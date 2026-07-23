@@ -1,0 +1,54 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aa4ded9b57e60e941b83ff0162e04083, type: 3}
+  m_Name: CarObjList
+  m_EditorClassIdentifier: 
+  m_Datas:
+  - m_Idx: 1
+    m_Type: 2
+    m_PrefabName: "\uAE30\uC544_K5"
+  - m_Idx: 2
+    m_Type: 1
+    m_PrefabName: "\uAE30\uC544_\uB808\uC774"
+  - m_Idx: 3
+    m_Type: 1
+    m_PrefabName: "\uAE30\uC544_\uBAA8\uB2DD"
+  - m_Idx: 4
+    m_Type: 6
+    m_PrefabName: "\uAE30\uC544_\uBD09\uACE0"
+  - m_Idx: 5
+    m_Type: 6
+    m_PrefabName: "\uAE30\uC544_\uBD09\uACE0_\uD0D1\uCC28"
+  - m_Idx: 6
+    m_Type: 4
+    m_PrefabName: "\uAE30\uC544_\uC3D8\uB80C\uD1A0"
+  - m_Idx: 7
+    m_Type: 5
+    m_PrefabName: "\uAE30\uC544_\uCE74\uB2C8\uBC1C"
+  - m_Idx: 8
+    m_Type: 2
+    m_PrefabName: "\uB974\uB178\uC0BC\uC131_SM7"
+  - m_Idx: 9
+    m_Type: 3
+    m_PrefabName: "\uC81C\uB124\uC2DC\uC2A4_G90"
+  - m_Idx: 10
+    m_Type: 5
+    m_PrefabName: "\uD604\uB300_\uC2A4\uD0C0\uB809\uC2A4"
+  - m_Idx: 11
+    m_Type: 4
+    m_PrefabName: "\uD604\uB300_\uC0B0\uD0C0\uD398"
+  - m_Idx: 13
+    m_Type: 6
+    m_PrefabName: "\uD604\uB300_\uD3EC\uD130"
+  - m_Idx: 12
+    m_Type: 2
+    m_PrefabName: "\uD604\uB300_\uC3D8\uB098\uD0C0"

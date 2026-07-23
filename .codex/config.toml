@@ -1,0 +1,9 @@
+personality = "friendly"
+
+[agents]
+# 루트 + 5개 Park3D 역할을 열 수 있는 상한. 호스트의 더 낮은 동시성 제한이 있으면 순차 실행한다.
+max_threads = 6
+max_depth = 1
+
+[mcp_servers.unreal]
+url = "http://localhost:8000/mcp"

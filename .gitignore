@@ -1,0 +1,32 @@
+# ============================================================
+# Park3D git 저장소 .gitignore
+# - git 작업트리는 이 폴더(Parking), .git 메타데이터는 SVN 밖(D:\Work\GitRepos\Parking.git)
+# - Content 등 대용량 바이너리는 SVN이 authoritative → git 제외
+# ============================================================
+
+# ===== Unreal Engine 생성물 (Park3D/) =====
+Park3D/Binaries/
+Park3D/Intermediate/
+Park3D/DerivedDataCache/
+Park3D/Saved/
+Park3D/.vs/
+Park3D/*.sln
+Park3D/*.slnx
+Park3D/*.VC.db
+Park3D/*.opensdf
+Park3D/*.sdf
+
+# ===== 대용량 바이너리 에셋 (SVN이 버전 관리) =====
+# Content(.uasset/.umap)는 수 GB 바이너리 → git 제외. 에셋 이력은 SVN에서 관리.
+Park3D/Content/
+
+# ===== Visual Studio / OS 로컬 파일 =====
+.vs/
+*.VC.db
+*.opendb
+Thumbs.db
+Desktop.ini
+
+# ===== 기타 임시 파일 =====
+*.tmp
+*.log

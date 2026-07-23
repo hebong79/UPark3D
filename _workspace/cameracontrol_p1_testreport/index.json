@@ -1,0 +1,149 @@
+﻿{
+	"devices": [
+		{
+			"deviceName": "DESKTOP-61K8VFG",
+			"instance": "394924C6458E9545623418AD6E9EEF33",
+			"instanceName": "DESKTOP-61K8VFG-23596",
+			"platform": "WindowsEditor",
+			"oSVersion": "Windows 11 (24H2) [10.0.26100.8655] ",
+			"model": "Default",
+			"gPU": "NVIDIA GeForce RTX 2080 Super",
+			"cPUModel": "Intel(R) Core(TM) i9-10900K CPU @ 3.70GHz",
+			"rAMInGB": 64,
+			"renderMode": "D3D12_SM6",
+			"rHI": "D3D12 (SM6)",
+			"appInstanceLog": ""
+		}
+	],
+	"reportCreatedOn": "2026.07.02-09.30.38",
+	"succeeded": 8,
+	"succeededWithWarnings": 0,
+	"failed": 0,
+	"notRun": 0,
+	"inProcess": 0,
+	"totalDuration": 0.15481281280517578,
+	"comparisonExported": false,
+	"comparisonExportDirectory": "",
+	"tests": [
+		{
+			"testDisplayName": "Angle",
+			"fullTestPath": "Park3D.CameraControl.Angle",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"394924C6458E9545623418AD6E9EEF33"
+			],
+			"duration": 0.017718300223350525,
+			"dateTime": "2026.07.02-09.30.38",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "Coord",
+			"fullTestPath": "Park3D.CameraControl.Coord",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"394924C6458E9545623418AD6E9EEF33"
+			],
+			"duration": 0.015087798237800598,
+			"dateTime": "2026.07.02-09.30.38",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "Fov",
+			"fullTestPath": "Park3D.CameraControl.Fov",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"394924C6458E9545623418AD6E9EEF33"
+			],
+			"duration": 0.019585099071264267,
+			"dateTime": "2026.07.02-09.30.38",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "JsonFixture",
+			"fullTestPath": "Park3D.CameraControl.JsonFixture",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"394924C6458E9545623418AD6E9EEF33"
+			],
+			"duration": 0.032865703105926514,
+			"dateTime": "2026.07.02-09.30.38",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "JsonRoundTrip",
+			"fullTestPath": "Park3D.CameraControl.JsonRoundTrip",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"394924C6458E9545623418AD6E9EEF33"
+			],
+			"duration": 0.017099600285291672,
+			"dateTime": "2026.07.02-09.30.38",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "Line",
+			"fullTestPath": "Park3D.CameraControl.Line",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"394924C6458E9545623418AD6E9EEF33"
+			],
+			"duration": 0.018954001367092133,
+			"dateTime": "2026.07.02-09.30.38",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "Rot",
+			"fullTestPath": "Park3D.CameraControl.Rot",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"394924C6458E9545623418AD6E9EEF33"
+			],
+			"duration": 0.015719398856163025,
+			"dateTime": "2026.07.02-09.30.38",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "Slider",
+			"fullTestPath": "Park3D.CameraControl.Slider",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"394924C6458E9545623418AD6E9EEF33"
+			],
+			"duration": 0.017782900482416153,
+			"dateTime": "2026.07.02-09.30.38",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		}
+	]
+}

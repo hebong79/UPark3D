@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Program Files/Epic Games/UE_5.8/Engine/Source/**)",
+      "Read(//c/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/**)",
+      "mcp__unreal__list_toolsets",
+      "mcp__unreal__describe_toolset",
+      "mcp__unreal__call_tool",
+      "PowerShell(& \"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Build\\BatchFiles\\Build.bat\" Park3DEditor Win64 Development -Project=\"D:\\Work\\UnrealWork\\Parking\\Park3D\\Park3D.uproject\" -WaitMutex -NoHotReload)"
+    ]
+  }
+}

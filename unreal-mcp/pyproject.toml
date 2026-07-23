@@ -1,0 +1,16 @@
+[project]
+name = "unreal-mcp"
+version = "0.1.0"
+description = "MCP server exposing Unreal Editor (viewport, actors, blueprints, C++, console, UMG, build) to MCP clients"
+requires-python = ">=3.11"
+dependencies = ["mcp>=1.2"]
+
+[project.scripts]
+unreal-mcp = "unreal_mcp.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

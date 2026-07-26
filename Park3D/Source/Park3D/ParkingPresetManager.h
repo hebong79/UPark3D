@@ -29,6 +29,51 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Parking|View")
 	void ClearAll();
 
+	// ---- 데이터 권위(RPC preset.* 백엔드). Unity CDataMgr/CSavePresetData 대응. ----
+	// 순수 렌더러이던 이 액터에 프리셋 목록을 상주시켜 car의 ACarPlacementManager.Cars 패턴을 승계한다.
+	// 위젯이 동시에 열려 자기 목록으로 RebuildAll 을 호출하면 렌더가 덮일 수 있다(RPC는 헤드리스 가정).
+
+	/** 데이터 권위: 현재 프리셋 목록. (멤버명은 RebuildAll 파라미터 Presets 와 충돌 방지) */
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Parking|Data")
+	TArray<FParkingPreset> StoredPresets;
+
+	/** 선택 인덱스(배열 인덱스, INDEX_NONE=없음). */
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Parking|Data")
+	int32 SelectedPresetIndex = INDEX_NONE;
+
+	/** 3D 큐브 표시 토글(RefreshView 반영). 멤버명은 RebuildAll 파라미터 bShow3D 와 충돌 방지. */
+	UPROPERTY(Transient, BlueprintReadWrite, Category = "Parking|Data")
+	bool bShow3DView = false;
+
+	const TArray<FParkingPreset>& GetPresets() const { return StoredPresets; }
+
+	/** PresetIdx 로 프리셋 검색(없으면 nullptr). */
+	FParkingPreset* FindPresetByIdx(int32 PresetIdx);
+
+	/** 다음 PresetIdx(현재 최대+1, 비어있으면 1). */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Parking|Data")
+	int32 NextPresetIdx() const;
+
+	/** 프리셋 추가(PresetIdx<=0 이면 NextPresetIdx 자동 부여). 추가된 PresetIdx 반환. */
+	UFUNCTION(BlueprintCallable, Category = "Parking|Data")
+	int32 AddPreset(const FParkingPreset& InPreset);
+
+	/** PresetIdx 로 삭제. 성공 여부. */
+	UFUNCTION(BlueprintCallable, Category = "Parking|Data")
+	bool RemovePresetByIdx(int32 PresetIdx);
+
+	/** 전체 비우고 선택 해제. */
+	UFUNCTION(BlueprintCallable, Category = "Parking|Data")
+	void ClearPresets();
+
+	/** PresetIdx 를 선택(-1=해제). */
+	UFUNCTION(BlueprintCallable, Category = "Parking|Data")
+	void SetSelectedByIdx(int32 PresetIdx);
+
+	/** 저장된 목록/선택/3D 상태로 다시 그린다. */
+	UFUNCTION(BlueprintCallable, Category = "Parking|Data")
+	void RefreshView();
+
 	// ---- 데칼 기반 실사 주차면(배포판 렌더용). 디버그 라인 경로와 완전 분리. ----
 	/**
 	 * 데칼을 재빌드한다(변당 라인 데칼 1개 = 슬롯 4변, 선택 프리셋에 fill 데칼 1개/면).

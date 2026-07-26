@@ -47,6 +47,64 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Car")
 	ACarActor* SpawnCarFromPos(const FCarPos& Pos, const TArray<FCarPresetEntry>& Catalog);
 
+	// ---- 랜덤 배치/표시 (Unity CCarObjListUI 랜덤 함수군 포팅) ----
+	// 공통: Seed==0 이면 비결정(Unity Random.InitState 매회 재시드와 동일 의미),
+	//       Seed!=0 이면 재현 가능(유닛테스트/재생성 검증용). 좌표계·prefabId 규약은 SpawnCarFromPos 재사용.
+
+	/**
+	 * 일정 간격으로 랜덤 차종 CarCount대를 일렬 스폰. Unity CreateRandomCarsInLine 포팅.
+	 * 위치는 UCarPlacementLibrary::AutoPlacePosition(가로: RightDir 방향 / 세로: bVertical) 로 산출한다.
+	 * @param StartWorld   시작 기준 월드 위치(cm). i번째 차량은 StartWorld + 방향*(i*Spacing).
+	 * @param RightDir     가로 배치 방향(영벡터면 UE +X 폴백). 세로 배치 시 무시.
+	 * @param RefYawDeg    모든 차량에 적용할 Unity rotY(deg).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Car|Random")
+	TArray<ACarActor*> SpawnRandomCarsInLine(
+		const FVector& StartWorld, int32 CarCount, const TArray<FCarPresetEntry>& Catalog,
+		float SpacingMeters = 2.5f, bool bVertical = false, FVector RightDir = FVector::ZeroVector,
+		float RefYawDeg = 180.f, int32 PresetId = 1, int32 Seed = 0);
+
+	/**
+	 * 저장된 위치/회전은 유지하고 각 차량 prefabId(차종)만 카탈로그에서 랜덤 재선택해 전체 재생성.
+	 * Unity Reset_CreateCarObjectList(bRandomCreate=true) → CreateRandomCarObjectByCarPos 포팅.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Car|Random")
+	void RebuildAllRandomMesh(const FCarPosDatas& Data, const TArray<FCarPresetEntry>& Catalog,
+		const TArray<int32>& SelectedIndices, int32 Seed = 0);
+
+	/**
+	 * 활성(가시) 차량 중 HideCount대를 랜덤 숨김. HideCount<=0 이면 [0, floor(활성*0.9)) 랜덤.
+	 * 항상 최소 1대는 표시 유지한다. 숨긴 차량 배열 반환. Unity HideRandomCars 포팅.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Car|Random")
+	TArray<ACarActor*> HideRandomCars(int32 HideCount = 0, int32 Seed = 0);
+
+	/**
+	 * NoiseIndices 가 가리키는 차량을 전부 숨긴 뒤 GetNoiseShowCount()대만 랜덤 표시(Fisher-Yates).
+	 * 최종적으로 숨겨진 차량 배열 반환. Unity HideRandomNoiseCars 포팅.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Car|Random")
+	TArray<ACarActor*> HideRandomNoiseCars(const TArray<int32>& NoiseIndices, int32 Seed = 0);
+
+	/** 노이즈 표시 대수 확률 결정: 0대 50% / 1대 45% / 2대 5%. Unity GetNoiseShowCount 포팅. */
+	UFUNCTION(BlueprintCallable, Category = "Car|Random")
+	int32 GetNoiseShowCount(int32 Seed = 0);
+
+	/** roll(0~99) → 표시 대수 매핑(순수, 테스트용). <50:0 / <95:1 / else:2. */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Car|Random")
+	static int32 NoiseShowCountForRoll(int32 Roll);
+
+	/**
+	 * 무작위 Count대의 표시상태(SetActorHiddenInGame)를 토글. Count<=0 이면 전체 대상.
+	 * 토글된 차량 배열 반환. Unity ToggleRandomCars 포팅.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Car|Random")
+	TArray<ACarActor*> ToggleRandomCars(int32 Count, int32 Seed = 0);
+
+	/** 활성 차량 전체를 랜덤 ECarColor 로 도색. Unity SetRandomColorOfCarList 포팅. */
+	UFUNCTION(BlueprintCallable, Category = "Car|Random")
+	void SetRandomColorOfCarList(int32 Seed = 0);
+
 	/**
 	 * 카탈로그의 모든 메시를 미리 로드해 캐시(메모리 풀)에 상주시킨다(하드 참조 → GC 언로드 방지).
 	 * 최초 1회(다이얼로그 오픈 시) 호출하면 이후 스폰/재생성은 디스크 로드 없이 즉시 처리된다.
@@ -69,6 +127,17 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Car")
 	ACarActor* FindByNameId(const FString& NameId) const;
+
+	/** carNameId(FCarPos.id) 로 차량 1대 제거. 제거 성공 여부 반환(RPC car.delete 용). */
+	UFUNCTION(BlueprintCallable, Category = "Car")
+	bool RemoveCarById(const FString& NameId);
+
+	/** 차량의 리스트 인덱스 반환(없으면 INDEX_NONE). RPC car.select 용. */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Car")
+	int32 IndexOfNameId(const FString& NameId) const;
+
+	/** 내부 Cars 배열 읽기 접근(RPC 모듈 순회용). */
+	const TArray<TObjectPtr<ACarActor>>& GetCars() const { return Cars; }
 
 	/** 인덱스 집합만 선택 표시(나머지 해제). */
 	UFUNCTION(BlueprintCallable, Category = "Car")
@@ -98,6 +167,15 @@ public:
 private:
 	/** prefabId → 로드된 메시. 캐시에 있으면 즉시 반환, 없으면 로드 후 캐시(메모리 풀). */
 	UStaticMesh* ResolveMesh(const TArray<FCarPresetEntry>& Catalog, int32 PrefabId);
+
+	/** Seed==0 → 비결정 스트림(FMath::Rand 기반), Seed!=0 → FRandomStream(Seed) 재현. */
+	FRandomStream MakeStream(int32 Seed) const;
+
+	/** 스트림에서 노이즈 표시 대수 산출(GetNoiseShowCount / HideRandomNoiseCars 공용). */
+	static int32 NoiseShowCountFromStream(FRandomStream& Stream);
+
+	/** 카탈로그에서 무작위 prefabId(1-based Idx) 반환. 빈 카탈로그면 1. */
+	static int32 RandomPrefabId(const TArray<FCarPresetEntry>& Catalog, FRandomStream& Stream);
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<ACarActor>> Cars;

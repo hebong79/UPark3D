@@ -44,4 +44,12 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Map|Floor")
 	static FVector MapSizeToPlaneScale(float WidthM, float DepthM,
 		float MetersToUU = 100.f, float PlaneBaseUU = 100.f);
+
+	/** 맵 크기(m) → JSON 파일 저장. 키 {sizeX,sizeZ}. (Unity CDataMgr.SaveMapSizeFile 대응) */
+	UFUNCTION(BlueprintCallable, Category = "Map|Floor")
+	static bool SaveMapSizeToJson(const FString& FilePath, float WidthM, float DepthM);
+
+	/** JSON 파일 → 맵 크기(m). 실패 시 false(Out 미변경). */
+	UFUNCTION(BlueprintCallable, Category = "Map|Floor")
+	static bool LoadMapSizeFromJson(const FString& FilePath, float& OutWidthM, float& OutDepthM);
 };

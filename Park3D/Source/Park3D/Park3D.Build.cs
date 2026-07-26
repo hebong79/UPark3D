@@ -10,6 +10,11 @@ public class Park3D : ModuleRules
 	
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "UMG", "Slate", "SlateCore", "Json", "JsonUtilities" });
 
+		// RPC 서버(JSON-RPC 2.0 over HTTP). Unity 99_Network/NetworkRpc 포팅.
+		// HTTPServer: 내장 HTTP 리스너/라우터(포트 13110). 요청 콜백은 게임 스레드에서 처리됨.
+		// ImageWrapper: cam.captureJPG/PNG 렌더타깃 픽셀 → JPEG/PNG 인코딩(Phase 5).
+		PrivateDependencyModuleNames.AddRange(new string[] { "HTTPServer", "ImageWrapper" });
+
 		PrivateDependencyModuleNames.AddRange(new string[] {  });
 
 		// 파일 열기/저장 네이티브 대화상자(DesktopPlatform)는 Shipping에서 제외되는 개발자 모듈이다.

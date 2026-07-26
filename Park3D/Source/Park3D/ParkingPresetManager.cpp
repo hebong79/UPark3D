@@ -207,6 +207,81 @@ void AParkingPresetManager::ClearAll()
 }
 
 // ─────────────────────────────────────────────────────────────
+// 데이터 권위(RPC preset.* 백엔드)
+// ─────────────────────────────────────────────────────────────
+
+FParkingPreset* AParkingPresetManager::FindPresetByIdx(int32 PresetIdx)
+{
+	for (FParkingPreset& P : StoredPresets)
+	{
+		if (P.PresetIdx == PresetIdx)
+		{
+			return &P;
+		}
+	}
+	return nullptr;
+}
+
+int32 AParkingPresetManager::NextPresetIdx() const
+{
+	int32 MaxIdx = 0;
+	for (const FParkingPreset& P : StoredPresets)
+	{
+		MaxIdx = FMath::Max(MaxIdx, P.PresetIdx);
+	}
+	return MaxIdx + 1;
+}
+
+int32 AParkingPresetManager::AddPreset(const FParkingPreset& InPreset)
+{
+	FParkingPreset P = InPreset;
+	if (P.PresetIdx <= 0)
+	{
+		P.PresetIdx = NextPresetIdx();
+	}
+	StoredPresets.Add(P);
+	return P.PresetIdx;
+}
+
+bool AParkingPresetManager::RemovePresetByIdx(int32 PresetIdx)
+{
+	const int32 Removed = StoredPresets.RemoveAll([PresetIdx](const FParkingPreset& P) { return P.PresetIdx == PresetIdx; });
+	if (Removed > 0)
+	{
+		if (!StoredPresets.IsValidIndex(SelectedPresetIndex))
+		{
+			SelectedPresetIndex = INDEX_NONE;
+		}
+		return true;
+	}
+	return false;
+}
+
+void AParkingPresetManager::ClearPresets()
+{
+	StoredPresets.Reset();
+	SelectedPresetIndex = INDEX_NONE;
+	RefreshView();
+}
+
+void AParkingPresetManager::SetSelectedByIdx(int32 PresetIdx)
+{
+	SelectedPresetIndex = INDEX_NONE;
+	if (PresetIdx >= 0)
+	{
+		for (int32 i = 0; i < StoredPresets.Num(); ++i)
+		{
+			if (StoredPresets[i].PresetIdx == PresetIdx) { SelectedPresetIndex = i; break; }
+		}
+	}
+}
+
+void AParkingPresetManager::RefreshView()
+{
+	RebuildAll(StoredPresets, SelectedPresetIndex, bShow3DView);
+}
+
+// ─────────────────────────────────────────────────────────────
 // 데칼 기반 실사 주차면(배포판 렌더) — 디버그 라인 경로와 완전 분리
 // ─────────────────────────────────────────────────────────────
 

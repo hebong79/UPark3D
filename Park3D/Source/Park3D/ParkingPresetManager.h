@@ -45,6 +45,13 @@ public:
 	UPROPERTY(Transient, BlueprintReadWrite, Category = "Parking|Data")
 	bool bShow3DView = false;
 
+	/**
+	 * 데칼 렌더 사용 토글(RefreshView 반영). true=2D 바닥 데칼만, false=디버그 라인만(배타).
+	 * 위젯의 Check_UseDecal 기본 체크와 동일하게 true 로 둔다. 데칼 모드에서는 bShow3DView 를 무시한다.
+	 */
+	UPROPERTY(Transient, BlueprintReadWrite, Category = "Parking|Data")
+	bool bUseDecalView = true;
+
 	const TArray<FParkingPreset>& GetPresets() const { return StoredPresets; }
 
 	/** PresetIdx 로 프리셋 검색(없으면 nullptr). */

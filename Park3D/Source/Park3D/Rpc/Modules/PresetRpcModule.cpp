@@ -334,10 +334,16 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 	{
 		AParkingPresetManager* Mgr = GetPresetManager(E); if (!Mgr) return nullptr;
 		Mgr->bShow3DView = RpcParam::GetBool(P, TEXT("showQubeBox"), false);
+		// useDecal 은 전달됐을 때만 대입(생략 호출이 데칼 모드를 끄지 않도록).
+		if (RpcParam::Has(P, TEXT("useDecal"))) Mgr->bUseDecalView = RpcParam::GetBool(P, TEXT("useDecal"), Mgr->bUseDecalView);
+		if (RpcParam::Has(P, TEXT("decalThickness"))) Mgr->DecalLineThicknessCm = RpcParam::GetFloat(P, TEXT("decalThickness"), Mgr->DecalLineThicknessCm);
 		Mgr->RefreshView();
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetBoolField(TEXT("ok"), true);
 		O->SetNumberField(TEXT("count"), Mgr->GetPresets().Num());
+		O->SetBoolField(TEXT("useDecal"), Mgr->bUseDecalView);
+		O->SetBoolField(TEXT("show3D"), Mgr->bShow3DView);
+		O->SetNumberField(TEXT("decalThickness"), Mgr->DecalLineThicknessCm);
 		return RpcDto::MakeObject(O);
 	});
 }

@@ -278,7 +278,17 @@ void AParkingPresetManager::SetSelectedByIdx(int32 PresetIdx)
 
 void AParkingPresetManager::RefreshView()
 {
-	RebuildAll(StoredPresets, SelectedPresetIndex, bShow3DView);
+	// 데칼과 디버그 라인은 상호 배타(위젯 RefreshView 와 동일 규칙) — 같은 기하를 쓰므로 겹치면 이중 라인이 된다.
+	if (bUseDecalView)
+	{
+		ClearAll(); // 디버그 라인/반투명 메시 제거
+		RebuildDecals(StoredPresets, SelectedPresetIndex, DecalLineThicknessCm, true);
+	}
+	else
+	{
+		RebuildAll(StoredPresets, SelectedPresetIndex, bShow3DView);
+		RebuildDecals(StoredPresets, SelectedPresetIndex, DecalLineThicknessCm, false); // 데칼 전부 숨김
+	}
 }
 
 // ─────────────────────────────────────────────────────────────

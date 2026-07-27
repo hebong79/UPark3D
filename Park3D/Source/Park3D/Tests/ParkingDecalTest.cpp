@@ -239,4 +239,73 @@ bool FParkingDecalRebuildTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// ===== RefreshView 렌더 모드(데칼 vs 디버그 라인) =====
+// RPC preset.* 가 쓰는 데이터 권위 경로. bUseDecalView 로 2D 바닥 데칼과 디버그 라인이 배타 동작해야 한다.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FParkingRefreshViewModeTest,
+	"Park3D.ParkingDecal.RefreshViewMode",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FParkingRefreshViewModeTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = (GEngine && GEngine->GetWorldContexts().Num() > 0) ? GWorld : nullptr;
+	if (!World)
+	{
+		AddWarning(TEXT("에디터 월드 없음 — RefreshView 모드 테스트 건너뜀."));
+		return true;
+	}
+
+	AParkingPresetManager* Mgr = World->SpawnActor<AParkingPresetManager>();
+	if (!TestNotNull(TEXT("매니저 스폰(RefreshView)"), Mgr)) return false;
+
+	if (!Mgr->LineDecalMaterial)
+	{
+		AddWarning(TEXT("LineDecalMaterial null — RefreshView 데칼 카운트 검증 건너뜀(에셋 경로 확인)."));
+		Mgr->Destroy();
+		return true;
+	}
+
+	// 요청 사양: 주차면 6개, 2.5m × 5m.
+	FParkingPreset P;
+	P.FaceCount = 6;
+	P.BoxSizeX = 2.5f;
+	P.BoxSizeZ = 5.0f;
+	Mgr->StoredPresets.Add(P);
+	Mgr->SelectedPresetIndex = INDEX_NONE; // fill 데칼 제외 → 라인만 계산
+
+	const int32 ExpectedLines = 6 * 4; // 면당 4변
+
+	// TP-1: 데칼 모드 기본값 → 6면 × 4변 = 24개 가시.
+	TestTrue(TEXT("TP-1 bUseDecalView 기본값 true"), Mgr->bUseDecalView);
+	Mgr->RefreshView();
+	TestEqual(TEXT("TP-1 데칼 모드 → 6면×4변 데칼"), CountVisibleDecals(Mgr), ExpectedLines);
+
+	// TP-3: 2D 보장 — 3D 토글이 켜져 있어도 데칼 수 동일(압출 없음).
+	Mgr->bShow3DView = true;
+	Mgr->RefreshView();
+	TestEqual(TEXT("TP-3 3D 토글 무시(2D 데칼 유지)"), CountVisibleDecals(Mgr), ExpectedLines);
+	Mgr->bShow3DView = false;
+
+	// TP-4: 두께 전달 — DecalLineThicknessCm=20 → 라인 데칼 half-extent Z=10.
+	Mgr->DecalLineThicknessCm = 20.f;
+	Mgr->RefreshView();
+	{
+		TArray<UDecalComponent*> Decals;
+		Mgr->GetComponents<UDecalComponent>(Decals);
+		float MaxZ = 0.f;
+		for (UDecalComponent* D : Decals)
+		{
+			if (D && D->GetVisibleFlag()) MaxZ = FMath::Max(MaxZ, (float)D->DecalSize.Z);
+		}
+		TestEqual(TEXT("TP-4 두께 20 → DecalSize.Z=10"), MaxZ, 10.f, 1e-3f);
+	}
+
+	// TP-2: 라인 모드 → 데칼 전부 숨김.
+	Mgr->bUseDecalView = false;
+	Mgr->RefreshView();
+	TestEqual(TEXT("TP-2 라인 모드 → 가시 데칼 0"), CountVisibleDecals(Mgr), 0);
+
+	Mgr->Destroy();
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

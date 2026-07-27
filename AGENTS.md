@@ -5,7 +5,7 @@
 ## Claude Code와의 동등성 계약
 
 - 동등성은 파일 문자열 복사가 아니라 같은 요청 분류, 역할 책임, 게이트 순서, 산출물, 실패 복귀, 종료 조건으로 판정한다.
-- 문자열까지 같아야 하는 값은 5개 역할명, 8개 스킬명, `unreal` MCP 서버명, `http://localhost:8000/mcp` URL, 표준 산출물 경로다.
+- 문자열까지 같아야 하는 값은 5개 역할명, 8개 스킬명, `unreal` MCP 서버명, `http://localhost:8000/mcp` URL, `park3d-rpc` MCP 서버명(Park3D JSON-RPC 브리지, 기본 `PARK3D_RPC_URL=http://localhost:13120`), 표준 산출물 경로다.
 - Claude의 `opus`/`sonnet`과 Codex의 Sol/Terra/Luna, Claude 팀 도구와 Codex 서브에이전트 도구, 각 플랫폼의 권한 문법은 1:1 복사하지 않는다.
 - 어느 쪽 하네스를 변경하든 대응 진입점과 공통 상세 스킬의 의미 계약을 함께 점검하고, 기존 `_workspace/` 전체를 이동·삭제하지 않는다.
 

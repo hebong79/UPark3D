@@ -16,7 +16,7 @@ namespace
 	}
 
 	/** 미구현 도메인(포트 백엔드 부재) 공통 응답. */
-	TSharedPtr<FJsonValue> NotImplemented(FRpcError& E, const TCHAR* Method, const TCHAR* Reason)
+	TSharedPtr<FJsonValue> Random_NotImplemented(FRpcError& E, const TCHAR* Method, const TCHAR* Reason)
 	{
 		E.FailDomain(FString::Printf(TEXT("미구현(%s): %s"), Method, Reason));
 		return nullptr;
@@ -128,22 +128,22 @@ void FRandomRpcModule::Register(URpcDispatcher& Dispatcher)
 	// ---- 포트 백엔드 부재 (5) — 이름은 등록하되 정직한 -32000 ----
 	Dispatcher.Register(TEXT("random.slotPlace"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
-		return NotImplemented(E, TEXT("random.slotPlace"), TEXT("주차면 슬롯(CFaceRect) 백엔드 없음"));
+		return Random_NotImplemented(E, TEXT("random.slotPlace"), TEXT("주차면 슬롯(CFaceRect) 백엔드 없음"));
 	});
 	Dispatcher.Register(TEXT("random.placeInView"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
-		return NotImplemented(E, TEXT("random.placeInView"), TEXT("PTZ 뷰포트 배치 백엔드 없음"));
+		return Random_NotImplemented(E, TEXT("random.placeInView"), TEXT("PTZ 뷰포트 배치 백엔드 없음"));
 	});
 	Dispatcher.Register(TEXT("random.slotJitter"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
-		return NotImplemented(E, TEXT("random.slotJitter"), TEXT("슬롯 지터 백엔드 없음"));
+		return Random_NotImplemented(E, TEXT("random.slotJitter"), TEXT("슬롯 지터 백엔드 없음"));
 	});
 	Dispatcher.Register(TEXT("random.frontBack"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
-		return NotImplemented(E, TEXT("random.frontBack"), TEXT("전/후면 지터 백엔드 없음"));
+		return Random_NotImplemented(E, TEXT("random.frontBack"), TEXT("전/후면 지터 백엔드 없음"));
 	});
 	Dispatcher.Register(TEXT("random.randomizeAll"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
-		return NotImplemented(E, TEXT("random.randomizeAll"), TEXT("슬롯/앰비언트 통합 랜덤 백엔드 없음"));
+		return Random_NotImplemented(E, TEXT("random.randomizeAll"), TEXT("슬롯/앰비언트 통합 랜덤 백엔드 없음"));
 	});
 }

@@ -12,7 +12,7 @@
 namespace
 {
 	/** camId(1-based) → 카메라 액터. 범위 밖이면 nullptr + OutError(-32000). CamRpcModule 과 동형. */
-	APTZCameraActor* GetCamById(ACameraControlManager* Mgr, int32 CamId, FRpcError& E)
+	APTZCameraActor* Measure_GetCamById(ACameraControlManager* Mgr, int32 CamId, FRpcError& E)
 	{
 		APTZCameraActor* Cam = Mgr->GetCamera(CamId - 1); // camId = index + 1
 		if (!Cam)
@@ -53,7 +53,7 @@ void FMeasureRpcModule::Register(URpcDispatcher& Dispatcher)
 		int32 CamId = 0;
 		if (!RpcParam::RequireInt(P, TEXT("camId"), CamId, E)) return nullptr;
 		if (!bTargetActive) { E.FailDomain(TEXT("타겟점 미설정 — measure.setTargetPoint 를 먼저 호출하세요.")); return nullptr; }
-		APTZCameraActor* Cam = GetCamById(Mgr, CamId, E); if (!Cam) return nullptr;
+		APTZCameraActor* Cam = Measure_GetCamById(Mgr, CamId, E); if (!Cam) return nullptr;
 		const FVector CW = Cam->GetActorLocation();
 		const double Horz = UCameraControlLibrary::WorldCentimetersToMeters(
 			UCameraControlLibrary::DistanceXZ(CW, TargetWorld), Mgr->MetersToUU);
@@ -69,7 +69,7 @@ void FMeasureRpcModule::Register(URpcDispatcher& Dispatcher)
 		int32 CamId = 0;
 		if (!RpcParam::RequireInt(P, TEXT("camId"), CamId, E)) return nullptr;
 		if (!bTargetActive) { E.FailDomain(TEXT("타겟점 미설정 — measure.setTargetPoint 를 먼저 호출하세요.")); return nullptr; }
-		APTZCameraActor* Cam = GetCamById(Mgr, CamId, E); if (!Cam) return nullptr;
+		APTZCameraActor* Cam = Measure_GetCamById(Mgr, CamId, E); if (!Cam) return nullptr;
 		const FVector CW = Cam->GetActorLocation();
 		float Vert = 0.f, Horz = 0.f;
 		// 수평각 0° 기준은 직전 targetLine 이 설정한 VerticalPosWithCam(미설정 시 원점 = Unity 기본값 동작).
@@ -83,7 +83,7 @@ void FMeasureRpcModule::Register(URpcDispatcher& Dispatcher)
 		ACameraControlManager* Mgr = GetCameraManager(E); if (!Mgr) return nullptr;
 		int32 CamId = 0;
 		if (!RpcParam::RequireInt(P, TEXT("camId"), CamId, E)) return nullptr;
-		APTZCameraActor* Cam = GetCamById(Mgr, CamId, E); if (!Cam) return nullptr;
+		APTZCameraActor* Cam = Measure_GetCamById(Mgr, CamId, E); if (!Cam) return nullptr;
 		const FVector CW = Cam->GetActorLocation();
 
 		float HeightCm = static_cast<float>(CW.Z); // 폴백: 카메라 Z(바닥 Z=0 기준 높이).

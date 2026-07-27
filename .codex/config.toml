@@ -7,3 +7,9 @@ max_depth = 1
 
 [mcp_servers.unreal]
 url = "http://localhost:8000/mcp"
+
+# Park3D JSON-RPC(13120) → MCP 브리지. Claude .mcp.json 의 park3d-rpc 와 동등.
+[mcp_servers.park3d-rpc]
+command = "uv"
+args = ["run", "D:/Work/UnrealWork/Parking/park3d-rpc-mcp/server.py"]
+env = { PARK3D_RPC_URL = "http://localhost:13120" }

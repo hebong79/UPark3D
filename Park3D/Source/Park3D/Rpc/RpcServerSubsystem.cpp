@@ -19,6 +19,9 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonReader.h"
 #include "Engine/DataTable.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+#include "Misc/ConfigCacheIni.h"
 
 namespace
 {
@@ -90,6 +93,21 @@ namespace
 void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
+
+	// 리슨 포트 결정 우선순위: 커맨드라인 -RpcPort= > Config(DefaultGame.ini [RpcServer] Port) > 기본 13110.
+	{
+		int32 ConfigPort = 0;
+		if (GConfig && GConfig->GetInt(TEXT("RpcServer"), TEXT("Port"), ConfigPort, GGameIni) && ConfigPort > 0 && ConfigPort <= 65535)
+		{
+			Port = ConfigPort;
+		}
+		int32 CmdPort = 0;
+		if (FParse::Value(FCommandLine::Get(), TEXT("RpcPort="), CmdPort) && CmdPort > 0 && CmdPort <= 65535)
+		{
+			Port = CmdPort;
+		}
+		UE_LOG(LogTemp, Log, TEXT("[RPC] 리슨 포트 결정: %d"), Port);
+	}
 
 	Dispatcher = NewObject<URpcDispatcher>(this);
 

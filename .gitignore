@@ -6,6 +6,12 @@
 
 # ===== Unreal Engine 생성물 (Park3D/) =====
 Park3D/Binaries/
+# 패키징(UAT BuildCookRun) 산출물 — 수 GB, SVN/재생성 대상
+/Package/
+
+# Python(park3d-rpc-mcp 브리지) 캐시
+__pycache__/
+*.pyc
 Park3D/Intermediate/
 Park3D/DerivedDataCache/
 Park3D/Saved/

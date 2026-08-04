@@ -34,6 +34,8 @@ Park3D 작업에서는 루트 `AGENTS.md`를 우선 기준으로 삼고, 이 스
 
 작업이 충분히 크면 architect, impact-analyst, unreal-implementer, qa-verifier, doc-writer 역할을 서브에이전트로 분리한다. 각 역할은 독립적인 파일 범위를 받아야 하며, 최종 통합과 사실 확인은 주 에이전트가 담당한다. 단순 질문에는 팀을 만들지 않고 답변과 문서화만 수행한다.
 
+**MCP 런타임 조작 예외**: Park3D MCP/RPC로 실행 중인 인스턴스를 조작·조회만 하고 저장소 파일을 하나도 변경하지 않는 작업은 팀도 만들지 않고 `Docs/*.md`도 만들지 않는다. 판정 기준은 디스크의 저장소 파일 변경 여부다(`preset.save`/`car.save`처럼 RPC가 데이터 파일을 쓰면 변경에 해당). 결과·실패·미검증은 응답으로 사실대로 보고한다. 상세는 `.claude/skills/korean-docs/SKILL.md`의 "문서를 만들지 않는 경우"를 따른다.
+
 Unreal MCP 작업 전 `list_toolsets`와 필요한 `describe_toolset`으로 capability를 확인한다. 평면 도구명을 추정하지 않고 현재 서버가 제공하는 gateway `call_tool` 또는 확인된 직접 도구에 기능을 매핑한다. 연결 실패와 도구 미노출은 구분해 기록한다.
 
 ## 역할별 모델 선택

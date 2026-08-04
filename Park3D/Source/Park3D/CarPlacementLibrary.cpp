@@ -5,6 +5,61 @@
 #include "JsonObjectConverter.h"
 #include "Misc/FileHelper.h"
 #include "Misc/DateTime.h"
+#include "Serialization/JsonSerializer.h"
+
+namespace
+{
+	/**
+	 * 차량 배치 파일인지 판별한다.
+	 *
+	 * PresetMaker 파일(주차면 프리셋)도 루트 키가 똑같이 "datas" 배열이라
+	 * FJsonObjectConverter 가 조용히 "성공"하고, 원소 수만큼 전 필드 기본값짜리 FCarPos 를 만든다.
+	 * (프리셋 1개짜리 파일을 차량 열기로 고르면 "차량 1대 로드 성공"으로 보고되고
+	 *  원점에 정체불명 차량 1대가 생긴다 — 실제 사용자 신고 사례.)
+	 * 따라서 원소가 차량 고유 키를 갖는지 확인한다. 프리셋 원소에는 이 키들이 없다
+	 * (프리셋: idx/faceCount/offsetPos/xSize/zSize/dirType/camIdx...).
+	 */
+	bool LooksLikeCarDatas(const FString& Json, FString& OutReason)
+	{
+		TSharedPtr<FJsonObject> Root;
+		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
+		if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+		{
+			OutReason = TEXT("JSON 파싱 실패");
+			return false;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Datas = nullptr;
+		if (!Root->TryGetArrayField(TEXT("datas"), Datas) || !Datas)
+		{
+			OutReason = TEXT("루트에 datas 배열이 없음");
+			return false;
+		}
+		if (Datas->Num() == 0)
+		{
+			return true; // 빈 목록은 유효(전체 삭제 후 저장본).
+		}
+
+		const TSharedPtr<FJsonObject>* First = nullptr;
+		if (!(*Datas)[0]->TryGetObject(First) || !First || !First->IsValid())
+		{
+			OutReason = TEXT("datas[0] 이 객체가 아님");
+			return false;
+		}
+
+		static const TCHAR* CarOnlyKeys[] = { TEXT("prefabId"), TEXT("prefabName"), TEXT("rotY"), TEXT("isFront") };
+		for (const TCHAR* Key : CarOnlyKeys)
+		{
+			if ((*First)->HasField(Key))
+			{
+				return true;
+			}
+		}
+
+		OutReason = TEXT("차량 항목 키(prefabId/prefabName/rotY/isFront)가 없음 — 프리셋 등 다른 종류의 파일");
+		return false;
+	}
+}
 
 // === 좌표 변환 ===
 // legacy Unity(x,y,z; m) -> UE(z,x,y; cm). 내부 JSON은 Unreal 미터로 정규화한다.
@@ -203,6 +258,14 @@ bool UCarPlacementLibrary::LoadCarDatasFromJson(const FString& FilePath, FCarPos
 	if (!FFileHelper::LoadFileToString(Json, *FilePath))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[CarPlacement] 파일 읽기 실패: %s"), *FilePath);
+		return false;
+	}
+
+	// 역직렬화 전에 종류를 확인한다. 키 이름이 겹치는 다른 파일도 "성공"해 버리기 때문이다.
+	FString Reason;
+	if (!LooksLikeCarDatas(Json, Reason))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CarPlacement] 차량 배치 파일이 아님(%s): %s"), *Reason, *FilePath);
 		return false;
 	}
 

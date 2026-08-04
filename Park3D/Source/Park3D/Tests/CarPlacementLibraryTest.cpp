@@ -453,4 +453,54 @@ bool FCarPlacementUnitySampleTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// TP-SCHEMA: 차량 파일이 아닌 JSON 거부.
+//  PresetMaker 파일도 루트 키가 "datas" 배열이라 FJsonObjectConverter 는 조용히 성공하고
+//  원소 수만큼 기본값 차량을 만든다. 실제로 프리셋 1개짜리 파일을 차량 열기로 골라
+//  "차량 1대"가 원점에 생기는 신고가 있었다. 로드 단계에서 종류를 판별해 막는지 검증한다.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCarPlacementLoadRejectsNonCarJsonTest,
+	"Park3D.CarPlacement.LoadRejectsNonCarJson",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCarPlacementLoadRejectsNonCarJsonTest::RunTest(const FString& Parameters)
+{
+	IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
+	const FString Dir = FPaths::ProjectSavedDir();
+
+	auto WriteAndLoad = [&](const TCHAR* Name, const FString& Json, FCarPosDatas& Out) -> bool
+	{
+		const FString Path = FPaths::Combine(Dir, Name);
+		PF.DeleteFile(*Path);
+		FFileHelper::SaveStringToFile(Json, *Path);
+		const bool bOk = UCarPlacementLibrary::LoadCarDatasFromJson(Path, Out);
+		PF.DeleteFile(*Path);
+		return bOk;
+	};
+
+	// 1) 프리셋 파일(001_Preset_Cam1.json 과 같은 형태) → 거부.
+	const FString PresetJson = TEXT(R"({"datas":[{"idx":1,"faceCount":5,"offsetPos":{"x":0,"y":0,"z":0},"xSize":2.5,"zSize":5.0,"dirType":0,"camIdx":1,"fov":60}]})");
+	FCarPosDatas PresetOut;
+	TestFalse(TEXT("프리셋 JSON 은 차량 파일로 로드되지 않는다"),
+		WriteAndLoad(TEXT("Test_NonCar_Preset.json"), PresetJson, PresetOut));
+
+	// 2) 정상 차량 파일 → 수용 + 대수 일치(검증이 정상 파일을 막지 않는지 확인).
+	const FString CarJson = TEXT(R"({"datas":[{"id":"1-00.00.00","presetId":1,"slotId":1,"prefabId":3,"pos":{"x":1,"y":0,"z":2},"rotY":90,"isFront":true},{"id":"2-00.00.00","presetId":1,"slotId":2,"prefabId":4,"pos":{"x":4,"y":0,"z":2},"rotY":90,"isFront":false}]})");
+	FCarPosDatas CarOut;
+	TestTrue(TEXT("정상 차량 JSON 은 로드된다"),
+		WriteAndLoad(TEXT("Test_Car_Valid.json"), CarJson, CarOut));
+	TestEqual(TEXT("차량 2대"), CarOut.datas.Num(), 2);
+
+	// 3) 빈 목록(전체 삭제 저장본) → 수용.
+	FCarPosDatas EmptyOut;
+	TestTrue(TEXT("빈 datas 는 유효"),
+		WriteAndLoad(TEXT("Test_Car_Empty.json"), TEXT(R"({"datas":[]})"), EmptyOut));
+	TestEqual(TEXT("차량 0대"), EmptyOut.datas.Num(), 0);
+
+	// 4) datas 키 자체가 없는 JSON → 거부.
+	FCarPosDatas NoDatasOut;
+	TestFalse(TEXT("datas 없는 JSON 거부"),
+		WriteAndLoad(TEXT("Test_NonCar_NoDatas.json"), TEXT(R"({"hello":"world"})"), NoDatasOut));
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

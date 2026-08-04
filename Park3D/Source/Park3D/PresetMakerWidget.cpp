@@ -3,6 +3,7 @@
 #include "PresetMakerWidget.h"
 #include "ParkingGeometryLibrary.h"
 #include "ParkingPresetManager.h"
+#include "Park3DDataPaths.h"
 #include "UnityUnrealCoordinateConverter.h"
 #include "Components/Button.h"
 #include "Components/EditableTextBox.h"
@@ -797,7 +798,8 @@ void UPresetMakerWidget::RefreshView()
 FString UPresetMakerWidget::GetDefaultPresetFilePath() const
 {
 	// 참조 데이터가 있는 프로젝트 하위 Save/3D/Preset/ 사용(Saved 아님).
-	return FPaths::Combine(FPaths::ProjectDir(), TEXT("Save"), TEXT("3D"), TEXT("Preset"), TEXT("preset.json"));
+	// 패키지에서는 Save/ 가 ProjectDir() 밖(스테이지 루트)에 놓인다 — 해석은 Park3DDataPaths 에 맡긴다.
+	return Park3DDataPaths::GetDataFilePath(TEXT("Preset"), TEXT("preset.json"));
 }
 
 #if PARK3D_USE_FILE_DIALOG

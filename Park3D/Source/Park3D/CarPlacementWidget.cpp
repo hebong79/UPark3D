@@ -5,6 +5,7 @@
 #include "CarActor.h"
 #include "CarListItemWidget.h"
 #include "CarPlacementLibrary.h"
+#include "Park3DDataPaths.h"
 #include "UnityUnrealCoordinateConverter.h"
 #include "Components/Button.h"
 #include "Components/ComboBoxString.h"
@@ -614,8 +615,9 @@ void UCarPlacementWidget::InitAll()
 // ===== JSON =====
 FString UCarPlacementWidget::GetDefaultCarFilePath() const
 {
-	// 참조 데이터가 있는 프로젝트 하위 Save/3D/CarPos/ 사용(엔진 Saved/ 아님 — PresetMaker 와 동일 규약).
-	return FPaths::Combine(FPaths::ProjectDir(), TEXT("Save"), TEXT("3D"), TEXT("CarPos"), TEXT("CarPos_SNum.json"));
+	// 참조 데이터가 있는 Save/3D/CarPos/ 사용(엔진 Saved/ 아님 — PresetMaker 와 동일 규약).
+	// 패키지에서는 Save/ 가 ProjectDir() 밖(스테이지 루트)에 놓이므로 해석은 Park3DDataPaths 에 맡긴다.
+	return Park3DDataPaths::GetDataFilePath(TEXT("CarPos"), TEXT("CarPos_SNum.json"));
 }
 
 bool UCarPlacementWidget::SaveToJsonFile(const FString& FilePath)

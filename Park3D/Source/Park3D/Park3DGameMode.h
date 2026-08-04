@@ -10,6 +10,7 @@
 #include "Park3DGameMode.generated.h"
 
 class UUserWidget;
+class UCameraViewerWidget;
 
 /**
  * 게임 시작 시 Main Menu 위젯을 뷰포트에 올리고 마우스/입력 모드를 UI에 맞게 설정한다.
@@ -31,6 +32,14 @@ public:
 	/** 메뉴 표시/숨김 토글 단축키. 기본 M. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Park3D|UI")
 	FKey MenuToggleKey;
+
+	/** 상시 표시할 카메라 뷰어(렌더타겟 프리뷰) 위젯 클래스. 기본값 WBP_CameraViewer. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Park3D|UI")
+	TSubclassOf<UCameraViewerWidget> ViewerWidgetClass;
+
+	/** 상시 뷰어 인스턴스. 카메라 컨트롤 패널이 새로 만들지 않고 이것을 공유한다. */
+	UFUNCTION(BlueprintCallable, Category = "Park3D|UI")
+	UCameraViewerWidget* GetCameraViewer() const;
 
 	/** 메뉴 토글: 뷰포트에 있으면 제거, 없으면 표시. */
 	UFUNCTION(BlueprintCallable, Category = "Park3D|UI")
@@ -59,9 +68,16 @@ private:
 	/** bOverrideCameraStart=true 일 때 카메라 폰 위치/회전과 뷰(컨트롤러) 회전을 초기값으로 설정한다. */
 	void ApplyCameraStart();
 
+	/** 카메라 뷰어 위젯을 생성(최초 1회)하고 뷰포트에 표시한다. 컨트롤 패널 개폐와 무관하게 유지된다. */
+	void ShowCameraViewer();
+
 	/** 생성된 메뉴 위젯 인스턴스(중복 생성 방지/참조 보관용). */
 	UPROPERTY(Transient)
 	TObjectPtr<UUserWidget> MenuWidget = nullptr;
+
+	/** 생성된 카메라 뷰어 인스턴스(중복 생성 방지/참조 보관용). */
+	UPROPERTY(Transient)
+	TObjectPtr<UCameraViewerWidget> ViewerWidget = nullptr;
 
 	TWeakObjectPtr<APlayerController> CachedPC;
 };

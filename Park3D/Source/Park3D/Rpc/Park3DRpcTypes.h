@@ -15,6 +15,7 @@ namespace Park3DRpc
 	constexpr int32 MethodNotFound = -32601; // 미등록 method / 405 / 404
 	constexpr int32 InvalidParams  = -32602; // 정의만 존재(디스패치 경로 미사용) — Unity와 동일
 	constexpr int32 Domain         = -32000; // 도메인 오류 — 핸들러의 모든 실패가 여기로 매핑
+	constexpr int32 Unauthorized   = -32001; // 인증 실패(401). UE 전용 추가 — Unity CRpcErrorCode 에는 없음
 	constexpr int32 MainTimeout    = -32003; // 메인스레드 타임아웃(UE는 게임스레드 처리라 미사용, 상수만 유지)
 }
 

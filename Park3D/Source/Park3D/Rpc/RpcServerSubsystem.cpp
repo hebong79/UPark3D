@@ -3,6 +3,7 @@
 #include "RpcServerSubsystem.h"
 #include "RpcDispatcher.h"
 #include "Park3DRpcTypes.h"
+#include "RpcAuth.h"
 #include "Modules/CarRpcModule.h"
 #include "Modules/RandomRpcModule.h"
 #include "../CarPlacementManager.h"
@@ -13,6 +14,7 @@
 #include "HttpServerResponse.h"
 #include "HttpServerConstants.h"
 #include "HttpPath.h"
+#include "IPAddress.h"   // FInternetAddr 완전 정의(PeerAddress->GetRawIp()). Sockets 모듈 의존 필요.
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -78,15 +80,22 @@ namespace
 	{
 		Response.Headers.Add(TEXT("Access-Control-Allow-Origin"), { TEXT("*") });
 		Response.Headers.Add(TEXT("Access-Control-Allow-Methods"), { TEXT("GET, POST, OPTIONS") });
-		Response.Headers.Add(TEXT("Access-Control-Allow-Headers"), { TEXT("Content-Type") });
+		// preflight 가 토큰 헤더를 허용받지 못하면 브라우저가 본요청을 보내지 못한다.
+		Response.Headers.Add(TEXT("Access-Control-Allow-Headers"),
+			{ FString::Printf(TEXT("Content-Type, %s"), Park3DRpcAuth::HeaderKeyDisplay) });
+	}
+
+	void CompleteJsonWithCode(const FHttpResultCallback& OnComplete, const FString& Body, EHttpServerResponseCodes Code)
+	{
+		TUniquePtr<FHttpServerResponse> Response = FHttpServerResponse::Create(Body, TEXT("application/json"));
+		Response->Code = Code;
+		AddCors(*Response);
+		OnComplete(MoveTemp(Response));
 	}
 
 	void CompleteJson(const FHttpResultCallback& OnComplete, const FString& Body)
 	{
-		TUniquePtr<FHttpServerResponse> Response = FHttpServerResponse::Create(Body, TEXT("application/json"));
-		Response->Code = EHttpServerResponseCodes::Ok;
-		AddCors(*Response);
-		OnComplete(MoveTemp(Response));
+		CompleteJsonWithCode(OnComplete, Body, EHttpServerResponseCodes::Ok);
 	}
 }
 
@@ -94,19 +103,56 @@ void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 
-	// 리슨 포트 결정 우선순위: 커맨드라인 -RpcPort= > Config(DefaultGame.ini [RpcServer] Port) > 기본 13110.
+	// 리슨 포트 결정 우선순위: 커맨드라인 -RpcPort= > Config(DefaultGame.ini [RpcServer] Port) > 기본 13510.
 	{
 		int32 ConfigPort = 0;
 		if (GConfig && GConfig->GetInt(TEXT("RpcServer"), TEXT("Port"), ConfigPort, GGameIni) && ConfigPort > 0 && ConfigPort <= 65535)
 		{
 			Port = ConfigPort;
 		}
+		// 스위치의 "존재"와 "값"을 분리한다: -RpcPort=0 은 무시가 아니라 명시적 비활성화다.
+		// (바인드를 외부로 여는 구성에서 자동화가 LAN 에 리스닝 소켓을 여는 사고를 막는다.)
 		int32 CmdPort = 0;
-		if (FParse::Value(FCommandLine::Get(), TEXT("RpcPort="), CmdPort) && CmdPort > 0 && CmdPort <= 65535)
+		if (FParse::Value(FCommandLine::Get(), TEXT("RpcPort="), CmdPort))
 		{
-			Port = CmdPort;
+			if (CmdPort == 0)
+			{
+				bServerDisabled = true;
+			}
+			else if (CmdPort > 0 && CmdPort <= 65535)
+			{
+				Port = CmdPort;
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[RPC] -RpcPort=%d 는 유효 범위(1~65535) 밖 — 무시하고 %d 사용."), CmdPort, Port);
+			}
 		}
-		UE_LOG(LogTemp, Log, TEXT("[RPC] 리슨 포트 결정: %d"), Port);
+		UE_LOG(LogTemp, Log, TEXT("[RPC] 리슨 포트 결정: %d%s"), Port,
+			bServerDisabled ? TEXT(" (-RpcPort=0 → 서버 미기동)") : TEXT(""));
+	}
+
+	// 인증 토큰 결정 우선순위: 커맨드라인 -RpcToken= > Config(DefaultGame.ini [RpcServer] Token) > 없음(무토큰).
+	// ⚠ 토큰 값 자체는 어떤 로그 레벨에서도 출력하지 않는다. 설정 여부와 문자셋 위반 사실만 남긴다.
+	{
+		FString ConfigToken;
+		if (GConfig && GConfig->GetString(TEXT("RpcServer"), TEXT("Token"), ConfigToken, GGameIni))
+		{
+			AuthToken = ConfigToken;
+		}
+		FString CmdToken;
+		if (FParse::Value(FCommandLine::Get(), TEXT("RpcToken="), CmdToken))
+		{
+			AuthToken = CmdToken;
+		}
+		AuthToken.TrimStartAndEndInline();
+
+		// 금지 문자가 섞이면 경로마다 다르게 잘려(FParse 는 ",) \r\n\t" 에서 절단, ini 는 원문 보존,
+		// 헤더는 콤마 분할) Configured 와 Presented 가 어긋나 영구 401 이 된다. 조용한 실패를 소리나게 만든다.
+		if (!AuthToken.IsEmpty() && !Park3DRpcAuth::IsTokenCharsetValid(AuthToken))
+		{
+			UE_LOG(LogTemp, Error, TEXT("[RPC] 토큰에 금지 문자 포함(, ( ) 공백 등) — 커맨드라인/헤더 경로에서 잘려 영구 401 이 됩니다. [A-Za-z0-9_-] 만 사용하십시오."));
+		}
 	}
 
 	Dispatcher = NewObject<URpcDispatcher>(this);
@@ -191,6 +237,13 @@ void URpcServerSubsystem::RegisterSystemMethods()
 
 void URpcServerSubsystem::StartServer()
 {
+	// -RpcPort=0 → 리스닝 소켓을 아예 만들지 않는다(라우터도 잡지 않는다).
+	if (bServerDisabled)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[RPC] -RpcPort=0 지정 — JSON-RPC 서버를 시작하지 않습니다."));
+		return;
+	}
+
 	FHttpServerModule& Http = FHttpServerModule::Get();
 	Router = Http.GetHttpRouter(static_cast<uint32>(Port));
 	if (!Router.IsValid())
@@ -209,8 +262,46 @@ void URpcServerSubsystem::StartServer()
 		FHttpRequestHandler::CreateUObject(this, &URpcServerSubsystem::HandleCatalog)));
 
 	Http.StartAllListeners();
-	UE_LOG(LogTemp, Log, TEXT("[RPC] JSON-RPC 서버 시작: http://localhost:%d/rpc (method %d개)"),
-		Port, Dispatcher ? Dispatcher->NumMethods() : 0);
+	bServerStarted = true;
+
+	// 실효 바인드 주소를 진단용으로 계산해 로그에 남긴다.
+	// -RpcPort= 로 포트를 바꾸면 ListenerOverrides 가 매칭되지 않아 조용히 localhost 로 폴백하는데,
+	// 이 로그가 없으면 "외부에서 왜 안 붙지"의 원인을 찾을 수 없다.
+	FString BindAddress(TEXT("localhost"));   // 엔진 기본값(FHttpServerListenerConfig::BindAddress)
+	{
+		TArray<FString> Overrides;
+		FString DefaultBind(TEXT("localhost"));
+		if (GConfig)
+		{
+			GConfig->GetArray(TEXT("HTTPServer.Listeners"), TEXT("ListenerOverrides"), Overrides, GEngineIni);
+			GConfig->GetString(TEXT("HTTPServer.Listeners"), TEXT("DefaultBindAddress"), DefaultBind, GEngineIni);
+		}
+		BindAddress = Park3DRpcAuth::ResolveBindAddress(Overrides, Port, DefaultBind);
+	}
+
+	const bool bHasToken = !AuthToken.IsEmpty();
+	const bool bLoopbackOnlyBind = BindAddress.Equals(TEXT("localhost"), ESearchCase::IgnoreCase);
+
+	// URL 에는 실제로 접속 가능한 호스트를 쓴다("any"는 URL 이 아니다).
+	const FString DisplayHost = bLoopbackOnlyBind
+		? FString(TEXT("localhost"))
+		: (BindAddress.Equals(TEXT("any"), ESearchCase::IgnoreCase) ? FString(TEXT("0.0.0.0")) : BindAddress);
+
+	UE_LOG(LogTemp, Log, TEXT("[RPC] JSON-RPC 서버 시작: http://%s:%d/rpc (bind=%s, auth=%s, method %d개)"),
+		*DisplayHost, Port, *BindAddress, bHasToken ? TEXT("token") : TEXT("none"),
+		Dispatcher ? Dispatcher->NumMethods() : 0);
+
+	if (!bHasToken)
+	{
+		if (!bLoopbackOnlyBind)
+		{
+			UE_LOG(LogTemp, Error, TEXT("[RPC] 외부 바인드(%s)인데 토큰 미설정 — 루프백 외 모든 요청이 401 로 거부됩니다. -RpcToken= 또는 [RpcServer] Token= 을 설정하십시오."), *BindAddress);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[RPC] 토큰 미설정 — 루프백 요청만 허용합니다. 외부 개방하려면 -RpcToken= 또는 [RpcServer] Token= 을 설정하십시오."));
+		}
+	}
 }
 
 void URpcServerSubsystem::StopServer()
@@ -224,7 +315,74 @@ void URpcServerSubsystem::StopServer()
 	}
 	RouteHandles.Reset();
 	Router.Reset();
-	FHttpServerModule::Get().StopAllListeners();
+
+	// StopAllListeners() 는 프로세스 전역이다. 한 번도 시작하지 않았으면 호출하지 않는다.
+	if (bServerStarted)
+	{
+		FHttpServerModule::Get().StopAllListeners();
+		bServerStarted = false;
+	}
+}
+
+// ===== 인증 게이트 =====
+
+FString URpcServerSubsystem::ExtractPresentedToken(const FHttpServerRequest& Request)
+{
+	// 엔진이 수신 헤더 키를 소문자로 정규화하므로 반드시 소문자 키로 조회한다.
+	const TArray<FString>* Values = Request.Headers.Find(Park3DRpcAuth::HeaderKeyLower);
+	if (!Values || Values->Num() == 0)
+	{
+		return FString();
+	}
+	// 헤더 중복/콤마 분할 시 첫 값만 사용한다.
+	return (*Values)[0];
+}
+
+TArray<uint8> URpcServerSubsystem::ExtractPeerRawIp(const FHttpServerRequest& Request)
+{
+	if (!Request.PeerAddress.IsValid())
+	{
+		return TArray<uint8>();   // peer 불명 → 비루프백 취급(fail-closed)
+	}
+	return Request.PeerAddress->GetRawIp();
+}
+
+FString URpcServerSubsystem::ExtractPeerDisplay(const FHttpServerRequest& Request)
+{
+	if (!Request.PeerAddress.IsValid())
+	{
+		return FString(TEXT("<unknown>"));
+	}
+	return Request.PeerAddress->ToString(/*bAppendPort=*/false);
+}
+
+bool URpcServerSubsystem::PassAuthOrRespond(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete) const
+{
+	const bool bHasOrigin = Request.Headers.Find(Park3DRpcAuth::OriginKeyLower) != nullptr;
+	const FString Presented = ExtractPresentedToken(Request);
+	const TArray<uint8> PeerRawIp = ExtractPeerRawIp(Request);
+
+	const Park3DRpcAuth::EAuthResult Result =
+		Park3DRpcAuth::Authorize(AuthToken, Presented, PeerRawIp, bHasOrigin);
+
+	if (Result == Park3DRpcAuth::EAuthResult::Allowed)
+	{
+		return true;
+	}
+
+	// 실패 사유는 서버 로그에만 남긴다(클라이언트에는 구분 없이 동일 메시지).
+	// peer 주소는 시크릿이 아니므로 로깅 무해. 토큰 값은 출력하지 않는다.
+	UE_LOG(LogTemp, Warning, TEXT("[RPC] 인증 거부 (peer=%s, reason=%s)"),
+		*ExtractPeerDisplay(Request), Park3DRpcAuth::ToLogString(Result));
+
+	const FString Body = SerializeObject(MakeErrorResponse(
+		MakeShared<FJsonValueNull>(),   // 본문을 파싱하기 전이므로 요청 id 를 알 수 없다 — 항상 null
+		Park3DRpc::Unauthorized,
+		TEXT("인증 실패: X-Park3D-Token 헤더가 없거나 일치하지 않습니다")));
+
+	// EHttpServerResponseCodes 에서 401 의 이름은 Unauthorized 가 아니라 Denied 다.
+	CompleteJsonWithCode(OnComplete, Body, EHttpServerResponseCodes::Denied);
+	return false;
 }
 
 TSharedPtr<FJsonObject> URpcServerSubsystem::ProcessSingle(const TSharedPtr<FJsonObject>& RequestObj)
@@ -265,6 +423,8 @@ TSharedPtr<FJsonObject> URpcServerSubsystem::ProcessSingle(const TSharedPtr<FJso
 
 bool URpcServerSubsystem::HandleRpc(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete)
 {
+	if (!PassAuthOrRespond(Request, OnComplete)) { return true; }
+
 	const FString BodyStr = BodyToString(Request);
 
 	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(BodyStr);
@@ -309,6 +469,9 @@ bool URpcServerSubsystem::HandleHealth(const FHttpServerRequest& Request, const 
 
 bool URpcServerSubsystem::HandleCatalog(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete)
 {
+	// 메서드 목록은 공격면 정찰 정보다. liveness 는 /health 가 담당하므로 열어둘 실익이 없다.
+	if (!PassAuthOrRespond(Request, OnComplete)) { return true; }
+
 	TArray<TSharedPtr<FJsonValue>> Methods;
 	if (Dispatcher)
 	{

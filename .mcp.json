@@ -12,7 +12,7 @@
         "D:/Work/UnrealWork/Parking/park3d-rpc-mcp/server.py"
       ],
       "env": {
-        "PARK3D_RPC_URL": "http://localhost:13120"
+        "PARK3D_RPC_URL": "http://localhost:13510"
       }
     }
   }

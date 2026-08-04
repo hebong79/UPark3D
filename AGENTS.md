@@ -5,7 +5,7 @@
 ## Claude Code와의 동등성 계약
 
 - 동등성은 파일 문자열 복사가 아니라 같은 요청 분류, 역할 책임, 게이트 순서, 산출물, 실패 복귀, 종료 조건으로 판정한다.
-- 문자열까지 같아야 하는 값은 5개 역할명, 8개 스킬명, `unreal` MCP 서버명, `http://localhost:8000/mcp` URL, `park3d-rpc` MCP 서버명(Park3D JSON-RPC 브리지, 기본 `PARK3D_RPC_URL=http://localhost:13120`), 표준 산출물 경로다.
+- 문자열까지 같아야 하는 값은 5개 역할명, 8개 스킬명, `unreal` MCP 서버명, `http://localhost:8000/mcp` URL, `park3d-rpc` MCP 서버명(Park3D JSON-RPC 브리지, 기본 `PARK3D_RPC_URL=http://localhost:13510`), 표준 산출물 경로다.
 - Claude의 `opus`/`sonnet`과 Codex의 Sol/Terra/Luna, Claude 팀 도구와 Codex 서브에이전트 도구, 각 플랫폼의 권한 문법은 1:1 복사하지 않는다.
 - 어느 쪽 하네스를 변경하든 대응 진입점과 공통 상세 스킬의 의미 계약을 함께 점검하고, 기존 `_workspace/` 전체를 이동·삭제하지 않는다.
 
@@ -18,7 +18,7 @@
 - JSON↔3D 생성·저장·로드 작업
 - 이전 작업의 재실행·보완·업데이트·버그 수정
 
-단순한 사실 질문은 직접 답할 수 있지만, 답변도 `Docs/yyyyMMdd_HHmmss_이름.md`에 한글로 기록한다.
+단순한 사실 질문은 직접 답할 수 있지만, 답변도 `Docs/yyyyMMdd_HHmmss_이름.md`에 한글로 기록한다. 단 소스 변경 없이 Park3D MCP/RPC 런타임 조작·조회만 한 작업은 3번 규칙의 예외에 따라 문서를 만들지 않는다.
 
 ## 절대 규칙 — 0~5
 
@@ -26,6 +26,7 @@
 1. **유닛 테스트**: 모든 코드 변경에 Unreal Automation 테스트 또는 변경에 맞는 검증 테스트를 작성·실행한다. 테스트 불가 항목은 이유와 함께 미검증으로 기록한다.
 2. **실동작 확인**: Edit Mode/Play Mode에서 실제 동작을 확인한다. 위젯·액터·JSON↔3D 결과는 존재 여부만 보지 말고 입력과 출력 상태를 비교한다.
 3. **한글 문서화**: 변경 사항, 신규 클래스, 로직, 검증 결과를 UTF-8 한글 Markdown으로 `Docs/yyyyMMdd_HHmmss_이름.md`에 기록한다. 질문 답변도 같은 규칙을 따른다.
+   - **예외 — MCP 런타임 조작**: Park3D MCP/RPC로 실행 중인 인스턴스를 조작·조회만 하고 저장소 파일(`Park3D/Source`·`Config`·`Content`·스크립트·문서 등)을 **하나도 변경하지 않은** 작업은 `Docs/*.md`를 생성하지 않는다. 결과·수치·실패·미검증은 응답으로 사실대로 보고한다. 파일을 하나라도 변경했거나(`preset.save`/`car.save` 등 RPC의 파일 쓰기 포함) 사용자가 문서화를 요청하면 예외를 적용하지 않는다.
 4. **영향도 분석**: 빌드 모듈, 헤더 참조, 위젯↔매니저 호출, C++ 부모를 가진 Blueprint, 에셋 참조, JSON 호환성을 사전·사후 분석한다.
 5. **주변 동작 사후점검**: 표준 작업의 QA가 끝난 뒤 `gpt-5.6-luna`가 변경 지점의 인접 호출·UI/입력·데이터 저장/로드·렌더/액터 상태 중 해당 항목을 점검한다. 기존 Automation·PIE 결과·로그·스크린샷과 코드/에셋 참조를 교차해 회귀 가능성을 판정하고, 결과를 `_workspace/{phase}_luna_behavior_impact_report.md`에 통과/실패/미검증 근거와 함께 남긴다. 실패 또는 높은 위험은 Terra QA/구현 단계로 되돌린다.
 

@@ -47,6 +47,25 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
 	FName PoleTag = TEXT("CamPole");
 
+	/**
+	 * 부팅 시 자동 생성되는 카메라 1대의 초기 자세(Unreal 미터/도).
+	 * UCameraControlWidget 슬라이더 기본값(높이 5m, X/Z 0, pan/tilt 0, zoom 1)과 같은 값이라
+	 * 나중에 컨트롤 패널을 열어도 화면이 바뀌지 않는다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
+	FCamDir DefaultCameraDir;
+
+	/** 월드의 매니저를 재사용하고 없으면 스폰한다(AMapFloorActor::GetOrSpawn 관례, 중복 스폰 방지). */
+	static ACameraControlManager* GetOrSpawn(UWorld* World);
+
+	/**
+	 * 카메라가 0대면 1대 생성 + DefaultCameraDir 반영. 이후 항상 현재 인덱스를 재선택한다.
+	 * 선택은 캡처 on + 즉시 1회 캡처이므로, 이 호출 뒤에는 GetSelectedRenderTarget() 이 유효한 RT 를 준다
+	 * (= 컨트롤 패널을 열지 않아도 뷰어가 첫 프레임부터 화면을 낸다).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Camera")
+	void EnsureDefaultCamera();
+
 	/** 현재 선택된 카메라 인덱스. */
 	UPROPERTY(BlueprintReadOnly, Category = "Camera")
 	int32 SelectedIndex = 0;

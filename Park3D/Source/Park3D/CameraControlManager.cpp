@@ -5,11 +5,43 @@
 #include "CameraControlLibrary.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
 
 ACameraControlManager::ACameraControlManager()
 {
 	PrimaryActorTick.bCanEverTick = false;
 	CameraActorClass = APTZCameraActor::StaticClass();
+	// 높이만 기본값과 다르다(FCamDir 기본이 pan=0/tilt=0/zoom=1). pos 는 Unreal 미터: (x, z, 높이).
+	DefaultCameraDir.pos.z = 5.f;
+}
+
+ACameraControlManager* ACameraControlManager::GetOrSpawn(UWorld* World)
+{
+	if (!World)
+	{
+		return nullptr;
+	}
+	// CameraControlWidget::GetCameraManager 의 "있으면 재사용, 없으면 스폰"을 static 으로 승격(중복 스폰 방지).
+	if (ACameraControlManager* Existing = Cast<ACameraControlManager>(
+		UGameplayStatics::GetActorOfClass(World, ACameraControlManager::StaticClass())))
+	{
+		return Existing;
+	}
+	return World->SpawnActor<ACameraControlManager>();
+}
+
+void ACameraControlManager::EnsureDefaultCamera()
+{
+	if (Cameras.Num() == 0)
+	{
+		if (!AddCamera(TEXT("Camera 1")))
+		{
+			return;
+		}
+		ApplyDir(0, DefaultCameraDir);
+	}
+	// 이미 카메라가 있어도 재선택한다 — 캡처 on + 즉시 1회 캡처로 RT 를 살리는 것이 이 함수의 계약이다.
+	SelectCamera(FMath::Clamp(SelectedIndex, 0, Cameras.Num() - 1));
 }
 
 APTZCameraActor* ACameraControlManager::AddCamera(FString Name)

@@ -6,6 +6,8 @@
 #include "CameraControlLibrary.h"
 #include "CameraViewerWidget.h"
 #include "CameraDistanceWidget.h"
+#include "Park3DDataPaths.h"
+#include "Park3DGameMode.h"
 #include "Components/Button.h"
 #include "Components/ComboBoxString.h"
 #include "Components/EditableTextBox.h"
@@ -234,12 +236,8 @@ void UCameraControlWidget::NativeDestruct()
 	{
 		DistanceDialogInstance->RemoveFromParent();
 	}
-	// 컨트롤 패널이 뷰포트에서 제거될 때(메뉴 토글 off) 독립 뷰어도 함께 화면에서 제거한다.
-	// 인스턴스는 파괴하지 않고 보존 → 다음 토글 on 시 재-AddToViewport로 재사용.
-	if (ViewerInstance && ViewerInstance->IsInViewport())
-	{
-		ViewerInstance->RemoveFromParent();
-	}
+	// 뷰어는 APark3DGameMode 가 소유하는 상시 위젯이므로 패널이 닫혀도 제거하지 않는다.
+	// (이전에는 여기서 RemoveFromParent 하여 컨트롤 패널을 닫으면 카메라 뷰가 사라졌다.)
 	Super::NativeDestruct();
 }
 
@@ -1210,14 +1208,24 @@ void UCameraControlWidget::DrawDistanceVisuals() const
 // ===== 뷰어/콤보 항목 =====
 void UCameraControlWidget::EnsureViewer()
 {
-	// 독립 뷰어 위젯(WBP_CameraViewer)을 1회 생성해 뷰포트 우하단에 표시한다.
-	// 앵커/크기는 WBP 디자이너에서 지정. ZOrder 5 = 컨트롤 패널(10)·메뉴(100)보다 뒤.
-	if (!ViewerWidgetClass)
-	{
-		return; // 뷰어 WBP 미지정(WBP_CameraControl 기본값 확인)
-	}
+	// 뷰어는 APark3DGameMode 가 BeginPlay에서 생성해 상시 표시한다. 여기서는 그 인스턴스를 받아 쓴다.
 	if (!ViewerInstance)
 	{
+		if (APark3DGameMode* GM = Cast<APark3DGameMode>(UGameplayStatics::GetGameMode(this)))
+		{
+			ViewerInstance = GM->GetCameraViewer();
+		}
+	}
+
+	// 폴백: 게임모드가 APark3DGameMode 가 아니면(커스텀 BP 게임모드) 기존처럼 패널이 직접 생성한다.
+	// 이 경로에서는 종전대로 패널을 열어야 뷰어가 보인다.
+	// 앵커/크기는 WBP 디자이너에서 지정. ZOrder 5 = 컨트롤 패널(10)·메뉴(100)보다 뒤.
+	if (!ViewerInstance)
+	{
+		if (!ViewerWidgetClass)
+		{
+			return; // 뷰어 WBP 미지정(WBP_CameraControl 기본값 확인)
+		}
 		ViewerInstance = CreateWidget<UCameraViewerWidget>(GetOwningPlayer(), ViewerWidgetClass);
 	}
 	if (ViewerInstance && !ViewerInstance->IsInViewport())
@@ -1334,7 +1342,8 @@ FString UCameraControlWidget::GetDefaultFilePath() const
 {
 	// 참조 데이터가 있는 프로젝트 하위 Save/3D/CameraPos/ 사용(엔진 Saved/ 아님 — PresetMaker 와 동일 규약).
 	// 기존 데이터 파일명 규약은 CamPos_*.json 이다.
-	return FPaths::Combine(FPaths::ProjectDir(), TEXT("Save"), TEXT("3D"), TEXT("CameraPos"), TEXT("CamPos_SNum.json"));
+	// 패키지에서는 Save/ 가 ProjectDir() 밖(스테이지 루트)에 놓인다 — 해석은 Park3DDataPaths 에 맡긴다.
+	return Park3DDataPaths::GetDataFilePath(TEXT("CameraPos"), TEXT("CamPos_SNum.json"));
 }
 
 bool UCameraControlWidget::PromptOpenFilePath(FString& OutPath) const

@@ -1,0 +1,742 @@
+﻿{
+	"devices": [
+		{
+			"deviceName": "DESKTOP-61K8VFG",
+			"instance": "86CEB18D4715944E264C0F8D70CA72DB",
+			"instanceName": "DESKTOP-61K8VFG-14360",
+			"platform": "WindowsEditor",
+			"oSVersion": "Windows 11 (24H2) [10.0.26100.8875] ",
+			"model": "Default",
+			"gPU": "NVIDIA GeForce RTX 2080 Super",
+			"cPUModel": "Intel(R) Core(TM) i9-10900K CPU @ 3.70GHz",
+			"rAMInGB": 64,
+			"renderMode": "SM6",
+			"rHI": "",
+			"appInstanceLog": ""
+		}
+	],
+	"reportCreatedOn": "2026.07.28-10.01.02",
+	"succeeded": 43,
+	"succeededWithWarnings": 2,
+	"failed": 0,
+	"notRun": 0,
+	"inProcess": 0,
+	"totalDuration": 0.92211240530014038,
+	"comparisonExported": false,
+	"comparisonExportDirectory": "",
+	"tests": [
+		{
+			"testDisplayName": "Angle",
+			"fullTestPath": "Park3D.CameraControl.Angle",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016580302268266678,
+			"dateTime": "2026.07.28-10.01.00",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "Coord",
+			"fullTestPath": "Park3D.CameraControl.Coord",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016568001359701157,
+			"dateTime": "2026.07.28-10.01.00",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "Fov",
+			"fullTestPath": "Park3D.CameraControl.Fov",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016295596957206726,
+			"dateTime": "2026.07.28-10.01.00",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "JsonFixture",
+			"fullTestPath": "Park3D.CameraControl.JsonFixture",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016238100826740265,
+			"dateTime": "2026.07.28-10.01.00",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "JsonRoundTrip",
+			"fullTestPath": "Park3D.CameraControl.JsonRoundTrip",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016834698617458344,
+			"dateTime": "2026.07.28-10.01.00",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "Line",
+			"fullTestPath": "Park3D.CameraControl.Line",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.021267201751470566,
+			"dateTime": "2026.07.28-10.01.00",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "ManagerWorldApply",
+			"fullTestPath": "Park3D.CameraControl.ManagerWorldApply",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.018269900232553482,
+			"dateTime": "2026.07.28-10.01.00",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "Rot",
+			"fullTestPath": "Park3D.CameraControl.Rot",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016469001770019531,
+			"dateTime": "2026.07.28-10.01.00",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "Slider",
+			"fullTestPath": "Park3D.CameraControl.Slider",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016561899334192276,
+			"dateTime": "2026.07.28-10.01.00",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "RenderTargetVisibility",
+			"fullTestPath": "Park3D.CameraViewer.RenderTargetVisibility",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016617797315120697,
+			"dateTime": "2026.07.28-10.01.00",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "SizeRoundTrip",
+			"fullTestPath": "Park3D.CameraViewer.SizeRoundTrip",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016866199672222137,
+			"dateTime": "2026.07.28-10.01.00",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "ActorTransformRoundTrip",
+			"fullTestPath": "Park3D.CarPlacement.ActorTransformRoundTrip",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.018015500158071518,
+			"dateTime": "2026.07.28-10.01.00",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "AutoPlace",
+			"fullTestPath": "Park3D.CarPlacement.AutoPlace",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016694799065589905,
+			"dateTime": "2026.07.28-10.01.00",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "CatalogLookup",
+			"fullTestPath": "Park3D.CarPlacement.CatalogLookup",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.017240598797798157,
+			"dateTime": "2026.07.28-10.01.01",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "ColorEnum",
+			"fullTestPath": "Park3D.CarPlacement.ColorEnum",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016556799411773682,
+			"dateTime": "2026.07.28-10.01.01",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "CoordRoundTrip",
+			"fullTestPath": "Park3D.CarPlacement.CoordRoundTrip",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016240198165178299,
+			"dateTime": "2026.07.28-10.01.01",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "JsonRoundTrip",
+			"fullTestPath": "Park3D.CarPlacement.JsonRoundTrip",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.014489401131868362,
+			"dateTime": "2026.07.28-10.01.01",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "MakeId",
+			"fullTestPath": "Park3D.CarPlacement.MakeId",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.014970898628234863,
+			"dateTime": "2026.07.28-10.01.01",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "ManagerRebuild",
+			"fullTestPath": "Park3D.CarPlacement.ManagerRebuild",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.017114199697971344,
+			"dateTime": "2026.07.28-10.01.01",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "NoiseShowCountRoll",
+			"fullTestPath": "Park3D.CarPlacement.NoiseShowCountRoll",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016530297696590424,
+			"dateTime": "2026.07.28-10.01.01",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "PlateNumber",
+			"fullTestPath": "Park3D.CarPlacement.PlateNumber",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.13761389255523682,
+			"dateTime": "2026.07.28-10.01.01",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "PrefabIdFromCombo",
+			"fullTestPath": "Park3D.CarPlacement.PrefabIdFromCombo",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016315102577209473,
+			"dateTime": "2026.07.28-10.01.01",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "PrefabNameKey",
+			"fullTestPath": "Park3D.CarPlacement.PrefabNameKey",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.017086602747440338,
+			"dateTime": "2026.07.28-10.01.01",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "RandomFunctions",
+			"fullTestPath": "Park3D.CarPlacement.RandomFunctions",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.051477599889039993,
+			"dateTime": "2026.07.28-10.01.01",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "ShiftSelection",
+			"fullTestPath": "Park3D.CarPlacement.ShiftSelection",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.01654529944062233,
+			"dateTime": "2026.07.28-10.01.01",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "UnitySample",
+			"fullTestPath": "Park3D.CarPlacement.UnitySample",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.017416797578334808,
+			"dateTime": "2026.07.28-10.01.01",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "YawNormalize",
+			"fullTestPath": "Park3D.CarPlacement.YawNormalize",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016545798629522324,
+			"dateTime": "2026.07.28-10.01.01",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "AxisMapping",
+			"fullTestPath": "Park3D.MapFloor.AxisMapping",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016643200069665909,
+			"dateTime": "2026.07.28-10.01.01",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "ClampSize",
+			"fullTestPath": "Park3D.MapFloor.ClampSize",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016668699681758881,
+			"dateTime": "2026.07.28-10.01.01",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "ParseSize",
+			"fullTestPath": "Park3D.MapFloor.ParseSize",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.015943501144647598,
+			"dateTime": "2026.07.28-10.01.01",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "SizeToScale",
+			"fullTestPath": "Park3D.MapFloor.SizeToScale",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016644500195980072,
+			"dateTime": "2026.07.28-10.01.01",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "UnitChain",
+			"fullTestPath": "Park3D.MapFloor.UnitChain",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016901597380638123,
+			"dateTime": "2026.07.28-10.01.02",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "ComputeSlotCorners",
+			"fullTestPath": "Park3D.ParkingDecal.ComputeSlotCorners",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016581099480390549,
+			"dateTime": "2026.07.28-10.01.02",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "Rebuild",
+			"fullTestPath": "Park3D.ParkingDecal.Rebuild",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.01715560257434845,
+			"dateTime": "2026.07.28-10.01.02",
+			"entries": [
+				{
+					"event":
+					{
+						"type": "Warning",
+						"message": "LogTemp: [ParkingManager] LineDecalMaterial 이 null → 데칼을 그릴 수 없습니다. 에디터에서 지정하세요.",
+						"context": "log",
+						"artifact": "00000000000000000000000000000000"
+					},
+					"filename": "",
+					"lineNumber": -1,
+					"timestamp": "2026.07.28-10.01.02"
+				}
+			],
+			"warnings": 1,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "RefreshViewMode",
+			"fullTestPath": "Park3D.ParkingDecal.RefreshViewMode",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016194596886634827,
+			"dateTime": "2026.07.28-10.01.02",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "UnityJson",
+			"fullTestPath": "Park3D.PresetMaker.UnityJson",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016940999776124954,
+			"dateTime": "2026.07.28-10.01.02",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "CamModule",
+			"fullTestPath": "Park3D.Rpc.CamModule",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.020272199064493179,
+			"dateTime": "2026.07.28-10.01.02",
+			"entries": [
+				{
+					"event":
+					{
+						"type": "Warning",
+						"message": "Blueprint: 캡처 씬: bCaptureEveryFrame이 활성화된 씬 캡처는 업데이트가 필요하며 매우 비효율적입니다.",
+						"context": "log",
+						"artifact": "00000000000000000000000000000000"
+					},
+					"filename": "",
+					"lineNumber": -1,
+					"timestamp": "2026.07.28-10.01.02"
+				},
+				{
+					"event":
+					{
+						"type": "Warning",
+						"message": "Blueprint: 캡처 씬: bCaptureEveryFrame이 활성화된 씬 캡처는 업데이트가 필요하며 매우 비효율적입니다.",
+						"context": "log",
+						"artifact": "00000000000000000000000000000000"
+					},
+					"filename": "",
+					"lineNumber": -1,
+					"timestamp": "2026.07.28-10.01.02"
+				}
+			],
+			"warnings": 2,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "CarModule",
+			"fullTestPath": "Park3D.Rpc.CarModule",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.017617698758840561,
+			"dateTime": "2026.07.28-10.01.02",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "Dispatcher",
+			"fullTestPath": "Park3D.Rpc.Dispatcher",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016519296914339066,
+			"dateTime": "2026.07.28-10.01.02",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "ImageUtil",
+			"fullTestPath": "Park3D.Rpc.ImageUtil",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.020501498132944107,
+			"dateTime": "2026.07.28-10.01.02",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "MapModule",
+			"fullTestPath": "Park3D.Rpc.MapModule",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.020484399050474167,
+			"dateTime": "2026.07.28-10.01.02",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "MeasureModule",
+			"fullTestPath": "Park3D.Rpc.MeasureModule",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.017633400857448578,
+			"dateTime": "2026.07.28-10.01.02",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "ParamUtil",
+			"fullTestPath": "Park3D.Rpc.ParamUtil",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016529198735952377,
+			"dateTime": "2026.07.28-10.01.02",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "PresetModule",
+			"fullTestPath": "Park3D.Rpc.PresetModule",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016695301979780197,
+			"dateTime": "2026.07.28-10.01.02",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "RandomModule",
+			"fullTestPath": "Park3D.Rpc.RandomModule",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"86CEB18D4715944E264C0F8D70CA72DB"
+			],
+			"duration": 0.016763098537921906,
+			"dateTime": "2026.07.28-10.01.02",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		}
+	]
+}

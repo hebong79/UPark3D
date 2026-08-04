@@ -1,1 +1,89 @@
-{"datas":[{"idx":1,"presetName":"Preset 1","faceCount":7,"offsetPos":{"x":-7.367,"y":0.0,"z":19.176},"faceRot":0.0,"groupRot":0.0,"xSize":2.5,"zSize":5.0,"dirType":0,"useBaseWidth":true,"camIdx":2,"camPos":{"x":1.817,"y":27.336,"z":-9.562},"camRot":{"x":39.909,"y":353.654,"z":356.893},"fov":45.0},{"idx":2,"presetName":"Preset 2","faceCount":6,"offsetPos":{"x":13.761,"y":0.0,"z":3.332},"faceRot":0.0,"groupRot":0.0,"xSize":5.0,"zSize":2.5,"dirType":0,"useBaseWidth":false,"camIdx":1,"camPos":{"x":3.774,"y":100.264,"z":-15.541},"camRot":{"x":82.749,"y":359.462,"z":0.0},"fov":45.0},{"idx":3,"presetName":"Preset 3","faceCount":4,"offsetPos":{"x":-3.549,"y":0.0,"z":3.586},"faceRot":0.0,"groupRot":0.0,"xSize":2.5,"zSize":5.0,"dirType":0,"useBaseWidth":true,"camIdx":2,"camPos":{"x":3.774,"y":100.264,"z":-15.541},"camRot":{"x":82.749,"y":359.462,"z":0.0},"fov":45.0},{"idx":4,"presetName":"Preset 4","faceCount":4,"offsetPos":{"x":-3.549,"y":0.0,"z":8.58},"faceRot":0.0,"groupRot":0.0,"xSize":2.5,"zSize":5.0,"dirType":0,"useBaseWidth":true,"camIdx":2,"camPos":{"x":3.774,"y":100.264,"z":-15.541},"camRot":{"x":82.749,"y":359.462,"z":0.0},"fov":45.0},{"idx":5,"presetName":"Preset 5","faceCount":2,"offsetPos":{"x":-3.625,"y":0.0,"z":-7.114},"faceRot":0.0,"groupRot":0.0,"xSize":5.0,"zSize":2.5,"dirType":0,"useBaseWidth":true,"camIdx":1,"camPos":{"x":1.817,"y":27.336,"z":-32.408},"camRot":{"x":39.909,"y":353.654,"z":356.893},"fov":45.0}]}
+{
+    "datas": [
+        {
+            "idx": 1,
+            "presetName": "Preset 1",
+            "faceCount": 7,
+            "offsetPos": {
+                "x": -7.367,
+                "y": 0.0,
+                "z": 19.176
+            },
+            "faceRot": 0.0,
+            "groupRot": 0.0,
+            "xSize": 2.5,
+            "zSize": 5.0,
+            "dirType": 0,
+            "useBaseWidth": true,
+            "camIdx": 2
+        },
+        {
+            "idx": 2,
+            "presetName": "Preset 2",
+            "faceCount": 6,
+            "offsetPos": {
+                "x": 13.761,
+                "y": 0.0,
+                "z": 3.332
+            },
+            "faceRot": 0.0,
+            "groupRot": 0.0,
+            "xSize": 5.0,
+            "zSize": 2.5,
+            "dirType": 0,
+            "useBaseWidth": false,
+            "camIdx": 1
+        },
+        {
+            "idx": 3,
+            "presetName": "Preset 3",
+            "faceCount": 4,
+            "offsetPos": {
+                "x": -3.549,
+                "y": 0.0,
+                "z": 3.586
+            },
+            "faceRot": 0.0,
+            "groupRot": 0.0,
+            "xSize": 2.5,
+            "zSize": 5.0,
+            "dirType": 0,
+            "useBaseWidth": true,
+            "camIdx": 2
+        },
+        {
+            "idx": 4,
+            "presetName": "Preset 4",
+            "faceCount": 4,
+            "offsetPos": {
+                "x": -3.549,
+                "y": 0.0,
+                "z": 8.58
+            },
+            "faceRot": 0.0,
+            "groupRot": 0.0,
+            "xSize": 2.5,
+            "zSize": 5.0,
+            "dirType": 0,
+            "useBaseWidth": true,
+            "camIdx": 2
+        },
+        {
+            "idx": 5,
+            "presetName": "Preset 5",
+            "faceCount": 2,
+            "offsetPos": {
+                "x": -3.625,
+                "y": 0.0,
+                "z": -7.114
+            },
+            "faceRot": 0.0,
+            "groupRot": 0.0,
+            "xSize": 5.0,
+            "zSize": 2.5,
+            "dirType": 0,
+            "useBaseWidth": true,
+            "camIdx": 1
+        }
+    ]
+}

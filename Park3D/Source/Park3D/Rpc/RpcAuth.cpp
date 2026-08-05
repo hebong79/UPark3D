@@ -89,8 +89,16 @@ namespace Park3DRpcAuth
 	EAuthResult Authorize(const FString& ConfiguredToken,
 	                      const FString& PresentedToken,
 	                      const TArray<uint8>& PeerRawIp,
-	                      bool bHasOriginHeader)
+	                      bool bHasOriginHeader,
+	                      bool bAllowAnonymous)
 	{
+		// ⓪ 익명 허용(개발/폐쇄망 전용) → 나머지 판정을 전부 건너뛴다.
+		//    브라우저 fetch/XHR 의 Origin 거부까지 함께 풀린다(그래야 웹 뷰어가 붙는다).
+		if (bAllowAnonymous)
+		{
+			return EAuthResult::Allowed;
+		}
+
 		// ① Origin 헤더 존재 → 토큰 설정 여부와 무관하게 무조건 거부(D11).
 		//    비브라우저 클라이언트(curl/urllib 브리지/외부 툴/Automation)는 Origin 을 보내지 않으므로 무영향.
 		if (bHasOriginHeader)

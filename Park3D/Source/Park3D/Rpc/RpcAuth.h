@@ -63,16 +63,20 @@ namespace Park3DRpcAuth
 	bool IsLoopbackRawIp(const TArray<uint8>& RawIp);
 
 	/**
-	 * 핵심 판정. 판정 순서: Origin → (토큰 설정 시) 토큰 → (미설정 시) 루프백.
+	 * 핵심 판정. 판정 순서: 익명허용 → Origin → (토큰 설정 시) 토큰 → (미설정 시) 루프백.
 	 * @param ConfiguredToken  결정된 서버 토큰(Trim 후 빈 문자열 = 미설정)
 	 * @param PresentedToken   요청 헤더 값(없으면 빈 문자열)
 	 * @param PeerRawIp        피어 원시 IP(알 수 없으면 빈 배열 → 비루프백 취급 = fail-closed)
 	 * @param bHasOriginHeader 요청에 Origin 헤더가 있는가. 있으면 토큰 설정 여부와 무관하게 무조건 거부(D11)
+	 * @param bAllowAnonymous  ⚠ true 면 위 모든 판정을 건너뛰고 무조건 통과시킨다(개발/폐쇄망 전용).
+	 *                         토큰·Origin·루프백 규칙이 전부 무력화되므로, 네트워크에 닿는 누구나
+	 *                         79개 RPC 메서드(저장 포함)를 호출할 수 있게 된다. 기본값은 반드시 false 다.
 	 */
 	EAuthResult Authorize(const FString& ConfiguredToken,
 	                      const FString& PresentedToken,
 	                      const TArray<uint8>& PeerRawIp,
-	                      bool bHasOriginHeader);
+	                      bool bHasOriginHeader,
+	                      bool bAllowAnonymous = false);
 
 	/**
 	 * [HTTPServer.Listeners] 설정에서 해당 포트에 적용될 바인드 주소 계산. 진단/경고 로그 전용이며

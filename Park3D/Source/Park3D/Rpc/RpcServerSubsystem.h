@@ -15,6 +15,7 @@
 #include "Modules/MapRpcModule.h"
 #include "Modules/CamRpcModule.h"
 #include "Modules/MeasureRpcModule.h"
+#include "MjpegStreamManager.h"
 #include "RpcServerSubsystem.generated.h"
 
 class URpcDispatcher;
@@ -50,6 +51,12 @@ private:
 	bool HandleCatalog(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete);
 	bool HandleOptions(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete);
 
+	/**
+	 * GET /stream — MJPEG(multipart/x-mixed-replace). 응답을 완결하지 않고 스트림 매니저에 넘긴다.
+	 * 이후 프레임 공급은 FMjpegStreamManager 의 티커가 수행한다.
+	 */
+	bool HandleStream(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete);
+
 	/** 단건 JSON-RPC 요청 객체 → 응답 객체({jsonrpc,id,result|error}). */
 	TSharedPtr<FJsonObject> ProcessSingle(const TSharedPtr<FJsonObject>& RequestObj);
 
@@ -57,8 +64,9 @@ private:
 	/**
 	 * 인증을 판정하고, 실패면 401 응답까지 완결한다. 본문은 파싱하지 않는다(미인증 입력을 파서에 먹이지 않음).
 	 * @return true = 통과(호출자 계속 진행). false = 이미 응답했으므로 호출자는 즉시 return true 할 것.
+	 * @param bAllowQueryToken true 면 헤더가 없을 때 ?token= 쿼리를 폴백으로 인정한다(/stream 전용).
 	 */
-	bool PassAuthOrRespond(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete) const;
+	bool PassAuthOrRespond(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete, bool bAllowQueryToken = false) const;
 
 	/** 요청에서 X-Park3D-Token 첫 값을 꺼낸다(소문자 키). Find()==nullptr 과 Num()==0 을 모두 방어. */
 	static FString ExtractPresentedToken(const FHttpServerRequest& Request);
@@ -86,12 +94,22 @@ private:
 	TSharedPtr<IHttpRouter> Router;
 	TArray<FHttpRouteHandle> RouteHandles;
 
+	/** MJPEG 스트림 세션 소유자. StartServer 에서 생성, StopServer 에서 파괴(티커·세션 동반 정리). */
+	TUniquePtr<FMjpegStreamManager> StreamManager;
+
 	/**
 	 * 결정된 인증 토큰. 빈 문자열이면 "무토큰 = 루프백 전용" 모드.
 	 * ⚠ 어떤 로그 레벨에서도 값을 출력하지 않는다. UPROPERTY 를 붙이지 않는 것은
 	 *   디테일 패널/직렬화/블루프린트 노출을 막기 위해서다(의도적).
 	 */
 	FString AuthToken;
+
+	/**
+	 * ⚠ 인증 전면 우회. `-RpcAllowAnonymous` 또는 `[RpcServer] AllowAnonymous=True` 로 켠다.
+	 * 켜면 토큰·Origin·루프백 규칙이 전부 무력화되어 네트워크에 닿는 누구나 79개 메서드를 호출할 수 있다.
+	 * 폐쇄망 개발 편의를 위한 스위치이며 기본값은 false 다.
+	 */
+	bool bAllowAnonymous = false;
 
 	/** -RpcPort=0 으로 명시 비활성화되었는가. true 면 StartServer 가 리스닝 소켓을 아예 만들지 않는다. */
 	bool bServerDisabled = false;

@@ -155,6 +155,20 @@ void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		}
 	}
 
+	// 익명 허용(인증 전면 우회) 결정: 커맨드라인 -RpcAllowAnonymous > Config([RpcServer] AllowAnonymous).
+	// 켜져 있으면 토큰이 설정돼 있어도 무시된다(우회가 목적이므로 토큰 우선이 아니다).
+	{
+		bool bConfigAnon = false;
+		if (GConfig && GConfig->GetBool(TEXT("RpcServer"), TEXT("AllowAnonymous"), bConfigAnon, GGameIni))
+		{
+			bAllowAnonymous = bConfigAnon;
+		}
+		if (FParse::Param(FCommandLine::Get(), TEXT("RpcAllowAnonymous")))
+		{
+			bAllowAnonymous = true;
+		}
+	}
+
 	Dispatcher = NewObject<URpcDispatcher>(this);
 
 	// 월드는 호출 시점에 해석(레벨 로드/초기화 타이밍 안전).
@@ -260,6 +274,11 @@ void URpcServerSubsystem::StartServer()
 		FHttpRequestHandler::CreateUObject(this, &URpcServerSubsystem::HandleHealth)));
 	RouteHandles.Add(Router->BindRoute(FHttpPath(TEXT("/rpc/catalog")), EHttpServerRequestVerbs::VERB_GET,
 		FHttpRequestHandler::CreateUObject(this, &URpcServerSubsystem::HandleCatalog)));
+	RouteHandles.Add(Router->BindRoute(FHttpPath(TEXT("/stream")), EHttpServerRequestVerbs::VERB_GET,
+		FHttpRequestHandler::CreateUObject(this, &URpcServerSubsystem::HandleStream)));
+
+	// 스트림 매니저는 라우터와 수명을 맞춘다(리스너 없이 티커만 도는 상태를 만들지 않는다).
+	StreamManager = MakeUnique<FMjpegStreamManager>([this]() -> UWorld* { return GetWorld(); });
 
 	Http.StartAllListeners();
 	bServerStarted = true;
@@ -288,8 +307,22 @@ void URpcServerSubsystem::StartServer()
 		: (BindAddress.Equals(TEXT("any"), ESearchCase::IgnoreCase) ? FString(TEXT("0.0.0.0")) : BindAddress);
 
 	UE_LOG(LogTemp, Log, TEXT("[RPC] JSON-RPC 서버 시작: http://%s:%d/rpc (bind=%s, auth=%s, method %d개)"),
-		*DisplayHost, Port, *BindAddress, bHasToken ? TEXT("token") : TEXT("none"),
+		*DisplayHost, Port, *BindAddress,
+		bAllowAnonymous ? TEXT("ANONYMOUS(우회)") : (bHasToken ? TEXT("token") : TEXT("none")),
 		Dispatcher ? Dispatcher->NumMethods() : 0);
+
+	if (bAllowAnonymous)
+	{
+		// 이 상태가 조용히 유지되면 사고가 된다. 매 기동마다 눈에 띄게 남긴다.
+		UE_LOG(LogTemp, Warning, TEXT("[RPC] ============================================================"));
+		UE_LOG(LogTemp, Warning, TEXT("[RPC] ⚠ 익명 접속 허용(AllowAnonymous) — 인증이 꺼져 있습니다."));
+		UE_LOG(LogTemp, Warning, TEXT("[RPC]   토큰·Origin·루프백 검사를 모두 건너뜁니다."));
+		UE_LOG(LogTemp, Warning, TEXT("[RPC]   %s:%d 에 닿는 누구나 %d개 메서드(저장 포함)를 호출할 수 있습니다."),
+			*DisplayHost, Port, Dispatcher ? Dispatcher->NumMethods() : 0);
+		UE_LOG(LogTemp, Warning, TEXT("[RPC]   끄기: DefaultGame.ini [RpcServer] AllowAnonymous=False"));
+		UE_LOG(LogTemp, Warning, TEXT("[RPC] ============================================================"));
+		return;
+	}
 
 	if (!bHasToken)
 	{
@@ -306,6 +339,9 @@ void URpcServerSubsystem::StartServer()
 
 void URpcServerSubsystem::StopServer()
 {
+	// 라우트를 풀기 전에 스트림부터 닫는다(티커가 죽은 연결에 프레임을 밀어넣지 않도록).
+	StreamManager.Reset();
+
 	if (Router.IsValid())
 	{
 		for (const FHttpRouteHandle& H : RouteHandles)
@@ -356,14 +392,20 @@ FString URpcServerSubsystem::ExtractPeerDisplay(const FHttpServerRequest& Reques
 	return Request.PeerAddress->ToString(/*bAppendPort=*/false);
 }
 
-bool URpcServerSubsystem::PassAuthOrRespond(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete) const
+bool URpcServerSubsystem::PassAuthOrRespond(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete, bool bAllowQueryToken) const
 {
 	const bool bHasOrigin = Request.Headers.Find(Park3DRpcAuth::OriginKeyLower) != nullptr;
-	const FString Presented = ExtractPresentedToken(Request);
+
+	// 토큰 운반 경로: 헤더 우선, /stream 에 한해 ?token= 폴백(<img> 가 헤더를 못 붙임 — 설계 §4.3).
+	// 판정 로직(Authorize)·루프백 폴백·Origin 거부는 전혀 바뀌지 않는다.
+	const FString QueryToken = bAllowQueryToken
+		? (Request.QueryParams.Contains(TEXT("token")) ? Request.QueryParams[TEXT("token")] : FString())
+		: FString();
+	const FString Presented = Park3DMjpeg::PickToken(ExtractPresentedToken(Request), QueryToken);
 	const TArray<uint8> PeerRawIp = ExtractPeerRawIp(Request);
 
 	const Park3DRpcAuth::EAuthResult Result =
-		Park3DRpcAuth::Authorize(AuthToken, Presented, PeerRawIp, bHasOrigin);
+		Park3DRpcAuth::Authorize(AuthToken, Presented, PeerRawIp, bHasOrigin, bAllowAnonymous);
 
 	if (Result == Park3DRpcAuth::EAuthResult::Allowed)
 	{
@@ -480,6 +522,36 @@ bool URpcServerSubsystem::HandleCatalog(const FHttpServerRequest& Request, const
 	TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 	O->SetArrayField(TEXT("methods"), Methods);
 	CompleteJson(OnComplete, SerializeObject(O));
+	return true;
+}
+
+bool URpcServerSubsystem::HandleStream(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete)
+{
+	// 영상은 /rpc 와 같은 등급의 보호 대상이다. 단 <img> 는 헤더를 못 붙이므로 ?token= 을 허용한다(설계 §4.3).
+	if (!PassAuthOrRespond(Request, OnComplete, /*bAllowQueryToken=*/true)) { return true; }
+
+	if (!StreamManager)
+	{
+		CompleteJsonWithCode(OnComplete,
+			SerializeObject(MakeErrorResponse(MakeShared<FJsonValueNull>(), Park3DRpc::Domain, TEXT("스트림 매니저 없음"))),
+			EHttpServerResponseCodes::ServerError);
+		return true;
+	}
+
+	const Park3DMjpeg::FStreamParams Params = Park3DMjpeg::ParseParams(Request.QueryParams);
+
+	int32 HttpCode = 0;
+	FString Error;
+	if (!StreamManager->BeginStream(Params, OnComplete, HttpCode, Error))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[MJPEG] 스트림 거부(%d): %s"), HttpCode, *Error);
+		CompleteJsonWithCode(OnComplete,
+			SerializeObject(MakeErrorResponse(MakeShared<FJsonValueNull>(), Park3DRpc::Domain, Error)),
+			HttpCode == 503 ? EHttpServerResponseCodes::ServiceUnavail : EHttpServerResponseCodes::NotFound);
+		return true;
+	}
+
+	// 성공 시 응답은 BeginStream 안에서 이미 시작됐다(이후 프레임은 매니저 티커가 공급).
 	return true;
 }
 

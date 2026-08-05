@@ -64,6 +64,49 @@ bool FRpcAuthHeaderKeyTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// ===== T-U6: 익명 허용(AllowAnonymous) =====
+// 우회 스위치는 "켜면 전부 통과 / 끄면 종전과 100% 동일" 두 가지를 모두 지켜야 한다.
+// 특히 기본값이 false 라는 것 — 실수로 기본이 뒤집히면 서버가 무인증으로 열린다.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRpcAuthAllowAnonymousTest,
+	"Park3D.Rpc.Auth.AllowAnonymous",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FRpcAuthAllowAnonymousTest::RunTest(const FString& Parameters)
+{
+	const TArray<uint8> External = Bytes({ 192, 168, 0, 200 });
+	const TArray<uint8> Loopback = Bytes({ 127, 0, 0, 1 });
+
+	// 켠 경우: 종전이라면 거부됐을 모든 조합이 통과한다.
+	TestEqual(TEXT("익명: 외부+무토큰"),
+		Park3DRpcAuth::Authorize(TEXT("SECRET"), FString(), External, false, true), EAuthResult::Allowed);
+	TestEqual(TEXT("익명: 외부+틀린토큰"),
+		Park3DRpcAuth::Authorize(TEXT("SECRET"), TEXT("WRONG"), External, false, true), EAuthResult::Allowed);
+	TestEqual(TEXT("익명: Origin 헤더(브라우저 fetch)"),
+		Park3DRpcAuth::Authorize(TEXT("SECRET"), TEXT("SECRET"), External, true, true), EAuthResult::Allowed);
+	TestEqual(TEXT("익명: 토큰 미설정+외부"),
+		Park3DRpcAuth::Authorize(FString(), FString(), External, false, true), EAuthResult::Allowed);
+	TestEqual(TEXT("익명: peer 불명(빈 IP)"),
+		Park3DRpcAuth::Authorize(FString(), FString(), TArray<uint8>(), false, true), EAuthResult::Allowed);
+
+	// 끈 경우: 종전 판정이 그대로여야 한다(회귀 방지).
+	TestEqual(TEXT("비익명: 외부+무토큰 → DeniedBadToken"),
+		Park3DRpcAuth::Authorize(TEXT("SECRET"), FString(), External, false, false), EAuthResult::DeniedBadToken);
+	TestEqual(TEXT("비익명: Origin → DeniedBrowserOrigin"),
+		Park3DRpcAuth::Authorize(TEXT("SECRET"), TEXT("SECRET"), External, true, false), EAuthResult::DeniedBrowserOrigin);
+	TestEqual(TEXT("비익명: 토큰 미설정+외부 → DeniedNotLoopback"),
+		Park3DRpcAuth::Authorize(FString(), FString(), External, false, false), EAuthResult::DeniedNotLoopback);
+	TestEqual(TEXT("비익명: 토큰 일치 → Allowed"),
+		Park3DRpcAuth::Authorize(TEXT("SECRET"), TEXT("SECRET"), External, false, false), EAuthResult::Allowed);
+	TestEqual(TEXT("비익명: 토큰 미설정+루프백 → Allowed"),
+		Park3DRpcAuth::Authorize(FString(), FString(), Loopback, false, false), EAuthResult::Allowed);
+
+	// 기본 인자가 false 인가 — 인자를 생략한 호출이 종전과 같아야 한다.
+	TestEqual(TEXT("기본값 생략 = 비익명"),
+		Park3DRpcAuth::Authorize(TEXT("SECRET"), FString(), External, false), EAuthResult::DeniedBadToken);
+
+	return true;
+}
+
 // ===== T-U1e: 토큰 문자셋 — 금지 문자는 경로마다 다르게 잘려 영구 401 을 만든다 =====
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRpcAuthTokenCharsetTest,
 	"Park3D.Rpc.Auth.TokenCharset",

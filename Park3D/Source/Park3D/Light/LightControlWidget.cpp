@@ -45,8 +45,11 @@ namespace
 	constexpr float TitleFontSize = 18.0f;
 	constexpr float StatusFontSize = 12.0f;
 
-	/** UEditableTextBox 는 SetFont 가 없어 스타일을 통째로 바꿔야 폰트가 적용된다. */
-	void SetBoxFontSize(UEditableTextBox* Box, float Size)
+	/**
+	 * UEditableTextBox 는 SetFont 가 없어 스타일을 통째로 바꿔야 폰트가 적용된다.
+	 * 색도 함께 지정한다 — 엔진 기본 글자색이 UseForeground(=흰색)라 밝은 기본 입력창 배경 위에서 보이지 않는다.
+	 */
+	void StyleField(UEditableTextBox* Box, float Size)
 	{
 		if (!Box)
 		{
@@ -54,6 +57,10 @@ namespace
 		}
 		FEditableTextBoxStyle St = Box->GetWidgetStyle();
 		St.TextStyle.Font.Size = Size;
+		St.TextStyle.ColorAndOpacity = FSlateColor(FLinearColor::Black);
+		St.ForegroundColor = FSlateColor(FLinearColor::Black);
+		St.FocusedForegroundColor = FSlateColor(FLinearColor::Black);
+		St.ReadOnlyForegroundColor = FSlateColor(FLinearColor::Black);
 		Box->SetWidgetStyle(St);
 	}
 
@@ -79,6 +86,8 @@ namespace
 		T->SetText(Label);
 		T->SetJustification(ETextJustify::Center);
 		T->SetFontSize(LabelFontSize);
+		// 엔진 기본 버튼 배경이 밝은 회색이라 기본 흰색 라벨은 보이지 않는다(다른 패널과 동일한 규약).
+		T->SetColorAndOpacity(FSlateColor(FLinearColor::Black));
 		B->AddChild(T);
 		return B;
 	}
@@ -130,7 +139,7 @@ void ULightControlWidget::AddSliderRow(UVerticalBox* Parent, const FText& Label,
 	}
 
 	OutField = WidgetTree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass());
-	SetBoxFontSize(OutField, LabelFontSize);
+	StyleField(OutField, LabelFontSize);
 	USizeBox* FieldBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
 	FieldBox->SetWidthOverride(ValueColumnWidth);
 	FieldBox->AddChild(OutField);
@@ -202,7 +211,7 @@ void ULightControlWidget::BuildUI()
 		for (TObjectPtr<UEditableTextBox>* Target : Targets)
 		{
 			*Target = WidgetTree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass());
-			SetBoxFontSize(*Target, LabelFontSize);
+			StyleField(*Target, LabelFontSize);
 			if (UHorizontalBoxSlot* S = Cast<UHorizontalBoxSlot>(Row->AddChild(*Target)))
 			{
 				S->SetPadding(FMargin(0, 0, 4, 0));

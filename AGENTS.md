@@ -69,15 +69,15 @@ Codex 서브에이전트가 유용한 규모의 작업이면 architect, impact-a
 
 ## Goal/Loop 요청
 
-사용자가 `Goal / Loop / Requirements`를 주거나 “루프 돌려”, “검증 실패 시 자동 반복”, “자동으로 재구현”이라고 요청하면 `.agents/skills/parking-cpp-loop/SKILL.md`를 전용 실행기로 선택한다. 설계·C++ 수정·PIE·검증·재설계는 자동으로 진행하되 C++ 컴파일만 수동 게이트로 둔다. 동일 원인 3회 연속 실패 시 근거와 다음 선택지를 보고하고 중단한다.
+사용자가 `Goal / Loop / Requirements`를 주거나 “루프 돌려”, “검증 실패 시 자동 반복”, “자동으로 재구현”이라고 요청하면 `.agents/skills/parking-cpp-loop/SKILL.md`를 전용 실행기로 선택한다. 설계·C++ 수정·PIE·검증·재설계는 자동으로 진행하되 C++ 컴파일만 수동 게이트로 둔다. 동일 원인 3회 연속 실패 시 근거와 다음 선택지를 보고하고 중단한다. 동일 원인은 `대상 Requirement`와 `실패 증상`이 같은 경우이며, 수정 파일·접근법이 달라도 카운터를 초기화하지 않는다. 카운트에는 EDIT 단계의 내부 재시도를 합산하고 `내부 시도: N회`로 남긴다.
 
 - **설계·영향도**: `gpt-5.6-sol` architect가 최초/수정 설계를, `gpt-5.6-sol` impact-analyst가 사전·사후 영향도를 담당한다. 실패 근거가 설계 변경을 요구하면 Sol 설계 게이트로 돌아간다.
 - **개발·루프 실행**: `gpt-5.6-terra` unreal-implementer가 EDIT, PRECHECK, 수동 COMPILE_GATE 안내, RUN과 반복 상태 집계를 담당한다.
-- **검수·테스트**: 별도 `gpt-5.6-terra` qa-verifier가 VERIFY와 Requirements 판정을 담당한다. 구현 역할이 자신의 결과를 최종 승인하지 않는다.
+- **검수·테스트**: 별도 `gpt-5.6-terra` qa-verifier가 VERIFY와 Requirements 판정을 담당한다. 구현 역할이 자신의 결과를 최종 승인하지 않는다. Goal/Loop 중에는 판정만 반환하고 implementer 반려 반복을 병행하지 않는다(복귀는 DESIGN 단일 경로).
 - **문서화**: 모든 Requirements와 사후 영향도가 통과한 뒤 `gpt-5.6-luna` doc-writer가 최종 `Docs/yyyyMMdd_HHmmss_이름.md`만 작성한다. Goal/Loop에는 별도 Luna 주변 동작 사후점검 보고서를 적용하지 않는다.
 
 ## 실패 처리와 산출물 보존
 
-- 빌드·테스트·MCP 작업은 안전한 범위에서 1회 재시도한다. 재실패는 보고서에 실패로 남긴다.
+- 빌드·테스트·MCP 작업은 안전한 범위에서 1회 재시도한다. 재실패는 보고서에 실패로 남긴다. 재시도 1회의 주체는 그 명령을 실제로 실행한 역할이며(빌드→implementer, 테스트→qa-verifier), 결과를 넘겨받은 상위 역할은 같은 실패를 다시 재시도하지 않는다. 같은 실패에 대한 총 재시도는 전체 1회다.
 - 기존 산출물과 사용자 변경은 삭제·되돌리지 않는다. 상충하는 자료는 출처를 함께 기록한다.
 - 중간 산출물은 `_workspace/`에 보존하고 최종 코드·문서만 정식 위치에 둔다.

@@ -56,7 +56,7 @@ architect 설계서 ──→ impact-analyst 사전 영향 검토 ─┐
                                   └ 통과/미검증 명시 → 종합 문서화 → Docs/
 ```
 - **설계 우선**: 구현은 항상 확정된 설계서를 입력으로 받는다(설계 게이트 미통과 시 구현 차단).
-- **생성-검증 루프**: qa-verifier가 버그 발견 시 unreal-implementer에 `SendMessage`로 반려, 통과까지 반복.
+- **생성-검증 루프**: qa-verifier가 버그 발견 시 unreal-implementer에 `SendMessage`로 반려, 통과까지 반복. 단 **Goal/Loop 실행 중에는 이 루프를 돌리지 않는다** — qa-verifier는 판정만 반환하고 복귀는 `parking-cpp-loop` `[7]`이 architect로 단일 수행한다(이중 반복 방지).
 - **점진적 QA**: 모듈 단위로 구현 직후 검증(전체 완료 후 몰아서 ✕).
 - **주변 동작 사후점검**: 표준 작업에서 QA와 사후 영향도 증거가 준비되면 doc-writer가 `_workspace/{phase}_luna_behavior_impact_report.md`에 인접 호출·UI/입력·저장/로드·렌더/액터 상태 중 관련 경계면을 통과/실패/미검증으로 기록한다. 실패·고위험은 구현/QA로 되돌리고, 기능 코드는 직접 수정하지 않는다.
 - **Goal/Loop 예외**: 별도 주변 동작 보고서를 만들지 않는다. architect/impact-analyst가 설계·사전/사후 영향도를, implementer가 개발·실행을, 별도 qa-verifier가 검수·테스트를 맡고, doc-writer는 모든 조건 통과 뒤 최종 Docs만 작성한다.
@@ -68,6 +68,7 @@ architect 설계서 ──→ impact-analyst 사전 영향 검토 ─┐
 
 ## 에러 핸들링
 - 빌드/테스트/MCP 실패: 1회 재시도. 재실패 시 해당 결과 없이 진행하고 **보고서에 누락·실패를 명시**(은폐 금지).
+  - **재시도 소유권(중복 재시도 금지)**: 재시도 1회는 **그 명령을 실제로 실행한 역할만** 수행한다(빌드→implementer, 테스트→qa-verifier). 결과를 넘겨받은 오케스트레이터는 같은 실패를 다시 재시도하지 않고 그대로 보고로 넘긴다. 같은 실패에 대한 총 재시도는 **전체 1회**다.
 - 상충 데이터: 삭제하지 않고 출처 병기.
 - MCP 연결 또는 도구 호출 실패: 1회 재시도한 뒤 실패를 기록한다. 작업 전 `list_toolsets`와 필요한 `describe_toolset`으로 capability를 확인하고, 확인된 gateway `call_tool` 또는 직접 도구에 기능을 매핑한다. 연결 실패와 도구 미노출을 구분하며, 필요하면 C++ 우회를 검토한다.
 

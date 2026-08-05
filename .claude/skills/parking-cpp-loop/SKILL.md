@@ -14,17 +14,21 @@ Park3D는 **C++ 전용**(블루프린트 배제) 방침이다. C++ 핫컴파일�
 - ✅ **상태 검증 자동**: `SlateInspectorToolset`(Observe/Snapshot/WaitFor/Screenshot), `EditorToolset.LogsToolset.GetLogEntries`, `AutomationTestToolset`.
 - ✅ **사전 문법점검(선택)**: 외부 UBT 빌드(Bash)로 컴파일 에러 선검출(에디터가 DLL 잠금 → 링크는 실패하나 컴파일 에러는 먼저 표출). 사람 컴파일 낭비를 줄임.
 
-메모리: [[slateinspector-pie-umg-click-limit]], [[mcp-pie-start-crash]], [[ue58-native-mcp-toolset]], [[park3d-build-test-livecoding]].
+메모리: [[mcp-cannot-trigger-cpp-compile]], [[slate-click-does-not-fire-umg-onclicked]], [[pie-start-stop-via-native-toolset]], [[ubt-precheck-before-compile-gate]], [[live-coding-vs-headless-automation]].
 
 ## 역할 분리
 
 - architect: 최초 설계와 실패 근거 기반 재설계
 - impact-analyst: 구현 전 사전 영향도와 검증 뒤 사후 영향도
 - unreal-implementer/loop-runner: C++ 수정, 사전점검, 수동 컴파일 게이트 안내, PIE 실행, 반복 상태 집계
-- qa-verifier: 구현 역할과 분리된 Automation/PIE 검수·테스트와 Requirements 판정
+- qa-verifier: 구현 역할과 분리된 Automation/PIE 검수·테스트와 Requirements 판정.
+  **Goal/Loop 중에는 판정만 반환하고 implementer에 직접 반려하는 자체 반복을 돌지 않는다**
+  (복귀는 `[7]`이 architect로 단일 수행 — 이중 반복 방지).
 - doc-writer: 모든 조건과 사후 영향도가 통과한 뒤 최종 문서화만 수행
 
 QA 또는 사후 영향도 실패가 설계 변경을 요구하면 architect로 돌아간다. 구현 역할이 자신의 결과를 최종 승인하지 않는다. 플랫폼별 모델 매핑은 각 플랫폼 어댑터/역할 파일에서 정한다.
+
+**재시도 소유권(중복 재시도 금지)**: 빌드·테스트·MCP 실패의 "1회 재시도"는 **실제로 그 명령을 실행한 역할만** 수행한다. 결과를 넘겨받은 상위 역할(오케스트레이터·루프 컨트롤러)은 같은 실패를 다시 재시도하지 않고 그대로 `[7]` 판정으로 보낸다. 같은 실패에 대한 총 재시도는 **전체 1회**다.
 
 ## 입력
 사용자가 준 **Goal / Loop / Requirements** 를 그대로 성공 기준으로 삼는다. 없으면 먼저 성공 기준(검증 가능한 조건)을 확정한다(CLAUDE.md 4번: 목표 중심).
@@ -39,6 +43,8 @@ QA 또는 사후 영향도 실패가 설계 변경을 요구하면 architect로 
         - 첫 반복: parking-design 규약으로 최소 설계(요구·구조·흐름·대안·테스트포인트).
         - 이후 반복: "직전 검증이 왜 실패했는가" 원인 분석 → 수정 설계. (Loop의 '재설계' 단계)
 [2] AUTO  unreal-implementer C++ 수정 (Edit). 외과적 변경(CLAUDE.md 3번). 검증용 Automation 테스트도 여기서 작성/갱신.
+        - **내부 재시도 합산**: 이 단계 안에서 스스로 고쳐보고 다시 시도한 횟수도 반복 카운트에 합산한다.
+          숨은 재시도 금지 — 시도 N회면 `loop_iteration_N.md`에 "내부 시도 N회"로 반드시 남긴다.
 [3] AUTO  (선택) 사전 문법점검: 외부 UBT 빌드로 컴파일 에러 선검출. 에러 있으면 사람 안 부르고 [1]로.
 [4] MANUAL 컴파일 게이트  ← 유일한 사람 개입
         - 사용자에게 명확히 요청: "Ctrl+Alt+F11 → '컴파일 성공' 확인 후 '완료'".
@@ -49,6 +55,10 @@ QA 또는 사후 영향도 실패가 설계 변경을 요구하면 architect로 
         - 성공 → impact-analyst 사후 영향도 통과 후 [8].
         - 실패/사후 고위험 → 실패 근거(로그/스냅샷)를 기록하고 [1]로 자동 재개(사람 개입 없이).
         - 무한루프 방지: 동일 원인 3회 연속 실패 시 중단하고 사용자에게 상황·후보안 보고.
+          **동일 원인 판정 기준**: `대상 Requirement`와 `실패 증상`이 같으면 동일 원인이다.
+          수정한 파일·함수·접근법이 달라도 같은 Requirement가 같은 증상으로 계속 실패하면 동일 원인으로 센다.
+          (원인 라벨을 새로 붙여 카운터를 초기화하지 않는다.)
+        - 카운트 대상은 [2]의 내부 재시도를 합산한 값이다.
 [8] AUTO  최종 보고 + 문서화(korean-docs 규약, Docs/yyyyMMdd_HHmmss_*.md) + 영향도(impact-analysis).
 ```
 
@@ -72,7 +82,7 @@ QA 또는 사후 영향도 실패가 설계 변경을 요구하면 architect로 
 - 설계: `_workspace/{phase}_goal_loop_design.md`
 - 영향도: `_workspace/{phase}_impact_report.md`
 - 구현 요약: `_workspace/{phase}_implementer_changes.md`
-- 반복 근거: `_workspace/{phase}_loop_iteration_N.md`
+- 반복 근거: `_workspace/{phase}_loop_iteration_N.md` — 실패 근거·수정 내용에 더해 **`내부 시도: N회`** 와 **`동일 원인 연속: N/3`** 을 반드시 포함한다(숨은 재시도 금지).
 - QA: `_workspace/{phase}_qa_report.md`
 - 최종 문서: `Docs/yyyyMMdd_HHmmss_이름.md`
 

@@ -31,23 +31,27 @@ DESIGN → EDIT → PRECHECK → COMPILE_GATE → RUN → VERIFY → DECIDE
 ```
 
 1. **DESIGN**: 첫 반복은 Goal/Requirements를 설계서로 고정한다. 이후 반복은 직전 실패 로그·Automation 결과·스냅샷을 원인 분석해 수정 설계를 작성한다.
-2. **EDIT**: C++와 검증용 Automation 테스트를 수정한다. Park3D Goal/Loop는 C++ 전용이며 Blueprint로 우회하지 않는다.
+2. **EDIT**: C++와 검증용 Automation 테스트를 수정한다. Park3D Goal/Loop는 C++ 전용이며 Blueprint로 우회하지 않는다. 이 단계 안에서 스스로 고쳐보고 다시 시도한 횟수도 반복 카운트에 합산하며, `내부 시도: N회`로 반복 근거에 남긴다(숨은 재시도 금지).
 3. **PRECHECK**: 가능하면 외부 UBT로 문법·타입 오류를 먼저 확인한다. 링크 잠금만 실패한 경우 컴파일 오류와 구분한다.
 4. **COMPILE_GATE**: C++ 컴파일은 유일한 수동 게이트다. 사용자에게 `Ctrl+Alt+F11` 후 Live Coding 성공 확인을 요청하고, 성공이면 `완료`, 실패면 로그를 받는다. 헤더/시그니처 변경은 PIE를 정지한 뒤 컴파일하도록 안내한다.
 5. **RUN**: 필요 시 `StopPIE → StartPIE`로 반영 상태를 초기화한다.
 6. **VERIFY**: Automation 테스트를 우선하고, 실 UI가 필요할 때 PIE Snapshot/로그/스크린샷으로 Requirements를 검증한다. 합성 클릭이 OnClicked를 보장하지 않으므로 콘솔 exec·테스트 훅을 우선한다.
-7. **DECIDE**: 모든 Requirements가 통과하면 종료한다. 실패하면 근거를 `_workspace/`에 남기고 DESIGN으로 돌아간다.
+7. **DECIDE**: 모든 Requirements가 통과하면 종료한다. 실패하면 근거를 `_workspace/`에 남기고 DESIGN으로 돌아간다. 복귀 경로는 DESIGN 하나뿐이며, qa-verifier가 implementer에 직접 반려하는 별도 반복을 병행하지 않는다.
 
 ## 산출물과 종료 조건
 
 - 설계: `_workspace/{phase}_goal_loop_design.md`
 - 영향도: `_workspace/{phase}_impact_report.md`
 - 구현 요약: `_workspace/{phase}_implementer_changes.md`
-- 반복 근거: `_workspace/{phase}_loop_iteration_N.md`
+- 반복 근거: `_workspace/{phase}_loop_iteration_N.md` — 실패 근거·수정에 더해 `내부 시도: N회`와 `동일 원인 연속: N/3`을 포함한다.
 - QA: `_workspace/{phase}_qa_report.md`
 - 최종: `Docs/yyyyMMdd_HHmmss_이름.md`
 
 Goal의 모든 Requirements가 검증되면 성공 보고 후 종료한다. 동일 원인이 3회 연속 재현되거나 사용자가 중단하면 반복을 멈추고 원인, 시도한 수정, 남은 선택지를 보고한다. 컴파일·MCP·테스트 재실패는 숨기지 않고 미검증으로 기록한다.
+
+**동일 원인 판정 기준**: `대상 Requirement`와 `실패 증상`이 같으면 동일 원인이다. 수정한 파일·함수·접근법이 달라도 같은 Requirement가 같은 증상으로 계속 실패하면 동일 원인으로 세며, 원인 라벨을 새로 붙여 카운터를 초기화하지 않는다. 카운트에는 EDIT 단계의 내부 재시도를 합산한다.
+
+**재시도 소유권**: 빌드·테스트·MCP 실패의 1회 재시도는 그 명령을 실제로 실행한 역할만 수행한다. 결과를 넘겨받은 상위 역할은 같은 실패를 다시 재시도하지 않고 DECIDE로 보낸다. 같은 실패에 대한 총 재시도는 전체 1회다.
 
 ## 담당 모델
 

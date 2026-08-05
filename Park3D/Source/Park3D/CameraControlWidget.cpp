@@ -846,11 +846,16 @@ void UCameraControlWidget::HandleOpen()
 	{
 		return;
 	}
+	LoadFromJsonFile(Path);
+}
+
+bool UCameraControlWidget::LoadFromJsonFile(const FString& Path)
+{
 	FCameraPosList Loaded;
 	if (!UCameraControlLibrary::LoadFromJson(Path, Loaded))
 	{
 		Notify(TEXT("열기 실패"));
-		return;
+		return false;
 	}
 	CamData = Loaded;
 	CurCamIndex = 0;
@@ -877,6 +882,7 @@ void UCameraControlWidget::HandleOpen()
 	RefreshViewerBrush();
 	SetFileName(FPaths::GetCleanFilename(Path));
 	Notify(FString::Printf(TEXT("열기 %d대 ← %s"), CamData.datas.Num(), *Path));
+	return true;
 }
 
 void UCameraControlWidget::HandleInit()

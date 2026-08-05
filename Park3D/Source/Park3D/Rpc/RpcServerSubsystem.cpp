@@ -7,6 +7,7 @@
 #include "Modules/CarRpcModule.h"
 #include "Modules/RandomRpcModule.h"
 #include "../CarPlacementManager.h"
+#include "../Config/Park3DAppConfig.h"
 
 #include "HttpServerModule.h"
 #include "IHttpRouter.h"
@@ -103,12 +104,20 @@ void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 
-	// 리슨 포트 결정 우선순위: 커맨드라인 -RpcPort= > Config(DefaultGame.ini [RpcServer] Port) > 기본 13510.
+	// 리슨 포트 결정 우선순위:
+	//   커맨드라인 -RpcPort= > Save/Config/config_pmaker.json rpc_port > DefaultGame.ini [RpcServer] Port > 기본 13510.
+	// 자동화·MCP 브리지가 -RpcPort= 로 띄우는 기존 동작이 설정 파일에 덮이지 않도록 커맨드라인을 최우선으로 둔다.
 	{
 		int32 ConfigPort = 0;
 		if (GConfig && GConfig->GetInt(TEXT("RpcServer"), TEXT("Port"), ConfigPort, GGameIni) && ConfigPort > 0 && ConfigPort <= 65535)
 		{
 			Port = ConfigPort;
+		}
+		// 앱 설정 파일. 범위 검증은 파서가 하고(범위 밖 → 0), 여기서는 지정 여부만 본다.
+		FPark3DAppConfig AppConfig;
+		if (UPark3DAppConfigLibrary::Load(AppConfig) && AppConfig.RpcPort > 0)
+		{
+			Port = AppConfig.RpcPort;
 		}
 		// 스위치의 "존재"와 "값"을 분리한다: -RpcPort=0 은 무시가 아니라 명시적 비활성화다.
 		// (바인드를 외부로 여는 구성에서 자동화가 LAN 에 리스닝 소켓을 여는 사고를 막는다.)

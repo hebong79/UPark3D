@@ -48,6 +48,18 @@ public:
 	FName PoleTag = TEXT("CamPole");
 
 	/**
+	 * 풀 전체가 공유하는 최대 줌 배율(APTZCameraActor::MaxZoom 기본값과 동일).
+	 * AddCamera 로 스폰되는 카메라에 주입되며, SetCameraMaxZoom 으로 기존 카메라까지 일괄 반영한다.
+	 * 설정 파일(config_pmaker.json)의 max_zoom 이 지정되면 시작 시 여기에 들어온다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
+	float CameraMaxZoom = 36.f;
+
+	/** 최대 줌 배율을 매니저와 기존 카메라 전체에 반영한다. 1 미만은 무시(0나눗셈/역전 방지). */
+	UFUNCTION(BlueprintCallable, Category = "Camera")
+	void SetCameraMaxZoom(float InMaxZoom);
+
+	/**
 	 * 부팅 시 자동 생성되는 카메라 1대의 초기 자세(Unreal 미터/도).
 	 * UCameraControlWidget 슬라이더 기본값(높이 5m, X/Z 0, pan/tilt 0, zoom 1)과 같은 값이라
 	 * 나중에 컨트롤 패널을 열어도 화면이 바뀌지 않는다.

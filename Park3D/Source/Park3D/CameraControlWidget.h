@@ -129,6 +129,14 @@ public:
 	// 피킹 버튼 원색(기본상태에서 1회 캡처) — On=붉은색/Off=원색 복원용.
 	FLinearColor PickBtnDefaultColor = FLinearColor::White;
 
+	/**
+	 * 카메라위치 JSON 을 열어 데이터·카메라 액터·콤보·뷰어까지 반영한다(= "열기" 버튼의 본체).
+	 * 파일 대화상자를 거치지 않으므로 시작 설정 자동 로딩에서도 같은 경로를 쓴다
+	 * (UCarPlacementWidget/UPresetMakerWidget 의 LoadFromJsonFile 과 동일한 형태).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Camera")
+	bool LoadFromJsonFile(const FString& FilePath);
+
 protected:
 	virtual void NativeConstruct() override;
 

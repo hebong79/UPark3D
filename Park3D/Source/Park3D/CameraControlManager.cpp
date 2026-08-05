@@ -44,6 +44,25 @@ void ACameraControlManager::EnsureDefaultCamera()
 	SelectCamera(FMath::Clamp(SelectedIndex, 0, Cameras.Num() - 1));
 }
 
+void ACameraControlManager::SetCameraMaxZoom(float InMaxZoom)
+{
+	if (InMaxZoom < 1.f)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CameraControl] max_zoom %.2f 는 1 미만 — 무시하고 %.2f 유지."), InMaxZoom, CameraMaxZoom);
+		return;
+	}
+
+	CameraMaxZoom = InMaxZoom;
+	for (const TObjectPtr<APTZCameraActor>& Cam : Cameras)
+	{
+		if (Cam)
+		{
+			Cam->MaxZoom = CameraMaxZoom;
+		}
+	}
+	UE_LOG(LogTemp, Log, TEXT("[CameraControl] 최대 줌 배율 %.2f 적용 (카메라 %d대)"), CameraMaxZoom, Cameras.Num());
+}
+
 APTZCameraActor* ACameraControlManager::AddCamera(FString Name)
 {
 	UWorld* World = GetWorld();
@@ -61,6 +80,7 @@ APTZCameraActor* ACameraControlManager::AddCamera(FString Name)
 	}
 
 	Cam->PoleTag = PoleTag;
+	Cam->MaxZoom = CameraMaxZoom;   // 줌↔FOV 매핑 상한을 풀 전체가 공유(설정 파일 max_zoom).
 	Cam->InitRenderTarget();
 	Cam->SetCaptureEnabled(false);   // 신규는 비선택 → 캡처 off(선택 시 SelectCamera 가 활성)
 	Cameras.Add(Cam);

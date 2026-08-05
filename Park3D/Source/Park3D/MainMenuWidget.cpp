@@ -177,6 +177,24 @@ void UMainMenuWidget::TogglePanel(TSubclassOf<UUserWidget> WidgetClass)
 	}
 }
 
+UUserWidget* UMainMenuWidget::EnsurePanelConstructed(TSubclassOf<UUserWidget> WidgetClass)
+{
+	UUserWidget* Panel = GetOrCreatePanel(WidgetClass);
+	if (!Panel)
+	{
+		return nullptr;
+	}
+
+	// 이미 표시 중이면 NativeConstruct 는 끝난 상태다(시작 화면의 PresetMaker 가 여기 해당).
+	if (!Panel->IsInViewport())
+	{
+		// AddToViewport 가 Slate 위젯을 만들면서 NativeConstruct 를 동기 호출한다.
+		Panel->AddToViewport(10);
+		Panel->RemoveFromParent();
+	}
+	return Panel;
+}
+
 void UMainMenuWidget::HandlePresetMaker()  { TogglePanel(PresetMakerWidgetClass); }
 void UMainMenuWidget::HandleCarPlacement() { TogglePanel(CarPlacementWidgetClass); }
 // §12-F 가산적 배선: Btn_Camera → CameraControlWidgetClass 패널 토글.

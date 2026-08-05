@@ -5,6 +5,8 @@
 #include "CameraControlManager.h"
 #include "CameraViewerWidget.h"
 #include "Map/MapFloorActor.h"
+#include "Light/LightControlLibrary.h"
+#include "Light/LightControlManager.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/InputComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -52,6 +54,19 @@ void APark3DGameMode::BeginPlay()
 
 	// 주차장 아스팔트 바닥(기본 160×160m). 패널을 한 번도 열지 않아도 바닥은 존재한다.
 	AMapFloorActor::GetOrSpawn(GetWorld());
+
+	// 조명: 마지막으로 저장·열기한 설정 파일을 기본값으로 적용한다.
+	// 포인터/파일/파싱 중 어느 단계든 실패하면 FLightSettings 의 내장 기본값을 쓴다(레벨 값 대신
+	// 내장 기본을 적용해야 "앱이 시작되면 파일 값을 사용" 요구가 일관되게 지켜진다).
+	if (ALightControlManager* LightMgr = ALightControlManager::GetOrSpawn(GetWorld()))
+	{
+		FLightSettings Settings;
+		const bool bFromFile = ULightControlLibrary::LoadDefaultSettings(Settings);
+		LightMgr->ApplySettings(Settings);
+		UE_LOG(LogTemp, Log, TEXT("[Light] 시작 조명 적용 — %s (노출 %.2f, 태양 %.1f lux, 고도 %.1f°)"),
+			bFromFile ? TEXT("저장된 기본값 파일") : TEXT("내장 기본값"),
+			Settings.ExposureEV100, Settings.SunIntensity, Settings.SunAltitudeDeg);
+	}
 
 	// UI 조작이 가능하도록 마우스 커서 표시 + 게임/UI 혼합 입력 모드.
 	PC->bShowMouseCursor = true;

@@ -1,0 +1,185 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#include "LightControlManager.h"
+
+#include "Components/DirectionalLightComponent.h"
+#include "Components/SkyLightComponent.h"
+#include "Engine/DirectionalLight.h"
+#include "Engine/PostProcessVolume.h"
+#include "Engine/SkyLight.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
+#include "LightControlLibrary.h"
+
+ALightControlManager::ALightControlManager()
+{
+	PrimaryActorTick.bCanEverTick = false;
+}
+
+ALightControlManager* ALightControlManager::GetOrSpawn(UWorld* World)
+{
+	if (!World)
+	{
+		return nullptr;
+	}
+
+	for (TActorIterator<ALightControlManager> It(World); It; ++It)
+	{
+		return *It;
+	}
+
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	return World->SpawnActor<ALightControlManager>(ALightControlManager::StaticClass(), Params);
+}
+
+ADirectionalLight* ALightControlManager::FindSun() const
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return nullptr;
+	}
+	for (TActorIterator<ADirectionalLight> It(World); It; ++It)
+	{
+		return *It;
+	}
+	return nullptr;
+}
+
+ASkyLight* ALightControlManager::FindSky() const
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return nullptr;
+	}
+	for (TActorIterator<ASkyLight> It(World); It; ++It)
+	{
+		return *It;
+	}
+	return nullptr;
+}
+
+APostProcessVolume* ALightControlManager::FindExposureVolume() const
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return nullptr;
+	}
+
+	APostProcessVolume* Fallback = nullptr;
+	for (TActorIterator<APostProcessVolume> It(World); It; ++It)
+	{
+		APostProcessVolume* V = *It;
+		if (!V)
+		{
+			continue;
+		}
+		if (V->bUnbound)
+		{
+			return V;  // 전역 볼륨 우선
+		}
+		if (!Fallback)
+		{
+			Fallback = V;
+		}
+	}
+	return Fallback;
+}
+
+void ALightControlManager::ApplySettings(const FLightSettings& Settings)
+{
+	FLightSettings S = Settings;
+	ULightControlLibrary::ClampSettings(S);
+
+	if (ADirectionalLight* Sun = FindSun())
+	{
+		// roll 은 방향(액터 +X)에 영향이 없으므로 원본을 보존한다.
+		const FRotator Cur = Sun->GetActorRotation();
+		Sun->SetActorRotation(FRotator(ULightControlLibrary::AltitudeToPitch(S.SunAltitudeDeg),
+			S.SunAzimuthDeg, Cur.Roll));
+
+		if (UDirectionalLightComponent* C = Cast<UDirectionalLightComponent>(Sun->GetLightComponent()))
+		{
+			C->SetIntensity(S.SunIntensity);
+			C->SetLightColor(S.SunColor);
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Light] DirectionalLight 를 찾지 못해 태양 설정을 건너뜁니다."));
+	}
+
+	if (ASkyLight* Sky = FindSky())
+	{
+		if (USkyLightComponent* C = Sky->GetLightComponent())
+		{
+			C->SetIntensity(S.SkyIntensity);
+			// RealTimeCapture 가 꺼져 있는 레벨에서도 태양 변경이 하늘빛에 반영되도록 한 번 재캡처한다.
+			C->RecaptureSky();
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Light] SkyLight 를 찾지 못해 하늘빛 설정을 건너뜁니다."));
+	}
+
+	if (APostProcessVolume* V = FindExposureVolume())
+	{
+		// Min == Max 로 두어 "고정 노출" 설계를 유지하되, 그 값 자체를 조절 가능하게 한다.
+		// (CCTV 화면 밝기가 프레임마다 출렁이지 않아야 한다.)
+		V->Settings.bOverride_AutoExposureMinBrightness = true;
+		V->Settings.AutoExposureMinBrightness = S.ExposureEV100;
+		V->Settings.bOverride_AutoExposureMaxBrightness = true;
+		V->Settings.AutoExposureMaxBrightness = S.ExposureEV100;
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Light] PostProcessVolume 을 찾지 못해 노출 설정을 건너뜁니다."));
+	}
+
+	LastApplied = S;
+}
+
+bool ALightControlManager::CaptureCurrent(FLightSettings& Out) const
+{
+	ADirectionalLight* Sun = FindSun();
+	if (!Sun)
+	{
+		return false;
+	}
+
+	FLightSettings S;
+	// FRotator 성분은 double — 설정 구조체(float)에 맞춰 명시적으로 좁힌다.
+	const FRotator Rot = Sun->GetActorRotation();
+	S.SunAltitudeDeg = ULightControlLibrary::PitchToAltitude(static_cast<float>(Rot.Pitch));
+	S.SunAzimuthDeg = static_cast<float>(Rot.Yaw);
+
+	if (const UDirectionalLightComponent* C = Cast<UDirectionalLightComponent>(Sun->GetLightComponent()))
+	{
+		S.SunIntensity = C->Intensity;
+		S.SunColor = C->GetLightColor();
+	}
+
+	if (const ASkyLight* Sky = FindSky())
+	{
+		if (const USkyLightComponent* C = Sky->GetLightComponent())
+		{
+			S.SkyIntensity = C->Intensity;
+		}
+	}
+
+	if (const APostProcessVolume* V = FindExposureVolume())
+	{
+		if (V->Settings.bOverride_AutoExposureMinBrightness)
+		{
+			S.ExposureEV100 = V->Settings.AutoExposureMinBrightness;
+		}
+	}
+
+	ULightControlLibrary::ClampSettings(S);
+	Out = S;
+	return true;
+}

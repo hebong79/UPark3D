@@ -44,6 +44,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Menu")
 	TSubclassOf<UUserWidget> MapSizeWidgetClass;
 
+	/** 조명 설정 패널. WBP 없이 C++ 로 구성되므로 기본값이 곧 ULightControlWidget 이다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Menu")
+	TSubclassOf<UUserWidget> LightControlWidgetClass;
+
 	/** 배타적 패널 토글: 다른 패널은 모두 숨기고, 클릭한 패널이 숨겨져 있었으면 표시(재클릭이면 숨김). 항상 최대 1개(인스턴스 캐시). */
 	UFUNCTION(BlueprintCallable, Category = "Menu")
 	void TogglePanel(TSubclassOf<UUserWidget> WidgetClass);
@@ -56,6 +60,8 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Menu") void OnVlaSim();
 
 protected:
+	/** Slate 트리가 만들어지기 전 시점 — 메뉴에 버튼을 끼워 넣으려면 여기여야 순서가 반영된다. */
+	virtual void NativeOnInitialized() override;
 	virtual void NativeConstruct() override;
 
 	// 타이틀/배경프레임 영역 드래그로 메뉴 이동(버튼은 클릭을 소비하므로 제외). 패널 드래그 선례와 동일.
@@ -71,9 +77,21 @@ protected:
 	UFUNCTION() void HandleVlaTrain();
 	UFUNCTION() void HandleVlaSim();
 	UFUNCTION() void HandleExit();
+	UFUNCTION() void HandleLight();
 
 private:
 	UUserWidget* GetOrCreatePanel(TSubclassOf<UUserWidget> WidgetClass);
+
+	/**
+	 * "조명 설정" 버튼을 메뉴에 런타임 삽입한다.
+	 * 기존 WBP_MainMenu 자산에는 이 버튼이 없고 에디터가 없어 자산을 수정할 수 없으므로,
+	 * VBox_Menu 를 이름으로 찾아 Exit 버튼 앞에 끼워 넣고 스타일은 기존 버튼에서 복사한다.
+	 */
+	void InjectLightButton();
+
+	/** 런타임에 만든 조명 버튼(WBP 바인딩이 아니다). */
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> Btn_Light = nullptr;
 
 	// 메뉴 드래그 상태.
 	bool bDraggingMenu = false;

@@ -1,10 +1,24 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "MainMenuWidget.h"
+#include "Blueprint/WidgetTree.h"
 #include "Components/Button.h"
 #include "Components/Border.h"
+#include "Components/TextBlock.h"
+#include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Light/LightControlWidget.h"
 #include "InputCoreTypes.h"
+
+void UMainMenuWidget::NativeOnInitialized()
+{
+	Super::NativeOnInitialized();
+
+	// NativeConstruct 는 Slate 트리가 이미 만들어진 뒤라, 여기서 넣어야 ShiftChild 로 잡은
+	// 순서(Exit 앞)가 실제 화면에 반영된다. NativeConstruct 에서 하면 버튼이 Exit 아래로 붙는다.
+	InjectLightButton();
+}
 
 void UMainMenuWidget::NativeConstruct()
 {
@@ -22,6 +36,95 @@ void UMainMenuWidget::NativeConstruct()
 	// 앱 실행 시 기본으로 PresetMaker 패널을 연다(요구사항: 시작 시 PresetMaker 출력).
 	// 구성 시점엔 열린 패널이 없어 배타 토글이 정확히 PresetMaker만 표시한다.
 	TogglePanel(PresetMakerWidgetClass);
+}
+
+void UMainMenuWidget::InjectLightButton()
+{
+	if (Btn_Light || !WidgetTree)
+	{
+		return;
+	}
+
+	// 메뉴 세로 목록을 찾는다. 이름은 WBP_MainMenu 의 VBox_Menu.
+	UVerticalBox* Menu = WidgetTree->FindWidget<UVerticalBox>(TEXT("VBox_Menu"));
+	if (!Menu)
+	{
+		// 구조가 바뀌었어도 패널 자체는 TogglePanel(BlueprintCallable)로 열 수 있다.
+		UE_LOG(LogTemp, Warning, TEXT("[MainMenu] VBox_Menu 를 찾지 못해 조명 버튼을 넣지 못했습니다."));
+		return;
+	}
+
+	Btn_Light = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("Btn_Light"));
+
+	// 스타일·패딩을 기존 버튼에서 그대로 가져와 메뉴 모양이 흐트러지지 않게 한다.
+	if (Btn_MapSize)
+	{
+		Btn_Light->SetStyle(Btn_MapSize->GetStyle());
+	}
+
+	UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+	Label->SetText(FText::FromString(TEXT("조명 설정")));
+	Label->SetJustification(ETextJustify::Center);
+	if (Btn_MapSize)
+	{
+		// 기존 버튼 라벨의 폰트를 복사(한글 폰트·크기 일치).
+		if (UTextBlock* SrcLabel = Cast<UTextBlock>(Btn_MapSize->GetChildAt(0)))
+		{
+			Label->SetFont(SrcLabel->GetFont());
+			Label->SetColorAndOpacity(SrcLabel->GetColorAndOpacity());
+		}
+	}
+	Btn_Light->AddChild(Label);
+
+	// Exit 바로 앞에 넣는다(Exit 는 항상 마지막이어야 한다).
+	// Btn_Exit 가 VBox 의 직계 자식이 아니라 래퍼(SizeBox 등) 안에 들어 있을 수 있으므로,
+	// 부모를 거슬러 올라가 VBox 의 직계 자식을 찾아야 인덱스를 얻는다.
+	int32 ExitIndex = INDEX_NONE;
+	if (Btn_Exit)
+	{
+		UWidget* Node = Btn_Exit;
+		while (Node && Node->GetParent() != Menu)
+		{
+			Node = Node->GetParent();
+		}
+		if (Node)
+		{
+			ExitIndex = Menu->GetChildIndex(Node);
+		}
+	}
+
+	UPanelSlot* NewSlot = Menu->AddChild(Btn_Light);
+	if (ExitIndex != INDEX_NONE)
+	{
+		Menu->ShiftChild(ExitIndex, Btn_Light);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[MainMenu] Exit 위치를 찾지 못해 조명 버튼을 목록 끝에 둡니다."));
+	}
+
+	// 세로 목록 간격을 기존 항목과 맞춘다.
+	if (UVerticalBoxSlot* VS = Cast<UVerticalBoxSlot>(NewSlot))
+	{
+		if (Btn_MapSize)
+		{
+			if (UVerticalBoxSlot* SrcSlot = Cast<UVerticalBoxSlot>(Btn_MapSize->Slot))
+			{
+				VS->SetPadding(SrcSlot->GetPadding());
+				VS->SetHorizontalAlignment(SrcSlot->GetHorizontalAlignment());
+				VS->SetSize(SrcSlot->GetSize());
+			}
+		}
+	}
+
+	Btn_Light->OnClicked.AddUniqueDynamic(this, &UMainMenuWidget::HandleLight);
+}
+
+void UMainMenuWidget::HandleLight()
+{
+	// WBP 없이 C++ 로 구성되는 패널이라, BP 기본값이 없으면 C++ 클래스를 직접 쓴다.
+	TogglePanel(LightControlWidgetClass ? LightControlWidgetClass
+										: TSubclassOf<UUserWidget>(ULightControlWidget::StaticClass()));
 }
 
 UUserWidget* UMainMenuWidget::GetOrCreatePanel(TSubclassOf<UUserWidget> WidgetClass)

@@ -71,6 +71,14 @@ private:
 	/** 카메라 뷰어 위젯을 생성(최초 1회)하고 뷰포트에 표시한다. 컨트롤 패널 개폐와 무관하게 유지된다. */
 	void ShowCameraViewer();
 
+	/**
+	 * Save/Config/config_pmaker.json 을 읽어 프리셋·카메라위치·차량배치 파일을 시작 시 적용한다
+	 * (Unity CPresetMakerScene.LoadInitialData 대응). 각 패널의 "열기" 경로를 그대로 호출하므로
+	 * 위젯 목록·입력 필드까지 사용자가 직접 연 것과 같은 상태가 된다.
+	 * 설정 파일이 없으면 아무것도 하지 않는다. 개별 파일 실패는 경고만 남기고 나머지를 계속 적용한다.
+	 */
+	void ApplyStartupConfig();
+
 	/** 생성된 메뉴 위젯 인스턴스(중복 생성 방지/참조 보관용). */
 	UPROPERTY(Transient)
 	TObjectPtr<UUserWidget> MenuWidget = nullptr;

@@ -52,6 +52,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Menu")
 	void TogglePanel(TSubclassOf<UUserWidget> WidgetClass);
 
+	/**
+	 * 패널 인스턴스를 만들고 NativeConstruct 까지 마친 상태로 돌려준다(표시 상태는 바꾸지 않는다).
+	 * 시작 설정 파일 자동 로딩이 "패널을 열고 열기 버튼을 누른" 것과 같은 순서를 갖게 하려는 용도다.
+	 * 숨겨진 패널은 뷰포트에 넣었다 즉시 빼서 구성만 태운다 — TogglePanel 이 이미 같은 왕복을 반복하므로
+	 * 위젯들은 이 재구성에 안전하다(핸들러 바인딩은 모두 AddUniqueDynamic).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Menu")
+	UUserWidget* EnsurePanelConstructed(TSubclassOf<UUserWidget> WidgetClass);
+
 	// ---- 미구현 기능은 디자이너(BP)에서 확장 ----
 	UFUNCTION(BlueprintImplementableEvent, Category = "Menu") void OnCameraControl();
 	UFUNCTION(BlueprintImplementableEvent, Category = "Menu") void OnMapSize();

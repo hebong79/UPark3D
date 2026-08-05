@@ -3,7 +3,12 @@
 #include "Park3DGameMode.h"
 #include "ParkFlyPawn.h"
 #include "CameraControlManager.h"
+#include "CameraControlWidget.h"
 #include "CameraViewerWidget.h"
+#include "CarPlacementWidget.h"
+#include "MainMenuWidget.h"
+#include "PresetMakerWidget.h"
+#include "Config/Park3DAppConfig.h"
 #include "Map/MapFloorActor.h"
 #include "Light/LightControlLibrary.h"
 #include "Light/LightControlManager.h"
@@ -89,12 +94,73 @@ void APark3DGameMode::BeginPlay()
 	// 카메라 뷰어 표시(상시 노출). 카메라 컨트롤 패널을 한 번도 열지 않아도 존재한다.
 	ShowCameraViewer();
 
+	// 시작 설정 파일(Save/Config/config_pmaker.json) 적용 — 메뉴/패널·카메라 매니저가 준비된 뒤여야 한다.
+	ApplyStartupConfig();
+
 	// 메뉴 토글 단축키 바인딩(GameMode 액터에 입력 활성화).
 	EnableInput(PC);
 	if (InputComponent && MenuToggleKey.IsValid())
 	{
 		InputComponent->BindKey(MenuToggleKey, IE_Pressed, this, &APark3DGameMode::ToggleMenu);
 	}
+}
+
+void APark3DGameMode::ApplyStartupConfig()
+{
+	FPark3DAppConfig Config;
+	if (!UPark3DAppConfigLibrary::Load(Config))
+	{
+		UE_LOG(LogTemp, Log, TEXT("[Config] 시작 설정 파일 없음/읽기 실패 — 자동 로딩 건너뜀: %s"),
+			*UPark3DAppConfigLibrary::GetConfigFilePath());
+		return;
+	}
+
+	// 1) 최대 줌 배율 — 아래 카메라위치 로딩이 카메라를 새로 스폰하므로 반드시 먼저 반영한다.
+	if (Config.MaxZoom > 0.f)
+	{
+		if (ACameraControlManager* CamMgr = ACameraControlManager::GetOrSpawn(GetWorld()))
+		{
+			CamMgr->SetCameraMaxZoom(Config.MaxZoom);
+		}
+	}
+
+	UMainMenuWidget* Menu = Cast<UMainMenuWidget>(MenuWidget);
+	if (!Menu)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Config] 메인 메뉴가 없어 파일 자동 로딩을 건너뜁니다(패널 경로 사용 불가)."));
+		return;
+	}
+
+	// 2~4) Unity LoadInitialData 와 같은 순서: 프리셋 → 카메라위치 → 차량배치.
+	//      각 패널의 "열기" 본체를 그대로 호출한다(목록·필드·파일명 표시까지 동일 상태).
+	auto ApplyToPanel = [Menu](const TCHAR* Label, TSubclassOf<UUserWidget> PanelClass,
+		const TCHAR* SubDir, const FString& FileName, TFunctionRef<bool(UUserWidget*, const FString&)> Load)
+	{
+		if (FileName.IsEmpty())
+		{
+			return; // 미지정 항목은 조용히 건너뛴다.
+		}
+
+		const FString Path = UPark3DAppConfigLibrary::ResolveDataPath(SubDir, FileName);
+		UUserWidget* Panel = Menu->EnsurePanelConstructed(PanelClass);
+		if (!Panel)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Config] %s 패널 클래스가 없어 %s 를 적용하지 못했습니다."), Label, *FileName);
+			return;
+		}
+
+		const bool bOk = Load(Panel, Path);
+		UE_LOG(LogTemp, Log, TEXT("[Config] %s %s ← %s"), Label, bOk ? TEXT("적용") : TEXT("실패"), *Path);
+	};
+
+	ApplyToPanel(TEXT("프리셋"), Menu->PresetMakerWidgetClass, TEXT("Preset"), Config.PresetFile,
+		[](UUserWidget* W, const FString& P) { UPresetMakerWidget* T = Cast<UPresetMakerWidget>(W); return T && T->LoadFromJsonFile(P); });
+
+	ApplyToPanel(TEXT("카메라위치"), Menu->CameraControlWidgetClass, TEXT("CameraPos"), Config.CameraPosFile,
+		[](UUserWidget* W, const FString& P) { UCameraControlWidget* T = Cast<UCameraControlWidget>(W); return T && T->LoadFromJsonFile(P); });
+
+	ApplyToPanel(TEXT("차량배치"), Menu->CarPlacementWidgetClass, TEXT("CarPos"), Config.CarPosFile,
+		[](UUserWidget* W, const FString& P) { UCarPlacementWidget* T = Cast<UCarPlacementWidget>(W); return T && T->LoadFromJsonFile(P); });
 }
 
 void APark3DGameMode::ApplyCameraStart()

@@ -15,7 +15,8 @@ public class Park3D : ModuleRules
 		// ImageWrapper: cam.captureJPG/PNG 렌더타깃 픽셀 → JPEG/PNG 인코딩(Phase 5).
 		// Sockets: FInternetAddr 완전 정의(PeerAddress->GetRawIp() 역참조). HttpServerRequest.h 는 전방 선언만 갖고,
 		//          HTTPServer 가 Sockets 를 Private 의존으로 가져 소비자에게 전파되지 않으므로 여기서 직접 의존해야 한다.
-		PrivateDependencyModuleNames.AddRange(new string[] { "HTTPServer", "ImageWrapper", "Sockets" });
+		// Networking: FTcpListener(카메라별 전용 포트 MJPEG 서버). Sockets 만으로는 리스너가 없다.
+		PrivateDependencyModuleNames.AddRange(new string[] { "HTTPServer", "ImageWrapper", "Sockets", "Networking" });
 
 		PrivateDependencyModuleNames.AddRange(new string[] {  });
 

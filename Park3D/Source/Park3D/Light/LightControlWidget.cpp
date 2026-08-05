@@ -28,11 +28,13 @@
 
 namespace
 {
-	constexpr float ExposureMin = -5.0f, ExposureMax = 20.0f;
-	constexpr float SunIntensityMin = 0.0f, SunIntensityMax = 150.0f;
+	// Ui 접두: LightControlLibrary.cpp 의 익명 네임스페이스에 같은 이름의 상수가 있어,
+	// 유니티 빌드로 두 파일이 한 TU 에 묶이면 재정의 에러가 난다(값은 동일).
+	constexpr float UiExposureMin = -5.0f, UiExposureMax = 20.0f;
+	constexpr float UiSunIntensityMin = 0.0f, UiSunIntensityMax = 150.0f;
 	constexpr float AltitudeMin = 0.0f, AltitudeMax = 90.0f;
 	constexpr float AzimuthMin = 0.0f, AzimuthMax = 360.0f;
-	constexpr float SkyIntensityMin = 0.0f, SkyIntensityMax = 20.0f;
+	constexpr float UiSkyIntensityMin = 0.0f, UiSkyIntensityMax = 20.0f;
 
 	// 열 너비. 라벨/수치를 고정폭으로 잡아야 슬라이더가 남는 폭을 차지하고 서로 겹치지 않는다.
 	constexpr float LabelColumnWidth = 150.0f;
@@ -174,11 +176,11 @@ void ULightControlWidget::BuildUI()
 		S->SetHorizontalAlignment(HAlign_Center);
 	}
 
-	AddSliderRow(Box, FText::FromString(TEXT("노출 (EV100)")), ExposureMin, ExposureMax, Slider_Exposure, Field_Exposure);
-	AddSliderRow(Box, FText::FromString(TEXT("태양 광량 (lux)")), SunIntensityMin, SunIntensityMax, Slider_SunIntensity, Field_SunIntensity);
+	AddSliderRow(Box, FText::FromString(TEXT("노출 (EV100)")), UiExposureMin, UiExposureMax, Slider_Exposure, Field_Exposure);
+	AddSliderRow(Box, FText::FromString(TEXT("태양 광량 (lux)")), UiSunIntensityMin, UiSunIntensityMax, Slider_SunIntensity, Field_SunIntensity);
 	AddSliderRow(Box, FText::FromString(TEXT("태양 고도 (도)")), AltitudeMin, AltitudeMax, Slider_Altitude, Field_Altitude);
 	AddSliderRow(Box, FText::FromString(TEXT("태양 방위 (도)")), AzimuthMin, AzimuthMax, Slider_Azimuth, Field_Azimuth);
-	AddSliderRow(Box, FText::FromString(TEXT("하늘빛 광량")), SkyIntensityMin, SkyIntensityMax, Slider_SkyIntensity, Field_SkyIntensity);
+	AddSliderRow(Box, FText::FromString(TEXT("하늘빛 광량")), UiSkyIntensityMin, UiSkyIntensityMax, Slider_SkyIntensity, Field_SkyIntensity);
 
 	// 태양 색 (R/G/B 0~1)
 	{

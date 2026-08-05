@@ -7,8 +7,10 @@
 #include "../../CameraControlManager.h"
 #include "../../PTZCameraActor.h"
 #include "../../CameraControlLibrary.h"
+#include "../CamStreamSubsystem.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/TextureRenderTarget2D.h"
+#include "Engine/World.h"
 #include "TextureResource.h"
 
 namespace
@@ -73,6 +75,12 @@ namespace
 		return RpcDto::MakeObject(O);
 	}
 
+	/** 카메라별 스트림 서브시스템(월드에 없으면 nullptr — 스트리밍 비활성/월드 없음). */
+	UCamStreamSubsystem* GetStreamSubsystem(UWorld* World)
+	{
+		return World ? World->GetSubsystem<UCamStreamSubsystem>() : nullptr;
+	}
+
 	/** camId 파라미터 해석: 지정 시 선택 전환, 생략 시 현재 선택. 반환 카메라 없으면 nullptr+OutError. */
 	APTZCameraActor* ResolveCaptureCam(ACameraControlManager* Mgr, const TSharedPtr<FJsonObject>& P, int32& OutCamId, FRpcError& E)
 	{
@@ -125,10 +133,17 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 	Dispatcher.Register(TEXT("cam.list"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		ACameraControlManager* Mgr = GetCameraManager(E); if (!Mgr) return nullptr;
+		UCamStreamSubsystem* Stream = GetStreamSubsystem(GetWorldPtr());
 		TArray<TSharedPtr<FJsonValue>> Arr;
 		for (int32 i = 0; i < Mgr->GetCameraCount(); ++i)
 		{
-			Arr.Add(RpcDto::CamToDtoValue(Mgr->GetCamera(i), i + 1, Mgr->MetersToUU));
+			const int32 CamId = i + 1;
+			TSharedPtr<FJsonObject> Dto = RpcDto::CamToDto(Mgr->GetCamera(i), CamId, Mgr->MetersToUU);
+			// 이 카메라 전용 스트림 포트(http://<host>:<port>/). 채널이 없으면 0 = 스트리밍 안 됨.
+			int32 Port = 0;
+			if (Stream) { Stream->GetCameraStreamPort(CamId, Port); }
+			Dto->SetNumberField(TEXT("streamPort"), Port);
+			Arr.Add(MakeShared<FJsonValueObject>(Dto));
 		}
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetArrayField(TEXT("cameras"), Arr);
@@ -178,6 +193,8 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 		APTZCameraActor* Cam = GetCamById(Mgr, CamId, E); if (!Cam) return nullptr;
 		Cam->SetPanTilt(RpcParam::GetFloat(P, TEXT("pan"), 0.0), RpcParam::GetFloat(P, TEXT("tilt"), 0.0));
 		Cam->SetZoom(RpcParam::GetFloat(P, TEXT("zoom"), 1.0));
+		// 조작 중인 카메라는 스트림 슬롯을 우선 배정받는다(화면이 안 움직이면 제어가 불가능하다).
+		if (UCamStreamSubsystem* S = GetStreamSubsystem(GetWorldPtr())) { S->NotifyPtzCommand(CamId); }
 		return RpcDto::OkTrue();
 	});
 
@@ -204,6 +221,7 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 		APTZCameraActor* Cam = GetCamById(Mgr, CamId, E); if (!Cam) return nullptr;
 		float CurPan = 0.f, CurTilt = 0.f; CurrentPanTilt(Cam, CurPan, CurTilt);
 		Cam->SetPanTilt(static_cast<float>(Pan), CurTilt);
+		if (UCamStreamSubsystem* S = GetStreamSubsystem(GetWorldPtr())) { S->NotifyPtzCommand(CamId); }
 		return RpcDto::OkTrue();
 	});
 
@@ -216,6 +234,7 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 		APTZCameraActor* Cam = GetCamById(Mgr, CamId, E); if (!Cam) return nullptr;
 		float CurPan = 0.f, CurTilt = 0.f; CurrentPanTilt(Cam, CurPan, CurTilt);
 		Cam->SetPanTilt(CurPan, static_cast<float>(Tilt));
+		if (UCamStreamSubsystem* S = GetStreamSubsystem(GetWorldPtr())) { S->NotifyPtzCommand(CamId); }
 		return RpcDto::OkTrue();
 	});
 
@@ -227,6 +246,7 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 		if (!RpcParam::RequireFloat(P, TEXT("zoom"), Zoom, E)) return nullptr;
 		APTZCameraActor* Cam = GetCamById(Mgr, CamId, E); if (!Cam) return nullptr;
 		Cam->SetZoom(static_cast<float>(Zoom));
+		if (UCamStreamSubsystem* S = GetStreamSubsystem(GetWorldPtr())) { S->NotifyPtzCommand(CamId); }
 		return RpcDto::OkTrue();
 	});
 
@@ -256,6 +276,44 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 		int32 CamId = 0;
 		APTZCameraActor* Cam = ResolveCaptureCam(Mgr, P, CamId, E); if (!Cam) return nullptr;
 		return DoCapture(Cam, CamId, /*bPng=*/true, /*Quality=*/0, E);
+	});
+
+	// ---- 카메라별 전용 포트 스트리밍(설계서 20260805_180808 §15) ----
+	// 포트는 카메라 수만큼 항상 열려 있고, "지금 프레임을 만드는 카메라 수"만 슬롯으로 제한한다.
+	Dispatcher.Register(TEXT("cam.streamStatus"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		UCamStreamSubsystem* S = GetStreamSubsystem(GetWorldPtr());
+		if (!S) { E.FailDomain(TEXT("스트림 서브시스템 없음 — 월드/맵이 로드된 상태(PIE 또는 -game)가 필요합니다.")); return nullptr; }
+		return RpcDto::MakeObject(S->BuildStatusJson());
+	});
+
+	Dispatcher.Register(TEXT("cam.setStreamSlots"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		UCamStreamSubsystem* S = GetStreamSubsystem(GetWorldPtr());
+		if (!S) { E.FailDomain(TEXT("스트림 서브시스템 없음")); return nullptr; }
+		int32 Slots = 0;
+		if (!RpcParam::RequireInt(P, TEXT("slots"), Slots, E)) return nullptr;
+		// 범위 밖은 거부하지 않고 clamp 한다 — 실제 적용값을 돌려주므로 호출자가 확인할 수 있다.
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetNumberField(TEXT("slots"), S->SetActiveSlots(Slots));
+		O->SetNumberField(TEXT("requested"), Slots);
+		O->SetNumberField(TEXT("hardMaxSlots"), S->HardMaxSlots);
+		return RpcDto::MakeObject(O);
+	});
+
+	Dispatcher.Register(TEXT("cam.pinStream"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		UCamStreamSubsystem* S = GetStreamSubsystem(GetWorldPtr());
+		if (!S) { E.FailDomain(TEXT("스트림 서브시스템 없음")); return nullptr; }
+		int32 CamId = 0;
+		if (!RpcParam::RequireInt(P, TEXT("camId"), CamId, E)) return nullptr;
+		const bool bOn = RpcParam::GetBool(P, TEXT("on"), true);
+		if (!S->SetPinned(CamId, bOn))
+		{
+			E.FailDomain(FString::Printf(TEXT("스트림 채널 없음: camId=%d"), CamId));
+			return nullptr;
+		}
+		return RpcDto::OkTrue();
 	});
 
 	// ---- 미구현(-32000) ----

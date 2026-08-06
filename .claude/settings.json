@@ -6,11 +6,9 @@
       "mcp__unreal__list_toolsets",
       "mcp__unreal__describe_toolset",
       "mcp__unreal__call_tool",
-
       "Read(//c/Program Files/Epic Games/**)",
       "Read(//d/Program Files/Epic Games/**)",
       "Read(//c/Users/goback/.claude/**)",
-
       "Bash(\"/c/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat\"*)",
       "Bash('/c/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat'*)",
       "Bash(\"/c/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe\"*)",
@@ -24,7 +22,6 @@
       "PowerShell(& \"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor.exe\"*)",
       "PowerShell(Start-Process -FilePath \"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor.exe\"*)",
       "PowerShell(Start-Process -FilePath \"D:\\Work\\UnrealWork\\Parking\\Package\\*)",
-
       "Bash(curl -s * http://localhost:*)",
       "Bash(curl -s http://localhost:*)",
       "Bash(curl --retry * http://localhost:*)",
@@ -37,7 +34,6 @@
       "PowerShell(Invoke-RestMethod -Uri http://127.0.0.1:*)",
       "PowerShell(Invoke-WebRequest -Uri http://localhost:*)",
       "PowerShell(Invoke-WebRequest -Uri http://127.0.0.1:*)",
-
       "Bash(uv run*)",
       "Bash(uv pip list*)",
       "Bash(python -c*)",
@@ -47,7 +43,6 @@
       "PowerShell(uv run*)",
       "PowerShell(uv pip list*)",
       "PowerShell(python -c*)",
-
       "Bash(tasklist*)",
       "Bash(netstat -ano*)",
       "Bash(until ! tasklist *)",
@@ -63,7 +58,6 @@
       "PowerShell(Get-Service *)",
       "PowerShell(Get-NetFirewallRule*)",
       "PowerShell(Get-WindowsCapability*)",
-
       "Bash(git status*)",
       "Bash(git diff*)",
       "Bash(git log*)",
@@ -83,7 +77,6 @@
       "Bash(git checkout *)",
       "Bash(git commit*)",
       "Bash(git merge*)",
-
       "Bash(ls*)",
       "Bash(head*)",
       "Bash(tail*)",
@@ -101,11 +94,19 @@
       "PowerShell(Get-ChildItem*)",
       "PowerShell(Get-FileHash*)",
       "PowerShell(New-Item -ItemType Directory -Force*)",
-
       "PowerShell(& \"D:\\Work\\UnrealWork\\Parking\\.claude\\tools\\*)",
       "PowerShell(& \"C:\\Users\\goback\\AppData\\Local\\Temp\\claude\\*)",
       "Bash(powershell -File \"D:/Work/UnrealWork/Parking/.claude/tools/*)",
-      "Bash(pwsh -File \"D:/Work/UnrealWork/Parking/.claude/tools/*)"
+      "Bash(pwsh -File \"D:/Work/UnrealWork/Parking/.claude/tools/*)",
+      "Bash(python *)",
+      "Bash(PYTHONIOENCODING=utf-8 python *)",
+      "Bash(powershell -NoProfile -Command \"Get-*)",
+      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File grab_window.ps1*)",
+      "Bash(mkdir -p *)",
+      "Bash(printf *)",
+      "Bash(du -sh *)",
+      "Bash(find *)",
+      "Bash(until *)"
     ],
     "ask": [
       "Bash(git push*)",

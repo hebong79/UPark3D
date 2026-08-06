@@ -237,6 +237,13 @@ private:
 	void EnsureViewer();                             // 독립 뷰어 위젯 생성 + 뷰포트 우하단 표시(중복 방지)
 	void SetButtonLabel(UButton* Btn, const FString& Label);
 	void SetFileName(const FString& InName);
+
+	/**
+	 * 카메라 대수가 스트림 포트 대역을 넘으면 대역을 넓히도록 UCamStreamSubsystem 에 알린다.
+	 * 카메라위치 파일을 열 때와 저장할 때만 호출한다(대수가 바뀌는 지점).
+	 * 스트리밍 서브시스템은 Game/PIE 월드에만 있으므로 없으면 조용히 넘어간다.
+	 */
+	void EnsureCamStreamPortRange(int32 CamCount);
 	void Notify(const FString& Msg) const;
 	void BuildDistanceLauncher();
 	UFUNCTION() void HandleOpenDistanceDialog();

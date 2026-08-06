@@ -36,6 +36,20 @@ namespace Park3DCamStream
 	int32 ResolvePort(int32 BasePort, int32 CamId, int32 MaxCameras);
 
 	/**
+	 * 설정의 포트 대역 [MinPort, MaxPort] → 내부 표현 (BasePort, MaxCameras).
+	 * camId 1 이 MinPort 를 받아야 하므로 BasePort = MinPort-1, 채널 상한 = Max-Min+1.
+	 * 유효 조건 2 <= Min <= Max <= 65535 를 어기면 false 이고 Out 을 건드리지 않는다
+	 * (Min=1 은 BasePort 0 → ResolvePort 가 거부하는 값이라 함께 막는다).
+	 */
+	bool PortRangeToBase(int32 MinPort, int32 MaxPort, int32& OutBasePort, int32& OutMaxCameras);
+
+	/**
+	 * 카메라 CamCount 대를 담는 데 필요한 대역 끝 포트. Min+Count-1, 65535 초과는 클램프.
+	 * CamCount <= 0 또는 Min 이 유효 범위 밖이면 0.
+	 */
+	int32 ExtendedMaxPort(int32 MinPort, int32 CamCount);
+
+	/**
 	 * 카메라 수 변화 → 개설/정지할 camId 목록. 소켓을 만지는 쪽은 이 결과대로만 움직인다
 	 * (전체 재기동 금지 — 살아있는 스트림이 끊기지 않게).
 	 * MaxCameras 를 넘는 인덱스는 개설 대상에서 빠진다.

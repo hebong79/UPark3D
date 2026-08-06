@@ -6,6 +6,7 @@
 #include "RpcImageUtil.h"
 #include "../CameraControlManager.h"
 #include "../PTZCameraActor.h"
+#include "../Config/Park3DAppConfig.h"
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -33,8 +34,76 @@ void UCamStreamSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 	bDisabled = !bEnabled || FParse::Param(FCommandLine::Get(), TEXT("NoCamStream"));
 
+	// 포트 대역: config_pmaker.json 의 cam_port_min/max 가 ini 값보다 우선한다(rpc_port 와 같은 규약).
+	// camId 1 이 min 을 받아야 하므로 BasePort = min-1 로 환산한다.
+	FPark3DAppConfig AppConfig;
+	if (UPark3DAppConfigLibrary::Load(AppConfig) && AppConfig.HasValidCamPortRange())
+	{
+		int32 NewBase = 0, NewMax = 0;
+		if (Park3DCamStream::PortRangeToBase(AppConfig.CamPortMin, AppConfig.CamPortMax, NewBase, NewMax))
+		{
+			BasePort = NewBase;
+			MaxCameras = NewMax;
+			UE_LOG(LogCamStreamSub, Log, TEXT("[CamStream] 포트 대역 %d~%d (출처: config_pmaker.json, 최대 %d대)"),
+				AppConfig.CamPortMin, AppConfig.CamPortMax, MaxCameras);
+		}
+	}
+	else
+	{
+		UE_LOG(LogCamStreamSub, Log, TEXT("[CamStream] 포트 대역 %d~%d (출처: DefaultGame.ini, 최대 %d대)"),
+			BasePort + 1, BasePort + MaxCameras, MaxCameras);
+	}
+
 	// 채널 개설은 Tick 에서 한다 — 카메라 매니저 스폰(GameMode BeginPlay)과의 순서에
 	// 의존하지 않기 위해서다. 카메라가 생기는 순간 자동으로 포트가 열린다.
+}
+
+bool UCamStreamSubsystem::EnsurePortRangeForCameras(int32 CamCount)
+{
+	if (bDisabled)
+	{
+		// 스트리밍이 꺼져 있으면 열 채널이 없다. 설정 파일을 건드릴 이유도 없다.
+		return false;
+	}
+	if (CamCount <= MaxCameras)
+	{
+		return false; // 대역이 이미 충분하다.
+	}
+
+	const int32 MinPort = BasePort + 1;
+	const int32 NewMaxPort = Park3DCamStream::ExtendedMaxPort(MinPort, CamCount);
+	if (NewMaxPort <= 0)
+	{
+		return false;
+	}
+
+	const int32 OldMaxPort = BasePort + MaxCameras;
+	MaxCameras = NewMaxPort - MinPort + 1;
+
+	if (MaxCameras < CamCount)
+	{
+		// 65535 클램프에 걸린 경우. 남는 카메라는 채널을 받지 못한다(포트를 억지로 만들지 않는다).
+		UE_LOG(LogCamStreamSub, Warning,
+			TEXT("[CamStream] 카메라 %d대를 담으려면 포트가 65535를 넘습니다 — %d대까지만 채널을 엽니다."),
+			CamCount, MaxCameras);
+	}
+
+	// config 파일이 있으면 대역을 파일에도 남긴다(다음 기동에도 유지되게).
+	// min 을 함께 쓴다 — 키가 하나만 있는 파일은 FromJson 이 미지정으로 취급해 확장이 사라진다.
+	const FString ConfigPath = UPark3DAppConfigLibrary::GetConfigFilePath();
+	if (UPark3DAppConfigLibrary::UpdateCamPortRange(ConfigPath, MinPort, NewMaxPort))
+	{
+		UE_LOG(LogCamStreamSub, Log,
+			TEXT("[CamStream] 카메라 %d대 — 포트 대역 %d~%d → %d~%d 확장, config 갱신: %s"),
+			CamCount, MinPort, OldMaxPort, MinPort, NewMaxPort, *ConfigPath);
+	}
+	else
+	{
+		UE_LOG(LogCamStreamSub, Warning,
+			TEXT("[CamStream] 카메라 %d대 — 포트 대역 %d~%d 로 확장했으나 config 기록 실패(파일 없음?): %s"),
+			CamCount, MinPort, NewMaxPort, *ConfigPath);
+	}
+	return true;
 }
 
 void UCamStreamSubsystem::Deinitialize()

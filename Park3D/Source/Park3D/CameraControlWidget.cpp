@@ -8,6 +8,7 @@
 #include "CameraDistanceWidget.h"
 #include "Park3DDataPaths.h"
 #include "Park3DGameMode.h"
+#include "Rpc/CamStreamSubsystem.h"
 #include "Components/Button.h"
 #include "Components/ComboBoxString.h"
 #include "Components/EditableTextBox.h"
@@ -831,6 +832,12 @@ void UCameraControlWidget::HandleSave()
 	if (UCameraControlLibrary::SaveToJson(Path, CamData))
 	{
 		SetFileName(FPaths::GetCleanFilename(Path));
+		// 저장한 대수가 스트림 포트 대역을 넘으면 대역을 넓혀 config 에 남긴다
+		// (다음에 이 파일을 열었을 때 포트가 모자라지 않게).
+		if (const ACameraControlManager* Mgr = GetCameraManager())
+		{
+			EnsureCamStreamPortRange(Mgr->GetCameraCount());
+		}
 		Notify(FString::Printf(TEXT("저장 %d대 → %s"), CamData.datas.Num(), *Path));
 	}
 	else
@@ -865,6 +872,8 @@ bool UCameraControlWidget::LoadFromJsonFile(const FString& Path)
 	{
 		Mgr->SyncCamerasToData(CamData);
 		Mgr->SelectCamera(CurCamIndex);
+		// 파일이 대역보다 많은 카메라를 담고 있으면 스트림 포트 대역을 넓힌다(config 도 함께 갱신).
+		EnsureCamStreamPortRange(Mgr->GetCameraCount());
 	}
 	EnsureCamDataSlots();
 	RebuildCameraCombo();
@@ -1336,6 +1345,24 @@ void UCameraControlWidget::SetFileName(const FString& InName)
 	if (Txt_FileName)
 	{
 		Txt_FileName->SetText(FText::FromString(InName));
+	}
+}
+
+void UCameraControlWidget::EnsureCamStreamPortRange(int32 CamCount)
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+	// Game/PIE 월드에만 존재한다(에디터 프리뷰에는 없음) — 없으면 스트리밍이 꺼진 상태이므로 할 일이 없다.
+	if (UCamStreamSubsystem* Stream = World->GetSubsystem<UCamStreamSubsystem>())
+	{
+		if (Stream->EnsurePortRangeForCameras(CamCount))
+		{
+			// config 기록까지 됐는지는 로그가 구분해 남긴다(읽기 전용 경로면 대역만 넓어진다).
+			Notify(FString::Printf(TEXT("카메라 %d대 — 스트림 포트 대역을 넓혔습니다"), CamCount));
+		}
 	}
 }
 

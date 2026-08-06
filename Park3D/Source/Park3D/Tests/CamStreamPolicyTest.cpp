@@ -20,6 +20,42 @@ namespace
 	}
 }
 
+// ===== U1-b: 설정 포트 대역 → 내부 표현 =====
+// config 의 [min,max] 와 내부 (BasePort, MaxCameras) 사이의 환산. 어긋나면 cam1 이 엉뚱한 포트를 잡는다.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCamStreamPortRangeTest,
+	"Park3D.Rpc.CamStream.PortRange",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCamStreamPortRangeTest::RunTest(const FString& Parameters)
+{
+	int32 Base = 0, Max = 0;
+	TestTrue(TEXT("13601~13610 유효"), Park3DCamStream::PortRangeToBase(13601, 13610, Base, Max));
+	TestEqual(TEXT("BasePort = min-1"), Base, 13600);
+	TestEqual(TEXT("MaxCameras = 10"), Max, 10);
+	// 환산 결과가 기존 포트 부여와 맞물리는지 — cam1 이 정확히 min 을 받아야 한다.
+	TestEqual(TEXT("cam1 = min"), Park3DCamStream::ResolvePort(Base, 1, Max), 13601);
+	TestEqual(TEXT("cam10 = max"), Park3DCamStream::ResolvePort(Base, 10, Max), 13610);
+	TestEqual(TEXT("cam11 = 대역 밖"), Park3DCamStream::ResolvePort(Base, 11, Max), 0);
+
+	// 한 칸짜리 대역도 유효(카메라 1대).
+	TestTrue(TEXT("min==max 유효"), Park3DCamStream::PortRangeToBase(13601, 13601, Base, Max));
+	TestEqual(TEXT("1대"), Max, 1);
+
+	// 무효 입력은 Out 을 건드리지 않는다.
+	int32 KeepBase = -1, KeepMax = -1;
+	TestFalse(TEXT("역전 거부"), Park3DCamStream::PortRangeToBase(13610, 13601, KeepBase, KeepMax));
+	TestFalse(TEXT("min=1 거부(BasePort 0)"), Park3DCamStream::PortRangeToBase(1, 10, KeepBase, KeepMax));
+	TestFalse(TEXT("65535 초과 거부"), Park3DCamStream::PortRangeToBase(13601, 70000, KeepBase, KeepMax));
+	TestEqual(TEXT("실패 시 Out 불변"), KeepBase, -1);
+
+	// 대역 확장: min + count - 1, 65535 클램프.
+	TestEqual(TEXT("11대 → 13611"), Park3DCamStream::ExtendedMaxPort(13601, 11), 13611);
+	TestEqual(TEXT("10대 → 13610"), Park3DCamStream::ExtendedMaxPort(13601, 10), 13610);
+	TestEqual(TEXT("65535 클램프"), Park3DCamStream::ExtendedMaxPort(65530, 100), 65535);
+	TestEqual(TEXT("0대 거부"), Park3DCamStream::ExtendedMaxPort(13601, 0), 0);
+	return true;
+}
+
 // ===== U1: 포트 부여 =====
 // 포트↔카메라 매칭이 이 함수 하나로 결정된다. 어긋나면 다른 카메라 영상이 나가는 조용한 실패다.
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCamStreamResolvePortTest,

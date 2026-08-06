@@ -1,0 +1,112 @@
+{
+  "map": "/Game/Levels/LV_Park_01",
+  "total_actors": 165,
+  "items": [
+    {
+      "actor": "Ultra_Dynamic_Sky",
+      "class": "Ultra_Dynamic_Sky_C",
+      "kind": "UltraDynamicSky",
+      "location": "<Struct 'Vector' (0x0000018DEA613210) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+      "rotation": "<Struct 'Rotator' (0x0000018DEA613210) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>",
+      "components": [
+        {
+          "comp": "Moon",
+          "class": "DirectionalLightComponent",
+          "props": {
+            "intensity": "0.0",
+            "light_color": "<Struct 'Color' (0x0000018E124A98B8) {b: 239, g: 197, r: 178, a: 255}>",
+            "temperature": "6500.0",
+            "use_temperature": "False",
+            "cast_shadows": "False",
+            "mobility": "<ComponentMobility.MOVABLE: 2>",
+            "light_source_angle": "0.949999988079071",
+            "light_source_soft_angle": "0.949999988079071",
+            "volumetric_scattering_intensity": "1.0",
+            "indirect_lighting_intensity": "2.0"
+          }
+        },
+        {
+          "comp": "Sun",
+          "class": "DirectionalLightComponent",
+          "props": {
+            "intensity": "5.0",
+            "light_color": "<Struct 'Color' (0x0000018E124A9EB8) {b: 255, g: 255, r: 255, a: 255}>",
+            "temperature": "6500.0",
+            "use_temperature": "True",
+            "cast_shadows": "True",
+            "mobility": "<ComponentMobility.MOVABLE: 2>",
+            "light_source_angle": "1.2000000476837158",
+            "light_source_soft_angle": "1.2000000476837158",
+            "volumetric_scattering_intensity": "1.0",
+            "indirect_lighting_intensity": "2.0"
+          }
+        },
+        {
+          "comp": "HeightFog",
+          "class": "ExponentialHeightFogComponent",
+          "props": {
+            "mobility": "<ComponentMobility.MOVABLE: 2>"
+          }
+        },
+        {
+          "comp": "PostProcess",
+          "class": "PostProcessComponent",
+          "props": {
+            "mobility": "<ComponentMobility.MOVABLE: 2>"
+          }
+        },
+        {
+          "comp": "SkyAtmosphere",
+          "class": "SkyAtmosphereComponent",
+          "props": {
+            "mobility": "<ComponentMobility.MOVABLE: 2>"
+          }
+        },
+        {
+          "comp": "Captured Scene Sky Light",
+          "class": "SkyLightComponent",
+          "props": {
+            "intensity": "1.0",
+            "light_color": "<Struct 'Color' (0x0000018E133820B8) {b: 255, g: 255, r: 255, a: 255}>",
+            "cast_shadows": "False",
+            "mobility": "<ComponentMobility.MOVABLE: 2>",
+            "volumetric_scattering_intensity": "1.0",
+            "indirect_lighting_intensity": "1.0",
+            "source_type": "<SkyLightSourceType.SLS_CAPTURED_SCENE: 0>",
+            "cubemap_resolution": "128",
+            "sky_distance_threshold": "150000.0",
+            "real_time_capture": "True",
+            "lower_hemisphere_is_black": "True"
+          }
+        },
+        {
+          "comp": "Cubemap Sky Light",
+          "class": "SkyLightComponent",
+          "props": {
+            "intensity": "1.0",
+            "light_color": "<Struct 'Color' (0x0000018E133825B8) {b: 255, g: 255, r: 255, a: 255}>",
+            "cast_shadows": "True",
+            "mobility": "<ComponentMobility.MOVABLE: 2>",
+            "volumetric_scattering_intensity": "1.0",
+            "indirect_lighting_intensity": "1.0",
+            "source_type": "<SkyLightSourceType.SLS_SPECIFIED_CUBEMAP: 1>",
+            "cubemap_resolution": "128",
+            "sky_distance_threshold": "150000.0",
+            "real_time_capture": "False",
+            "lower_hemisphere_is_black": "True"
+          }
+        },
+        {
+          "comp": "VolumetricCloud",
+          "class": "VolumetricCloudComponent",
+          "props": {
+            "mobility": "<ComponentMobility.MOVABLE: 2>"
+          }
+        }
+      ]
+    }
+  ],
+  "class_counts": {
+    "Ultra_Dynamic_Sky_C": 1
+  }
+}

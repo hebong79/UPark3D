@@ -1,0 +1,107 @@
+{
+  "_comment": [
+    "lightport B층(레벨 액터 직접) 이식값. 설계서 §2-B / source_light_params.md 를 직렬화한 것.",
+    "A층 6항목(태양 회전·Intensity·LightColor, SkyLight Intensity, PPV AutoExposureMin/Max)은",
+    "Park3DGameMode 의 ApplySettings 가 덮어쓰므로 여기에 절대 넣지 않는다(설계서 C1).",
+    "값 표기: 숫자/불리언은 그대로. 특수 타입은 {\"linear_color\":[r,g,b(,a)]}, {\"color\":[r,g,b,a]},",
+    "{\"enum\":\"Type.MEMBER\"}, {\"tent\":{...}}, {\"fogdata\":{...}}.",
+    "linear_color 를 3개만 주면 현재 알파를 보존한다(SkyAtmosphere 계열은 알파가 HideAlphaChannel)."
+  ],
+
+  "DirectionalLight": {
+    "component": "DirectionalLightComponent",
+    "props": {
+      "use_temperature": true,
+      "temperature": 6500.0,
+      "light_source_angle": 1.2,
+      "light_source_soft_angle": 1.2,
+      "indirect_lighting_intensity": 2.0,
+      "specular_scale": 0.999,
+      "dynamic_shadow_distance_movable_light": 20000.0,
+      "movable_whole_scene_dynamic_shadow_radius": 20000.0,
+      "dynamic_shadow_cascades": 4,
+      "cascade_distribution_exponent": 3.0,
+      "volumetric_scattering_intensity": 1.0,
+      "atmosphere_sun_light": true,
+      "atmosphere_sun_light_index": 0,
+      "forward_shading_priority": 2
+    }
+  },
+
+  "SkyLight": {
+    "component": "SkyLightComponent",
+    "props": {
+      "real_time_capture": true,
+      "source_type": { "enum": "SkyLightSourceType.SLS_CAPTURED_SCENE" },
+      "cast_shadows": false,
+      "lower_hemisphere_is_black": true,
+      "lower_hemisphere_color": { "linear_color": [0.034535, 0.054886, 0.088408, 1.0] },
+      "cubemap_resolution": 128,
+      "sky_distance_threshold": 150000.0,
+      "occlusion_max_distance": 1000.0
+    }
+  },
+
+  "SkyAtmosphere": {
+    "component": "SkyAtmosphereComponent",
+    "props": {
+      "rayleigh_scattering_scale": 0.04,
+      "rayleigh_scattering": { "linear_color": [0.168627, 0.407843, 1.0] },
+      "mie_scattering_scale": 0.013996,
+      "mie_scattering": { "linear_color": [0.802083, 0.879982, 1.0] },
+      "mie_absorption": { "linear_color": [1.0, 1.0, 1.0] },
+      "mie_anisotropy": 0.75,
+      "other_absorption_scale": 0.002,
+      "other_absorption": { "linear_color": [0.897238, 1.0, 0.095307] },
+      "other_tent_distribution": { "tent": { "tip_altitude": 25.0, "tip_value": 1.0, "width": 15.0 } },
+      "ground_albedo": { "color": [170, 170, 170, 255] },
+      "height_fog_contribution": 2.3,
+      "aerial_pespective_view_distance_scale": 0.0
+    }
+  },
+
+  "ExponentialHeightFog": {
+    "component": "ExponentialHeightFogComponent",
+    "actor_location_z": -150.0,
+    "props": {
+      "fog_density": 0.00551,
+      "fog_height_falloff": 0.06,
+      "fog_max_opacity": 1.0,
+      "start_distance": 10295.084,
+      "fog_cutoff_distance": 0.0,
+      "fog_inscattering_luminance": { "linear_color": [0.0, 0.0, 0.0, 0.0] },
+      "directional_inscattering_exponent": 5.0,
+      "directional_inscattering_luminance": { "linear_color": [0.788098, 0.642447, 0.555445, 5.712] },
+      "directional_inscattering_start_distance": 10000.0,
+      "inscattering_texture_tint": { "linear_color": [1.0, 1.0, 1.0, 1.0] },
+      "second_fog_data": { "fogdata": { "fog_density": 0.0, "fog_height_falloff": 0.1, "fog_height_offset": 0.0 } },
+      "volumetric_fog_scattering_distribution": 0.2,
+      "volumetric_fog_albedo": { "color": [255, 255, 255, 255] },
+      "volumetric_fog_emissive": { "linear_color": [0.0, 0.0, 0.0, 0.0] },
+      "volumetric_fog_extinction_scale": 2.0,
+      "volumetric_fog_distance": 8000.0
+    }
+  },
+
+  "VolumetricCloud": {
+    "component": "VolumetricCloudComponent",
+    "props": {
+      "layer_bottom_altitude": 0.6,
+      "layer_height": 0.7,
+      "tracing_start_max_distance": 100.0,
+      "tracing_max_distance": 20.0,
+      "ground_albedo": { "color": [170, 170, 170, 255] },
+      "view_sample_count_scale": 1.87,
+      "reflection_view_sample_count_scale_value": 2.0,
+      "shadow_view_sample_count_scale": 0.4,
+      "shadow_reflection_view_sample_count_scale_value": 0.3,
+      "shadow_tracing_distance": 0.1558567,
+      "sky_light_cloud_bottom_occlusion": 0.0
+    }
+  },
+
+  "SkySphere": {
+    "_note": "StaticMeshActor(/Engine/EngineSky/SM_SkySphere). 사용자 결정: 숨김(설계 §2-D 분기 (a)).",
+    "hide": true
+  }
+}

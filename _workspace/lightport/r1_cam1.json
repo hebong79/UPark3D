@@ -1,0 +1,92 @@
+{
+  "profile": "cam",
+  "n": 3,
+  "aggregate": {
+    "ground_mean": {
+      "mean": 46.526,
+      "std": 0.005
+    },
+    "ground_median": {
+      "mean": 49.484,
+      "std": 0.0
+    },
+    "ground_p95": {
+      "mean": 57.484,
+      "std": 0.0
+    },
+    "crush_pct": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "clip_pct": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "frame_mean": {
+      "mean": 76.783,
+      "std": 0.009
+    },
+    "sky_mean": {
+      "mean": 166.236,
+      "std": 0.032
+    },
+    "sky_crush_pct": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "sky_clip_pct": {
+      "mean": 0.0,
+      "std": 0.0
+    }
+  },
+  "frames": [
+    {
+      "file": "shots/r1_cam1_1.jpg",
+      "size": [
+        1280,
+        720
+      ],
+      "ground_mean": 46.53222675632911,
+      "ground_median": 49.4842,
+      "ground_p95": 57.484199999999994,
+      "crush_pct": 0.0,
+      "clip_pct": 0.0,
+      "frame_mean": 76.77424156662326,
+      "sky_mean": 166.28150875723378,
+      "sky_crush_pct": 0.0,
+      "sky_clip_pct": 0.0
+    },
+    {
+      "file": "shots/r1_cam1_2.jpg",
+      "size": [
+        1280,
+        720
+      ],
+      "ground_mean": 46.52388914556961,
+      "ground_median": 49.4842,
+      "ground_p95": 57.484199999999994,
+      "crush_pct": 0.0,
+      "clip_pct": 0.0,
+      "frame_mean": 76.77821901258679,
+      "sky_mean": 166.21274238425923,
+      "sky_crush_pct": 0.0,
+      "sky_clip_pct": 0.0
+    },
+    {
+      "file": "shots/r1_cam1_3.jpg",
+      "size": [
+        1280,
+        720
+      ],
+      "ground_mean": 46.52112794303797,
+      "ground_median": 49.4842,
+      "ground_p95": 57.484199999999994,
+      "crush_pct": 0.0,
+      "clip_pct": 0.0,
+      "frame_mean": 76.7952727875434,
+      "sky_mean": 166.2131860011574,
+      "sky_crush_pct": 0.0,
+      "sky_clip_pct": 0.0
+    }
+  ]
+}

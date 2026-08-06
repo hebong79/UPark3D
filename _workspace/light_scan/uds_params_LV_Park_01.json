@@ -1,0 +1,1100 @@
+{
+  "map": "/Game/Levels/LV_Park_01",
+  "actor": "Ultra_Dynamic_Sky",
+  "components": {
+    "Moon [DirectionalLightComponent]": {
+      "world_rotation": "<Struct 'Rotator' (0x0000025C10DD3C60) {pitch: 39.744242, yaw: 143.289688, roll: -40.024940}>",
+      "transform_error": "'DirectionalLightComponent' object has no attribute 'get_relative_rotation'",
+      "non_default": {
+        "atmosphere_sun_disk_color_scale": {
+          "value": "<Struct 'LinearColor' (0x0000025C3C1CA6B0) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>",
+          "default": "<Struct 'LinearColor' (0x0000025BEED2DCB0) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>"
+        },
+        "atmosphere_sun_light_index": {
+          "value": "1",
+          "default": "0"
+        },
+        "bloom_threshold": {
+          "value": "0.07619000226259232",
+          "default": "0.0"
+        },
+        "bloom_tint": {
+          "value": "<Struct 'Color' (0x0000025C3C1CA5A0) {b: 255, g: 255, r: 255, a: 255}>",
+          "default": "<Struct 'Color' (0x0000025BEED2DBA0) {b: 255, g: 255, r: 255, a: 255}>"
+        },
+        "brightness": {
+          "value": "0.0",
+          "default": "10.0"
+        },
+        "cast_shadows": {
+          "value": "False",
+          "default": "True"
+        },
+        "cloud_scattered_luminance_scale": {
+          "value": "<Struct 'LinearColor' (0x0000025C3C1CA6E0) {r: 2.187501, g: 2.458332, b: 3.000000, a: 1.000000}>",
+          "default": "<Struct 'LinearColor' (0x0000025BEED2DCE0) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>"
+        },
+        "disabled_brightness": {
+          "value": "0.8899999856948853",
+          "default": "0.5"
+        },
+        "dynamic_shadow_distance_movable_light": {
+          "value": "20000.0",
+          "default": "40000.0"
+        },
+        "forward_shading_priority": {
+          "value": "1",
+          "default": "0"
+        },
+        "indirect_lighting_intensity": {
+          "value": "2.0",
+          "default": "1.0"
+        },
+        "intensity": {
+          "value": "0.0",
+          "default": "10.0"
+        },
+        "light_color": {
+          "value": "<Struct 'Color' (0x0000025C3C1CA4B8) {b: 239, g: 197, r: 178, a: 255}>",
+          "default": "<Struct 'Color' (0x0000025BEED2DAB8) {b: 255, g: 255, r: 255, a: 255}>"
+        },
+        "light_function_fade_distance": {
+          "value": "10000000.0",
+          "default": "100000.0"
+        },
+        "light_function_material": {
+          "value": "<Object '/Game/Levels/LV_Park_01.LV_Park_01:PersistentLevel.Ultra_Dynamic_Sky_C_1.MID_LF_VolCloud_Shadows_0' (0x0000025C3166F000) Class 'MaterialInstanceDynamic'>",
+          "default": "None"
+        },
+        "light_function_scale": {
+          "value": "<Struct 'Vector' (0x0000025C3C1CA560) {x: 400.000000, y: 400.000000, z: 400.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BEED2DB60) {x: 1024.000000, y: 1024.000000, z: 1024.000000}>"
+        },
+        "light_shaft_override_direction": {
+          "value": "<Struct 'Vector' (0x0000025C3C1CA650) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BEED2DC50) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+        },
+        "light_source_angle": {
+          "value": "0.949999988079071",
+          "default": "0.5357000231742859"
+        },
+        "light_source_soft_angle": {
+          "value": "0.949999988079071",
+          "default": "0.0"
+        },
+        "lighting_channels": {
+          "value": "<Struct 'LightingChannels' (0x0000025C3C1CA54C) {channel0: False, channel1: False, channel2: False}>",
+          "default": "<Struct 'LightingChannels' (0x0000025BEED2DB4C) {channel0: True, channel1: False, channel2: False}>"
+        },
+        "modulated_shadow_color": {
+          "value": "<Struct 'Color' (0x0000025C3C1CA704) {b: 128, g: 128, r: 128, a: 255}>",
+          "default": "<Struct 'Color' (0x0000025BEED2DD04) {b: 128, g: 128, r: 128, a: 255}>"
+        },
+        "movable_whole_scene_dynamic_shadow_radius": {
+          "value": "20000.0",
+          "default": "40000.0"
+        },
+        "relative_location": {
+          "value": "<Struct 'Vector' (0x0000025C3C1CA380) {x: 0.000000, y: 0.000000, z: -150.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BEED2D980) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+        },
+        "relative_rotation": {
+          "value": "<Struct 'Rotator' (0x0000025C3C1CA398) {pitch: 39.744242, yaw: 143.289688, roll: -40.024940}>",
+          "default": "<Struct 'Rotator' (0x0000025BEED2D998) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>"
+        },
+        "relative_scale3d": {
+          "value": "<Struct 'Vector' (0x0000025C3C1CA3B0) {x: 1.000000, y: 1.000000, z: 1.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BEED2D9B0) {x: 1.000000, y: 1.000000, z: 1.000000}>"
+        },
+        "relative_translation": {
+          "value": "<Struct 'Vector' (0x0000025C3C1CA380) {x: 0.000000, y: 0.000000, z: -150.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BEED2D980) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+        },
+        "specular_scale": {
+          "value": "0.0",
+          "default": "1.0"
+        },
+        "view_lighting_channels": {
+          "value": "<Struct 'ViewLightingChannels' (0x0000025C3C1CA54D) {view_channel0: True, view_channel1: False, view_channel2: False, view_channel3: False, view_channel4: False}>",
+          "default": "<Struct 'ViewLightingChannels' (0x0000025BEED2DB4D) {view_channel0: True, view_channel1: False, view_channel2: False, view_channel3: False, view_channel4: False}>"
+        }
+      },
+      "all": {
+        "absolute_location": "False",
+        "absolute_rotation": "False",
+        "absolute_scale": "False",
+        "affect_global_illumination": "True",
+        "affect_reflection": "True",
+        "affect_translucent_lighting": "True",
+        "affects_world": "True",
+        "allow_mega_lights": "True",
+        "atmosphere_sun_disk_color_scale": "<Struct 'LinearColor' (0x0000025C3C1CA6B0) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>",
+        "atmosphere_sun_light": "True",
+        "atmosphere_sun_light_index": "1",
+        "auto_activate": "False",
+        "b_absolute_translation": "False",
+        "bloom_max_brightness": "100.0",
+        "bloom_scale": "0.20000000298023224",
+        "bloom_threshold": "0.07619000226259232",
+        "bloom_tint": "<Struct 'Color' (0x0000025C3C1CA5A0) {b: 255, g: 255, r: 255, a: 255}>",
+        "brightness": "0.0",
+        "cascade_distribution_exponent": "3.0",
+        "cascade_transition_fraction": "0.10000000149011612",
+        "cast_cloud_shadows": "False",
+        "cast_deep_shadow": "False",
+        "cast_dynamic_shadows": "True",
+        "cast_modulated_shadows": "False",
+        "cast_raytraced_shadow": "<CastRayTracedShadow.USE_PROJECT_SETTING: 1>",
+        "cast_shadows": "False",
+        "cast_shadows_from_cinematic_objects_only": "False",
+        "cast_shadows_on_atmosphere": "False",
+        "cast_shadows_on_clouds": "False",
+        "cast_static_shadows": "True",
+        "cast_translucent_shadows": "True",
+        "cast_volumetric_shadow": "True",
+        "cloud_scattered_luminance_scale": "<Struct 'LinearColor' (0x0000025C3C1CA6E0) {r: 2.187501, g: 2.458332, b: 3.000000, a: 1.000000}>",
+        "cloud_shadow_depth_bias": "0.0",
+        "cloud_shadow_extent": "150.0",
+        "cloud_shadow_map_resolution_scale": "1.0",
+        "cloud_shadow_on_atmosphere_strength": "1.0",
+        "cloud_shadow_on_surface_strength": "1.0",
+        "cloud_shadow_ray_sample_count_scale": "1.0",
+        "cloud_shadow_strength": "1.0",
+        "contact_shadow_casting_intensity": "1.0",
+        "contact_shadow_length": "0.0",
+        "contact_shadow_length_in_ws": "False",
+        "contact_shadow_non_casting_intensity": "0.0",
+        "deep_shadow_layer_distribution": "0.5",
+        "detail_mode": "<DetailMode.DM_LOW: 0>",
+        "diffuse_scale": "1.0",
+        "disabled_brightness": "0.8899999856948853",
+        "distance_field_shadow_distance": "51200.0",
+        "dynamic_shadow_cascades": "4",
+        "dynamic_shadow_distance_movable_light": "20000.0",
+        "dynamic_shadow_distance_stationary_light": "0.0",
+        "enable_light_shaft_bloom": "False",
+        "enable_light_shaft_occlusion": "False",
+        "far_shadow_cascade_count": "0",
+        "far_shadow_distance": "300000.0",
+        "force_cached_shadows_for_movable_primitives": "False",
+        "forward_shading_priority": "1",
+        "hidden_in_game": "False",
+        "ies_brightness_scale": "1.0",
+        "ies_texture": "None",
+        "indirect_lighting_intensity": "2.0",
+        "intensity": "0.0",
+        "is_editor_only": "False",
+        "light_color": "<Struct 'Color' (0x0000025C3C1CA4B8) {b: 239, g: 197, r: 178, a: 255}>",
+        "light_function_fade_distance": "10000000.0",
+        "light_function_material": "<Object '/Game/Levels/LV_Park_01.LV_Park_01:PersistentLevel.Ultra_Dynamic_Sky_C_1.MID_LF_VolCloud_Shadows_0' (0x0000025C3166F000) Class 'MaterialInstanceDynamic'>",
+        "light_function_scale": "<Struct 'Vector' (0x0000025C3C1CA560) {x: 400.000000, y: 400.000000, z: 400.000000}>",
+        "light_shaft_override_direction": "<Struct 'Vector' (0x0000025C3C1CA650) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+        "light_source_angle": "0.949999988079071",
+        "light_source_soft_angle": "0.949999988079071",
+        "lighting_channels": "<Struct 'LightingChannels' (0x0000025C3C1CA54C) {channel0: False, channel1: False, channel2: False}>",
+        "max_distance_fade_range": "0.0",
+        "max_draw_distance": "0.0",
+        "mega_lights_shadow_method": "<MegaLightsShadowMethod.DEFAULT: 0>",
+        "mobility": "<ComponentMobility.MOVABLE: 2>",
+        "modify_frequency": "<ComponentMobility.MOVABLE: 2>",
+        "modulated_shadow_color": "<Struct 'Color' (0x0000025C3C1CA704) {b: 128, g: 128, r: 128, a: 255}>",
+        "movable_whole_scene_dynamic_shadow_radius": "20000.0",
+        "occlusion_depth_range": "100000.0",
+        "occlusion_mask_darkness": "0.05000000074505806",
+        "override_ray_end_bias": "False",
+        "per_pixel_atmosphere_transmittance": "False",
+        "ray_end_bias": "0.0",
+        "ray_start_offset_depth_scale": "0.003000000026077032",
+        "relative_location": "<Struct 'Vector' (0x0000025C3C1CA380) {x: 0.000000, y: 0.000000, z: -150.000000}>",
+        "relative_rotation": "<Struct 'Rotator' (0x0000025C3C1CA398) {pitch: 39.744242, yaw: 143.289688, roll: -40.024940}>",
+        "relative_scale3d": "<Struct 'Vector' (0x0000025C3C1CA3B0) {x: 1.000000, y: 1.000000, z: 1.000000}>",
+        "relative_translation": "<Struct 'Vector' (0x0000025C3C1CA380) {x: 0.000000, y: 0.000000, z: -150.000000}>",
+        "samples_per_pixel": "1",
+        "shadow_amount": "1.0",
+        "shadow_bias": "0.5",
+        "shadow_cascade_bias_distribution": "1.0",
+        "shadow_distance_fadeout_fraction": "0.10000000149011612",
+        "shadow_resolution_scale": "1.0",
+        "shadow_sharpen": "0.0",
+        "shadow_slope_bias": "0.5",
+        "shadow_source_angle_factor": "1.0",
+        "specular_scale": "0.0",
+        "stationary_whole_scene_dynamic_shadow_radius": "0.0",
+        "temperature": "6500.0",
+        "trace_distance": "10000.0",
+        "transmission": "False",
+        "use_ies_brightness": "False",
+        "use_inset_shadows_for_movable_objects": "True",
+        "use_ray_traced_distance_field_shadows": "True",
+        "use_temperature": "False",
+        "view_lighting_channels": "<Struct 'ViewLightingChannels' (0x0000025C3C1CA54D) {view_channel0: True, view_channel1: False, view_channel2: False, view_channel3: False, view_channel4: False}>",
+        "visible": "True",
+        "volumetric_scattering_intensity": "1.0"
+      }
+    },
+    "Sun [DirectionalLightComponent]": {
+      "world_rotation": "<Struct 'Rotator' (0x0000025C06C47940) {pitch: -44.477512, yaw: -55.464603, roll: 45.513129}>",
+      "transform_error": "'DirectionalLightComponent' object has no attribute 'get_relative_rotation'",
+      "non_default": {
+        "atmosphere_sun_disk_color_scale": {
+          "value": "<Struct 'LinearColor' (0x0000025C3C1CACB0) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>",
+          "default": "<Struct 'LinearColor' (0x0000025BEED2DCB0) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>"
+        },
+        "bloom_tint": {
+          "value": "<Struct 'Color' (0x0000025C3C1CABA0) {b: 255, g: 255, r: 255, a: 255}>",
+          "default": "<Struct 'Color' (0x0000025BEED2DBA0) {b: 255, g: 255, r: 255, a: 255}>"
+        },
+        "brightness": {
+          "value": "5.0",
+          "default": "10.0"
+        },
+        "cloud_scattered_luminance_scale": {
+          "value": "<Struct 'LinearColor' (0x0000025C3C1CACE0) {r: 2.695000, g: 2.963334, b: 3.500000, a: 1.000000}>",
+          "default": "<Struct 'LinearColor' (0x0000025BEED2DCE0) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>"
+        },
+        "disabled_brightness": {
+          "value": "1.0",
+          "default": "0.5"
+        },
+        "dynamic_shadow_distance_movable_light": {
+          "value": "20000.0",
+          "default": "40000.0"
+        },
+        "forward_shading_priority": {
+          "value": "2",
+          "default": "0"
+        },
+        "indirect_lighting_intensity": {
+          "value": "2.0",
+          "default": "1.0"
+        },
+        "intensity": {
+          "value": "5.0",
+          "default": "10.0"
+        },
+        "light_color": {
+          "value": "<Struct 'Color' (0x0000025C3C1CAAB8) {b: 255, g: 255, r: 255, a: 255}>",
+          "default": "<Struct 'Color' (0x0000025BEED2DAB8) {b: 255, g: 255, r: 255, a: 255}>"
+        },
+        "light_function_fade_distance": {
+          "value": "10000000.0",
+          "default": "100000.0"
+        },
+        "light_function_material": {
+          "value": "<Object '/Game/Levels/LV_Park_01.LV_Park_01:PersistentLevel.Ultra_Dynamic_Sky_C_1.MID_LF_VolCloud_Shadows_0' (0x0000025C3166F000) Class 'MaterialInstanceDynamic'>",
+          "default": "None"
+        },
+        "light_function_scale": {
+          "value": "<Struct 'Vector' (0x0000025C3C1CAB60) {x: 400.000000, y: 400.000000, z: 400.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BEED2DB60) {x: 1024.000000, y: 1024.000000, z: 1024.000000}>"
+        },
+        "light_shaft_override_direction": {
+          "value": "<Struct 'Vector' (0x0000025C3C1CAC50) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BEED2DC50) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+        },
+        "light_source_angle": {
+          "value": "1.2000000476837158",
+          "default": "0.5357000231742859"
+        },
+        "light_source_soft_angle": {
+          "value": "1.2000000476837158",
+          "default": "0.0"
+        },
+        "lighting_channels": {
+          "value": "<Struct 'LightingChannels' (0x0000025C3C1CAB4C) {channel0: True, channel1: False, channel2: False}>",
+          "default": "<Struct 'LightingChannels' (0x0000025BEED2DB4C) {channel0: True, channel1: False, channel2: False}>"
+        },
+        "modulated_shadow_color": {
+          "value": "<Struct 'Color' (0x0000025C3C1CAD04) {b: 128, g: 128, r: 128, a: 255}>",
+          "default": "<Struct 'Color' (0x0000025BEED2DD04) {b: 128, g: 128, r: 128, a: 255}>"
+        },
+        "movable_whole_scene_dynamic_shadow_radius": {
+          "value": "20000.0",
+          "default": "40000.0"
+        },
+        "relative_location": {
+          "value": "<Struct 'Vector' (0x0000025C3C1CA980) {x: 0.000000, y: 0.000000, z: -150.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BEED2D980) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+        },
+        "relative_rotation": {
+          "value": "<Struct 'Rotator' (0x0000025C3C1CA998) {pitch: -44.477512, yaw: -55.464603, roll: 45.513129}>",
+          "default": "<Struct 'Rotator' (0x0000025BEED2D998) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>"
+        },
+        "relative_scale3d": {
+          "value": "<Struct 'Vector' (0x0000025C3C1CA9B0) {x: 1.000000, y: 1.000000, z: 1.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BEED2D9B0) {x: 1.000000, y: 1.000000, z: 1.000000}>"
+        },
+        "relative_translation": {
+          "value": "<Struct 'Vector' (0x0000025C3C1CA980) {x: 0.000000, y: 0.000000, z: -150.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BEED2D980) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+        },
+        "specular_scale": {
+          "value": "0.9990000128746033",
+          "default": "1.0"
+        },
+        "use_temperature": {
+          "value": "True",
+          "default": "False"
+        },
+        "view_lighting_channels": {
+          "value": "<Struct 'ViewLightingChannels' (0x0000025C3C1CAB4D) {view_channel0: True, view_channel1: False, view_channel2: False, view_channel3: False, view_channel4: False}>",
+          "default": "<Struct 'ViewLightingChannels' (0x0000025BEED2DB4D) {view_channel0: True, view_channel1: False, view_channel2: False, view_channel3: False, view_channel4: False}>"
+        }
+      },
+      "all": {
+        "absolute_location": "False",
+        "absolute_rotation": "False",
+        "absolute_scale": "False",
+        "affect_global_illumination": "True",
+        "affect_reflection": "True",
+        "affect_translucent_lighting": "True",
+        "affects_world": "True",
+        "allow_mega_lights": "True",
+        "atmosphere_sun_disk_color_scale": "<Struct 'LinearColor' (0x0000025C3C1CACB0) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>",
+        "atmosphere_sun_light": "True",
+        "atmosphere_sun_light_index": "0",
+        "auto_activate": "False",
+        "b_absolute_translation": "False",
+        "bloom_max_brightness": "100.0",
+        "bloom_scale": "0.20000000298023224",
+        "bloom_threshold": "0.0",
+        "bloom_tint": "<Struct 'Color' (0x0000025C3C1CABA0) {b: 255, g: 255, r: 255, a: 255}>",
+        "brightness": "5.0",
+        "cascade_distribution_exponent": "3.0",
+        "cascade_transition_fraction": "0.10000000149011612",
+        "cast_cloud_shadows": "False",
+        "cast_deep_shadow": "False",
+        "cast_dynamic_shadows": "True",
+        "cast_modulated_shadows": "False",
+        "cast_raytraced_shadow": "<CastRayTracedShadow.USE_PROJECT_SETTING: 1>",
+        "cast_shadows": "True",
+        "cast_shadows_from_cinematic_objects_only": "False",
+        "cast_shadows_on_atmosphere": "False",
+        "cast_shadows_on_clouds": "False",
+        "cast_static_shadows": "True",
+        "cast_translucent_shadows": "True",
+        "cast_volumetric_shadow": "True",
+        "cloud_scattered_luminance_scale": "<Struct 'LinearColor' (0x0000025C3C1CACE0) {r: 2.695000, g: 2.963334, b: 3.500000, a: 1.000000}>",
+        "cloud_shadow_depth_bias": "0.0",
+        "cloud_shadow_extent": "150.0",
+        "cloud_shadow_map_resolution_scale": "1.0",
+        "cloud_shadow_on_atmosphere_strength": "1.0",
+        "cloud_shadow_on_surface_strength": "1.0",
+        "cloud_shadow_ray_sample_count_scale": "1.0",
+        "cloud_shadow_strength": "1.0",
+        "contact_shadow_casting_intensity": "1.0",
+        "contact_shadow_length": "0.0",
+        "contact_shadow_length_in_ws": "False",
+        "contact_shadow_non_casting_intensity": "0.0",
+        "deep_shadow_layer_distribution": "0.5",
+        "detail_mode": "<DetailMode.DM_LOW: 0>",
+        "diffuse_scale": "1.0",
+        "disabled_brightness": "1.0",
+        "distance_field_shadow_distance": "51200.0",
+        "dynamic_shadow_cascades": "4",
+        "dynamic_shadow_distance_movable_light": "20000.0",
+        "dynamic_shadow_distance_stationary_light": "0.0",
+        "enable_light_shaft_bloom": "False",
+        "enable_light_shaft_occlusion": "False",
+        "far_shadow_cascade_count": "0",
+        "far_shadow_distance": "300000.0",
+        "force_cached_shadows_for_movable_primitives": "False",
+        "forward_shading_priority": "2",
+        "hidden_in_game": "False",
+        "ies_brightness_scale": "1.0",
+        "ies_texture": "None",
+        "indirect_lighting_intensity": "2.0",
+        "intensity": "5.0",
+        "is_editor_only": "False",
+        "light_color": "<Struct 'Color' (0x0000025C3C1CAAB8) {b: 255, g: 255, r: 255, a: 255}>",
+        "light_function_fade_distance": "10000000.0",
+        "light_function_material": "<Object '/Game/Levels/LV_Park_01.LV_Park_01:PersistentLevel.Ultra_Dynamic_Sky_C_1.MID_LF_VolCloud_Shadows_0' (0x0000025C3166F000) Class 'MaterialInstanceDynamic'>",
+        "light_function_scale": "<Struct 'Vector' (0x0000025C3C1CAB60) {x: 400.000000, y: 400.000000, z: 400.000000}>",
+        "light_shaft_override_direction": "<Struct 'Vector' (0x0000025C3C1CAC50) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+        "light_source_angle": "1.2000000476837158",
+        "light_source_soft_angle": "1.2000000476837158",
+        "lighting_channels": "<Struct 'LightingChannels' (0x0000025C3C1CAB4C) {channel0: True, channel1: False, channel2: False}>",
+        "max_distance_fade_range": "0.0",
+        "max_draw_distance": "0.0",
+        "mega_lights_shadow_method": "<MegaLightsShadowMethod.DEFAULT: 0>",
+        "mobility": "<ComponentMobility.MOVABLE: 2>",
+        "modify_frequency": "<ComponentMobility.MOVABLE: 2>",
+        "modulated_shadow_color": "<Struct 'Color' (0x0000025C3C1CAD04) {b: 128, g: 128, r: 128, a: 255}>",
+        "movable_whole_scene_dynamic_shadow_radius": "20000.0",
+        "occlusion_depth_range": "100000.0",
+        "occlusion_mask_darkness": "0.05000000074505806",
+        "override_ray_end_bias": "False",
+        "per_pixel_atmosphere_transmittance": "False",
+        "ray_end_bias": "0.0",
+        "ray_start_offset_depth_scale": "0.003000000026077032",
+        "relative_location": "<Struct 'Vector' (0x0000025C3C1CA980) {x: 0.000000, y: 0.000000, z: -150.000000}>",
+        "relative_rotation": "<Struct 'Rotator' (0x0000025C3C1CA998) {pitch: -44.477512, yaw: -55.464603, roll: 45.513129}>",
+        "relative_scale3d": "<Struct 'Vector' (0x0000025C3C1CA9B0) {x: 1.000000, y: 1.000000, z: 1.000000}>",
+        "relative_translation": "<Struct 'Vector' (0x0000025C3C1CA980) {x: 0.000000, y: 0.000000, z: -150.000000}>",
+        "samples_per_pixel": "1",
+        "shadow_amount": "1.0",
+        "shadow_bias": "0.5",
+        "shadow_cascade_bias_distribution": "1.0",
+        "shadow_distance_fadeout_fraction": "0.10000000149011612",
+        "shadow_resolution_scale": "1.0",
+        "shadow_sharpen": "0.0",
+        "shadow_slope_bias": "0.5",
+        "shadow_source_angle_factor": "1.0",
+        "specular_scale": "0.9990000128746033",
+        "stationary_whole_scene_dynamic_shadow_radius": "0.0",
+        "temperature": "6500.0",
+        "trace_distance": "10000.0",
+        "transmission": "False",
+        "use_ies_brightness": "False",
+        "use_inset_shadows_for_movable_objects": "True",
+        "use_ray_traced_distance_field_shadows": "True",
+        "use_temperature": "True",
+        "view_lighting_channels": "<Struct 'ViewLightingChannels' (0x0000025C3C1CAB4D) {view_channel0: True, view_channel1: False, view_channel2: False, view_channel3: False, view_channel4: False}>",
+        "visible": "True",
+        "volumetric_scattering_intensity": "1.0"
+      }
+    },
+    "HeightFog [ExponentialHeightFogComponent]": {
+      "world_rotation": "<Struct 'Rotator' (0x0000025C10DD3210) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>",
+      "transform_error": "'ExponentialHeightFogComponent' object has no attribute 'get_relative_rotation'",
+      "non_default": {
+        "directional_inscattering_exponent": {
+          "value": "5.0",
+          "default": "4.0"
+        },
+        "directional_inscattering_luminance": {
+          "value": "<Struct 'LinearColor' (0x0000025C39ECCB1C) {r: 0.788098, g: 0.642447, b: 0.555445, a: 5.712000}>",
+          "default": "<Struct 'LinearColor' (0x0000025BF02DEB1C) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>"
+        },
+        "fog_density": {
+          "value": "0.005510000046342611",
+          "default": "0.019999999552965164"
+        },
+        "fog_height_falloff": {
+          "value": "0.05999999865889549",
+          "default": "0.20000000298023224"
+        },
+        "fog_inscattering_luminance": {
+          "value": "<Struct 'LinearColor' (0x0000025C39ECCAB4) {r: 0.000000, g: 0.000000, b: 0.000000, a: 0.000000}>",
+          "default": "<Struct 'LinearColor' (0x0000025BF02DEAB4) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>"
+        },
+        "inscattering_texture_tint": {
+          "value": "<Struct 'LinearColor' (0x0000025C39ECCAEC) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>",
+          "default": "<Struct 'LinearColor' (0x0000025BF02DEAEC) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>"
+        },
+        "relative_location": {
+          "value": "<Struct 'Vector' (0x0000025C39ECC980) {x: 0.000000, y: 0.000000, z: -150.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BF02DE980) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+        },
+        "relative_rotation": {
+          "value": "<Struct 'Rotator' (0x0000025C39ECC998) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>",
+          "default": "<Struct 'Rotator' (0x0000025BF02DE998) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>"
+        },
+        "relative_scale3d": {
+          "value": "<Struct 'Vector' (0x0000025C39ECC9B0) {x: 1.000000, y: 1.000000, z: 1.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BF02DE9B0) {x: 1.000000, y: 1.000000, z: 1.000000}>"
+        },
+        "relative_translation": {
+          "value": "<Struct 'Vector' (0x0000025C39ECC980) {x: 0.000000, y: 0.000000, z: -150.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BF02DE980) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+        },
+        "second_fog_data": {
+          "value": "<Struct 'ExponentialHeightFogData' (0x0000025C39ECCA98) {fog_density: 0.000000, fog_height_falloff: 0.100000, fog_height_offset: 0.000000}>",
+          "default": "<Struct 'ExponentialHeightFogData' (0x0000025BF02DEA98) {fog_density: 0.000000, fog_height_falloff: 0.200000, fog_height_offset: 0.000000}>"
+        },
+        "sky_atmosphere_ambient_contribution_color_scale": {
+          "value": "<Struct 'LinearColor' (0x0000025C39ECCAC4) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>",
+          "default": "<Struct 'LinearColor' (0x0000025BF02DEAC4) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>"
+        },
+        "start_distance": {
+          "value": "10295.083984375",
+          "default": "0.0"
+        },
+        "volumetric_fog_albedo": {
+          "value": "<Struct 'Color' (0x0000025C39ECCB44) {b: 255, g: 255, r: 255, a: 255}>",
+          "default": "<Struct 'Color' (0x0000025BF02DEB44) {b: 255, g: 255, r: 255, a: 255}>"
+        },
+        "volumetric_fog_distance": {
+          "value": "8000.0",
+          "default": "6000.0"
+        },
+        "volumetric_fog_emissive": {
+          "value": "<Struct 'LinearColor' (0x0000025C39ECCB48) {r: 0.000000, g: 0.000000, b: 0.000000, a: 0.000000}>",
+          "default": "<Struct 'LinearColor' (0x0000025BF02DEB48) {r: 0.000000, g: 0.000000, b: 0.000000, a: 0.000000}>"
+        },
+        "volumetric_fog_extinction_scale": {
+          "value": "2.0",
+          "default": "1.0"
+        }
+      },
+      "all": {
+        "absolute_location": "False",
+        "absolute_rotation": "False",
+        "absolute_scale": "False",
+        "auto_activate": "False",
+        "b_absolute_translation": "False",
+        "detail_mode": "<DetailMode.DM_LOW: 0>",
+        "directional_inscattering_exponent": "5.0",
+        "directional_inscattering_luminance": "<Struct 'LinearColor' (0x0000025C39ECCB1C) {r: 0.788098, g: 0.642447, b: 0.555445, a: 5.712000}>",
+        "directional_inscattering_start_distance": "10000.0",
+        "enable_fsss": "False",
+        "enable_volumetric_fog": "False",
+        "end_distance": "0.0",
+        "fog_cutoff_distance": "0.0",
+        "fog_density": "0.005510000046342611",
+        "fog_height_falloff": "0.05999999865889549",
+        "fog_inscattering_luminance": "<Struct 'LinearColor' (0x0000025C39ECCAB4) {r: 0.000000, g: 0.000000, b: 0.000000, a: 0.000000}>",
+        "fog_max_opacity": "1.0",
+        "fsss_blur_control": "0.5",
+        "fsss_scene_color_scattering_amount_power": "1.0",
+        "fsss_scene_color_scattering_amount_scale": "1.0",
+        "fsss_spread_scale": "0.10000000149011612",
+        "fully_directional_inscattering_color_distance": "100000.0",
+        "hidden_in_game": "False",
+        "holdout": "False",
+        "inscattering_color_cubemap": "None",
+        "inscattering_color_cubemap_angle": "0.0",
+        "inscattering_texture_tint": "<Struct 'LinearColor' (0x0000025C39ECCAEC) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>",
+        "is_editor_only": "False",
+        "mobility": "<ComponentMobility.MOVABLE: 2>",
+        "modify_frequency": "<ComponentMobility.MOVABLE: 2>",
+        "non_directional_inscattering_color_distance": "1000.0",
+        "override_light_colors_with_fog_inscattering_colors": "False",
+        "relative_location": "<Struct 'Vector' (0x0000025C39ECC980) {x: 0.000000, y: 0.000000, z: -150.000000}>",
+        "relative_rotation": "<Struct 'Rotator' (0x0000025C39ECC998) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>",
+        "relative_scale3d": "<Struct 'Vector' (0x0000025C39ECC9B0) {x: 1.000000, y: 1.000000, z: 1.000000}>",
+        "relative_translation": "<Struct 'Vector' (0x0000025C39ECC980) {x: 0.000000, y: 0.000000, z: -150.000000}>",
+        "render_in_main_pass": "True",
+        "second_fog_data": "<Struct 'ExponentialHeightFogData' (0x0000025C39ECCA98) {fog_density: 0.000000, fog_height_falloff: 0.100000, fog_height_offset: 0.000000}>",
+        "sky_atmosphere_ambient_contribution_color_scale": "<Struct 'LinearColor' (0x0000025C39ECCAC4) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>",
+        "sky_light_capture_affects_height_fog_roughness": "0.15000000596046448",
+        "sky_light_capture_affects_height_fog_strength": "0.0",
+        "start_distance": "10295.083984375",
+        "visible": "True",
+        "visible_in_real_time_sky_captures": "True",
+        "visible_in_reflection_captures": "True",
+        "volumetric_fog_albedo": "<Struct 'Color' (0x0000025C39ECCB44) {b: 255, g: 255, r: 255, a: 255}>",
+        "volumetric_fog_distance": "8000.0",
+        "volumetric_fog_emissive": "<Struct 'LinearColor' (0x0000025C39ECCB48) {r: 0.000000, g: 0.000000, b: 0.000000, a: 0.000000}>",
+        "volumetric_fog_extinction_scale": "2.0",
+        "volumetric_fog_near_fade_in_distance": "0.0",
+        "volumetric_fog_scattering_distribution": "0.20000000298023224",
+        "volumetric_fog_start_distance": "0.0",
+        "volumetric_fog_static_lighting_scattering_intensity": "1.0"
+      }
+    },
+    "PostProcess [PostProcessComponent]": {
+      "world_rotation": "<Struct 'Rotator' (0x0000025C06C45410) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>",
+      "transform_error": "'PostProcessComponent' object has no attribute 'get_relative_rotation'",
+      "non_default": {
+        "priority": {
+          "value": "1.0",
+          "default": "0.0"
+        },
+        "relative_location": {
+          "value": "<Struct 'Vector' (0x0000025C3C1A7980) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BF0E7A980) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+        },
+        "relative_rotation": {
+          "value": "<Struct 'Rotator' (0x0000025C3C1A7998) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>",
+          "default": "<Struct 'Rotator' (0x0000025BF0E7A998) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>"
+        },
+        "relative_scale3d": {
+          "value": "<Struct 'Vector' (0x0000025C3C1A79B0) {x: 1.000000, y: 1.000000, z: 1.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BF0E7A9B0) {x: 1.000000, y: 1.000000, z: 1.000000}>"
+        },
+        "relative_translation": {
+          "value": "<Struct 'Vector' (0x0000025C3C1A7980) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BF0E7A980) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+        },
+        "settings": {
+          "value": "<Struct 'PostProcessSettings' (0x0000025C3C1A7AA0) {override_temperature_type: False, override_white_temp: False, override_white_tint: False, override_color_saturation: False, override_color_contrast: False, override_color_gamma: False, override_color_gain: False, override_color_offset: False, override_color_saturation_shadows: False, override_color_contrast_shadows: False, override_color_gamma_shadows: False, override_color_gain_shadows: False, override_color_offset_shadows: False, override_color_saturation_midtones: False, override_color_contrast_midtones: False, override_color_gamma_midtones: False, override_color_gain_midtones: False, override_color_offset_midtones: False, override_color_saturation_highlights: False, override_color_contrast_highlights: False, override_color_gamma_highlights: False, override_color_gain_highlights: False, override_color_offset_highlights: False, override_color_correction_shadows_max: False, override_color_correction_highlights_min: False, override_color_correction_highlights_max: False, override_blue_correction: False, override_expand_gamut: False, override_tone_curve_amount: False, override_tonemapping_method: False, override_film_slope: False, override_film_toe: False, override_film_shoulder: False, override_film_black_clip: False, override_film_white_clip: False, override_scene_color_tint: False, override_scene_fringe_intensity: False, override_chromatic_aberration_start_offset: False, override_b_mega_lights: False, override_mega_lights_front_layer_translucency: False, override_ambient_cubemap_tint: False, override_ambient_cubemap_intensity: False, override_bloom_method: False, override_bloom_intensity: False, override_bloom_gaussian_intensity: False, override_bloom_threshold: False, override_bloom1_tint: False, override_bloom1_size: False, override_bloom2_size: False, override_bloom2_tint: False, override_bloom3_tint: False, override_bloom3_size: False, override_bloom4_tint: False, override_bloom4_size: False, override_bloom5_tint: False, override_bloom5_size: False, override_bloom6_tint: False, override_bloom6_size: False, override_bloom_size_scale: False, override_bloom_convolution_intensity: False, override_bloom_convolution_texture: False, override_bloom_convolution_scatter_dispersion: False, override_bloom_convolution_size: False, override_bloom_convolution_center_uv: False, override_bloom_convolution_pre_filter_min: False, override_bloom_convolution_pre_filter_max: False, override_bloom_convolution_pre_filter_mult: False, override_bloom_convolution_buffer_scale: False, override_bloom_dirt_mask_intensity: False, override_bloom_dirt_mask_tint: False, override_bloom_dirt_mask: False, override_camera_shutter_speed: False, override_camera_iso: False, override_auto_exposure_method: True, override_auto_exposure_low_percent: False, override_auto_exposure_high_percent: False, override_auto_exposure_min_brightness: True, override_auto_exposure_max_brightness: True, override_auto_exposure_speed_up: False, override_auto_exposure_speed_down: False, override_auto_exposure_bias: True, override_auto_exposure_bias_curve: True, override_auto_exposure_meter_mask: False, override_auto_exposure_apply_physical_camera_exposure: False, override_histogram_log_min: False, override_histogram_log_max: False, override_local_exposure_method: False, override_local_exposure_highlight_contrast_scale: False, override_local_exposure_shadow_contrast_scale: False, override_local_exposure_highlight_contrast_curve: False, override_local_exposure_shadow_contrast_curve: False, override_local_exposure_highlight_threshold: False, override_local_exposure_shadow_threshold: False, override_local_exposure_detail_strength: False, override_local_exposure_blurred_luminance_blend: False, override_local_exposure_blurred_luminance_kernel_size_percent: False, override_local_exposure_highlight_threshold_strength: False, override_local_exposure_shadow_threshold_strength: False, override_local_exposure_middle_grey_bias: False, override_lens_flare_intensity: False, override_lens_flare_tint: False, override_lens_flare_tints: False, override_lens_flare_bokeh_size: False, override_lens_flare_bokeh_shape: False, override_lens_flare_threshold: False, override_vignette_intensity: False, override_vignette_type: False, override_vignette_center: False, override_vignette_color: False, override_vignette_size: False, override_vignette_softness: False, override_vignette_texture: False, override_sharpen: False, override_film_grain_intensity: False, override_film_grain_intensity_shadows: False, override_film_grain_intensity_midtones: False, override_film_grain_intensity_highlights: False, override_film_grain_shadows_max: False, override_film_grain_highlights_min: False, override_film_grain_highlights_max: False, override_film_grain_scale: False, override_film_grain_texture: False, override_ambient_occlusion_intensity: False, override_ambient_occlusion_static_fraction: False, override_ambient_occlusion_radius: False, override_ambient_occlusion_fade_distance: False, override_ambient_occlusion_fade_radius: False, override_ambient_occlusion_radius_in_ws: False, override_ambient_occlusion_power: False, override_ambient_occlusion_bias: False, override_ambient_occlusion_quality: False, override_ambient_occlusion_mip_blend: False, override_ambient_occlusion_mip_scale: False, override_ambient_occlusion_mip_threshold: False, override_ambient_occlusion_temporal_blend_weight: False, override_ray_tracing_ao: False, override_ray_tracing_ao_samples_per_pixel: False, override_ray_tracing_ao_intensity: False, override_ray_tracing_ao_radius: False, override_indirect_lighting_color: False, override_indirect_lighting_intensity: False, override_color_grading_intensity: False, override_color_grading_lut: False, override_depth_of_field_enabled: False, override_depth_of_field_focal_distance: False, override_depth_of_field_fstop: False, override_depth_of_field_min_fstop: False, override_depth_of_field_blade_count: False, override_depth_of_field_sensor_width: False, override_depth_of_field_squeeze_factor: False, override_depth_of_field_depth_blur_radius: False, override_depth_of_field_use_hair_depth: False, override_depth_of_field_petzval_bokeh: False, override_depth_of_field_petzval_bokeh_falloff: False, override_depth_of_field_petzval_exclusion_box_extents: False, override_depth_of_field_petzval_exclusion_box_radius: False, override_depth_of_field_aspect_ratio_scalar: False, override_depth_of_field_matte_box_flags: False, override_depth_of_field_barrel_radius: False, override_depth_of_field_barrel_length: False, override_depth_of_field_depth_blur_amount: False, override_depth_of_field_focal_region: False, override_depth_of_field_near_transition_region: False, override_depth_of_field_far_transition_region: False, override_depth_of_field_scale: False, override_depth_of_field_near_blur_size: False, override_depth_of_field_far_blur_size: False, override_mobile_hq_gaussian: False, override_depth_of_field_occlusion: False, override_depth_of_field_sky_focus_distance: False, override_depth_of_field_vignette_size: False, override_motion_blur_amount: False, override_motion_blur_max: False, override_motion_blur_target_fps: False, override_motion_blur_per_object_size: False, override_reflection_method: False, override_lumen_reflection_quality: False, override_screen_space_reflection_intensity: False, override_screen_space_reflection_quality: False, override_screen_space_reflection_max_roughness: False, override_user_flags: False, override_translucency_type: False, override_ray_tracing_translucency_max_roughness: False, override_ray_tracing_translucency_refraction_rays: False, override_ray_tracing_translucency_samples_per_pixel: False, override_ray_tracing_translucency_shadows: False, override_ray_tracing_translucency_refraction: False, override_ray_tracing_translucency_max_primary_hit_events: False, override_ray_tracing_translucency_max_secondary_hit_events: False, override_ray_tracing_translucency_use_ray_traced_refraction: False, override_dynamic_global_illumination_method: False, override_lumen_scene_lighting_quality: False, override_lumen_scene_detail: False, override_lumen_scene_view_distance: False, override_lumen_scene_lighting_update_speed: False, override_lumen_final_gather_quality: False, override_lumen_final_gather_lighting_update_speed: False, override_lumen_final_gather_screen_traces: False, override_lumen_max_trace_distance: False, override_lumen_diffuse_color_boost: False, override_lumen_ambient_occlusion_intensity: False, override_lumen_skylight_leaking: False, override_lumen_skylight_leaking_tint: False, override_lumen_full_skylight_leaking_distance: False, override_lumen_ray_lighting_mode: False, override_lumen_reflections_screen_traces: False, override_lumen_front_layer_translucency_reflections: False, override_lumen_max_roughness_to_trace_reflections: False, override_lumen_max_reflection_bounces: False, override_lumen_max_refraction_bounces: False, override_lumen_surface_cache_resolution: False, override_path_tracing_max_bounces: False, override_path_tracing_samples_per_pixel: False, override_path_tracing_max_path_intensity: False, override_path_tracing_enable_emissive_materials: False, override_path_tracing_enable_reference_dof: False, override_path_tracing_enable_reference_atmosphere: False, override_path_tracing_enable_denoiser: False, override_path_tracing_include_emissive: False, override_path_tracing_include_diffuse: False, override_path_tracing_include_indirect_diffuse: False, override_path_tracing_include_specular: False, override_path_tracing_include_indirect_specular: False, override_path_tracing_include_volume: False, override_path_tracing_include_indirect_volume: False, mobile_hq_gaussian: False, bloom_method: BM_SOG, auto_exposure_method: AEM_Histogram, temperature_type: TEMP_WhiteBalance, white_temp: 6500.000000, white_tint: 0.000000, color_saturation: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_contrast: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_gamma: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_gain: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_offset: {x: 0.000000, y: 0.000000, z: 0.000000, w: 0.000000}, color_saturation_shadows: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_contrast_shadows: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_gamma_shadows: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_gain_shadows: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_offset_shadows: {x: 0.000000, y: 0.000000, z: 0.000000, w: 0.000000}, color_saturation_midtones: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_contrast_midtones: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_gamma_midtones: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_gain_midtones: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_offset_midtones: {x: 0.000000, y: 0.000000, z: 0.000000, w: 0.000000}, color_saturation_highlights: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_contrast_highlights: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_gamma_highlights: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_gain_highlights: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_offset_highlights: {x: 0.000000, y: 0.000000, z: 0.000000, w: 0.000000}, color_correction_highlights_min: 0.500000, color_correction_highlights_max: 1.000000, color_correction_shadows_max: 0.090000, blue_correction: 0.600000, expand_gamut: 1.000000, tone_curve_amount: 1.000000, tonemapping_method: Filmic, film_slope: 0.880000, film_toe: 0.550000, film_shoulder: 0.260000, film_black_clip: 0.000000, film_white_clip: 0.040000, scene_color_tint: {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}, scene_fringe_intensity: 0.000000, chromatic_aberration_start_offset: 0.000000, bloom_intensity: 0.675000, bloom_gaussian_intensity: 1.000000, bloom_threshold: -1.000000, bloom_size_scale: 4.000000, bloom1_size: 0.300000, bloom2_size: 1.000000, bloom3_size: 2.000000, bloom4_size: 10.000000, bloom5_size: 30.000000, bloom6_size: 64.000000, bloom1_tint: {r: 0.346500, g: 0.346500, b: 0.346500, a: 1.000000}, bloom2_tint: {r: 0.138000, g: 0.138000, b: 0.138000, a: 1.000000}, bloom3_tint: {r: 0.117600, g: 0.117600, b: 0.117600, a: 1.000000}, bloom4_tint: {r: 0.066000, g: 0.066000, b: 0.066000, a: 1.000000}, bloom5_tint: {r: 0.066000, g: 0.066000, b: 0.066000, a: 1.000000}, bloom6_tint: {r: 0.061000, g: 0.061000, b: 0.061000, a: 1.000000}, bloom_convolution_intensity: 1.000000, bloom_convolution_scatter_dispersion: 1.000000, bloom_convolution_size: 1.000000, bloom_convolution_texture: None, bloom_convolution_center_uv: {x: 0.500000, y: 0.500000}, bloom_convolution_pre_filter_min: 7.000000, bloom_convolution_pre_filter_max: 15000.000000, bloom_convolution_pre_filter_mult: 15.000000, bloom_convolution_buffer_scale: 0.133000, bloom_dirt_mask: None, bloom_dirt_mask_intensity: 0.000000, bloom_dirt_mask_tint: {r: 0.500000, g: 0.500000, b: 0.500000, a: 1.000000}, dynamic_global_illumination_method: Lumen, indirect_lighting_color: {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}, indirect_lighting_intensity: 1.000000, lumen_ray_lighting_mode: Default, lumen_scene_lighting_quality: 1.000000, lumen_scene_detail: 1.000000, lumen_scene_view_distance: 20000.000000, lumen_scene_lighting_update_speed: 1.000000, lumen_final_gather_quality: 1.000000, lumen_final_gather_lighting_update_speed: 1.000000, lumen_final_gather_screen_traces: True, lumen_max_trace_distance: 20000.000000, lumen_diffuse_color_boost: 1.000000, lumen_ambient_occlusion_intensity: 1.000000, lumen_skylight_leaking: 0.000000, lumen_skylight_leaking_tint: {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}, lumen_full_skylight_leaking_distance: 1000.000000, lumen_surface_cache_resolution: 1.000000, reflection_method: Lumen, lumen_reflection_quality: 1.000000, lumen_reflections_screen_traces: True, lumen_front_layer_translucency_reflections: False, lumen_max_roughness_to_trace_reflections: 0.400000, lumen_max_reflection_bounces: 1, lumen_max_refraction_bounces: 0, screen_space_reflection_intensity: 100.000000, screen_space_reflection_quality: 50.000000, screen_space_reflection_max_roughness: 0.600000, mega_lights: True, mega_lights_front_layer_translucency: False, ambient_cubemap_tint: {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}, ambient_cubemap_intensity: 1.000000, ambient_cubemap: None, camera_shutter_speed: 60.000000, camera_iso: 100.000000, depth_of_field_fstop: 4.000000, depth_of_field_min_fstop: 1.200000, depth_of_field_blade_count: 5, auto_exposure_bias: 0.000000, auto_exposure_apply_physical_camera_exposure: True, auto_exposure_bias_curve: \"/Script/Engine.CurveFloat'/Game/UltraDynamicSky/Materials/Float_Curves/Exposure_Compensation_Curve.Exposure_Compensation_Curve'\", auto_exposure_meter_mask: None, auto_exposure_low_percent: 10.000000, auto_exposure_high_percent: 90.000000, auto_exposure_min_brightness: -10.000000, auto_exposure_max_brightness: 20.000000, auto_exposure_speed_up: 3.000000, auto_exposure_speed_down: 1.000000, histogram_log_min: -10.000000, histogram_log_max: 20.000000, local_exposure_method: Bilateral, local_exposure_highlight_contrast_scale: 1.000000, local_exposure_shadow_contrast_scale: 1.000000, local_exposure_highlight_contrast_curve: None, local_exposure_shadow_contrast_curve: None, local_exposure_highlight_threshold: 0.000000, local_exposure_shadow_threshold: 0.000000, local_exposure_detail_strength: 1.000000, local_exposure_blurred_luminance_blend: 0.600000, local_exposure_blurred_luminance_kernel_size_percent: 50.000000, local_exposure_highlight_threshold_strength: 1.000000, local_exposure_shadow_threshold_strength: 1.000000, local_exposure_middle_grey_bias: 0.000000, lens_flare_intensity: 1.000000, lens_flare_tint: {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}, lens_flare_bokeh_size: 3.000000, lens_flare_threshold: 8.000000, lens_flare_bokeh_shape: None, vignette_intensity: 0.400000, vignette_type: CosineFourthLaw, vignette_center: {}, vignette_color: {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}, vignette_size: {}, vignette_softness: 5.000000, vignette_texture: None, sharpen: 0.000000, film_grain_intensity: 0.000000, film_grain_intensity_shadows: 1.000000, film_grain_intensity_midtones: 1.000000, film_grain_intensity_highlights: 1.000000, film_grain_shadows_max: 0.090000, film_grain_highlights_min: 0.500000, film_grain_highlights_max: 1.000000, film_grain_scale: {}, film_grain_texture: None, ambient_occlusion_intensity: 0.500000, ambient_occlusion_static_fraction: 1.000000, ambient_occlusion_radius: 200.000000, ambient_occlusion_radius_in_ws: False, ambient_occlusion_fade_distance: 8000.000000, ambient_occlusion_fade_radius: 5000.000000, ambient_occlusion_power: 2.000000, ambient_occlusion_bias: 3.000000, ambient_occlusion_quality: 50.000000, ambient_occlusion_mip_blend: 0.600000, ambient_occlusion_mip_scale: 1.700000, ambient_occlusion_mip_threshold: 0.010000, ambient_occlusion_temporal_blend_weight: 0.100000, ray_tracing_ao: False, ray_tracing_ao_samples_per_pixel: 1, ray_tracing_ao_intensity: 1.000000, ray_tracing_ao_radius: 200.000000, color_grading_intensity: 1.000000, color_grading_lut: None, depth_of_field_enabled: True, depth_of_field_sensor_width: 24.576000, depth_of_field_squeeze_factor: 1.000000, depth_of_field_focal_distance: 0.000000, depth_of_field_depth_blur_amount: 1.000000, depth_of_field_depth_blur_radius: 0.000000, depth_of_field_use_hair_depth: False, depth_of_field_petzval_bokeh: 0.000000, depth_of_field_petzval_bokeh_falloff: 1.000000, depth_of_field_petzval_exclusion_box_extents: {}, depth_of_field_petzval_exclusion_box_radius: 0.000000, depth_of_field_aspect_ratio_scalar: 1.000000, depth_of_field_barrel_radius: 5.000000, depth_of_field_barrel_length: 0.000000, depth_of_field_focal_region: 0.000000, depth_of_field_near_transition_region: 300.000000, depth_of_field_far_transition_region: 500.000000, depth_of_field_scale: 0.000000, depth_of_field_near_blur_size: 15.000000, depth_of_field_far_blur_size: 15.000000, depth_of_field_occlusion: 0.400000, depth_of_field_sky_focus_distance: 0.000000, depth_of_field_vignette_size: 200.000000, motion_blur_amount: 0.500000, motion_blur_max: 5.000000, motion_blur_target_fps: 30, motion_blur_per_object_size: 0.000000, translucency_type: Raster, ray_tracing_translucency_max_roughness: 0.600000, ray_tracing_translucency_refraction_rays: 3, ray_tracing_translucency_samples_per_pixel: 1, ray_tracing_translucency_max_primary_hit_events: 4, ray_tracing_translucency_max_secondary_hit_events: 2, ray_tracing_translucency_shadows: Hard_shadows, ray_tracing_translucency_refraction: True, ray_tracing_translucency_use_ray_traced_refraction: False, path_tracing_max_bounces: 32, path_tracing_samples_per_pixel: 2048, path_tracing_max_path_intensity: 24.000000, path_tracing_enable_emissive_materials: True, path_tracing_enable_reference_dof: False, path_tracing_enable_reference_atmosphere: False, path_tracing_enable_denoiser: True, path_tracing_include_emissive: True, path_tracing_include_diffuse: True, path_tracing_include_indirect_diffuse: True, path_tracing_include_specular: True, path_tracing_include_indirect_specular: True, path_tracing_include_volume: True, path_tracing_include_indirect_volume: True, user_flags: 0, weighted_blendables: {array: }}>",
+          "default": "<Struct 'PostProcessSettings' (0x0000025BF0E7AAA0) {override_temperature_type: False, override_white_temp: False, override_white_tint: False, override_color_saturation: False, override_color_contrast: False, override_color_gamma: False, override_color_gain: False, override_color_offset: False, override_color_saturation_shadows: False, override_color_contrast_shadows: False, override_color_gamma_shadows: False, override_color_gain_shadows: False, override_color_offset_shadows: False, override_color_saturation_midtones: False, override_color_contrast_midtones: False, override_color_gamma_midtones: False, override_color_gain_midtones: False, override_color_offset_midtones: False, override_color_saturation_highlights: False, override_color_contrast_highlights: False, override_color_gamma_highlights: False, override_color_gain_highlights: False, override_color_offset_highlights: False, override_color_correction_shadows_max: False, override_color_correction_highlights_min: False, override_color_correction_highlights_max: False, override_blue_correction: False, override_expand_gamut: False, override_tone_curve_amount: False, override_tonemapping_method: False, override_film_slope: False, override_film_toe: False, override_film_shoulder: False, override_film_black_clip: False, override_film_white_clip: False, override_scene_color_tint: False, override_scene_fringe_intensity: False, override_chromatic_aberration_start_offset: False, override_b_mega_lights: False, override_mega_lights_front_layer_translucency: False, override_ambient_cubemap_tint: False, override_ambient_cubemap_intensity: False, override_bloom_method: False, override_bloom_intensity: False, override_bloom_gaussian_intensity: False, override_bloom_threshold: False, override_bloom1_tint: False, override_bloom1_size: False, override_bloom2_size: False, override_bloom2_tint: False, override_bloom3_tint: False, override_bloom3_size: False, override_bloom4_tint: False, override_bloom4_size: False, override_bloom5_tint: False, override_bloom5_size: False, override_bloom6_tint: False, override_bloom6_size: False, override_bloom_size_scale: False, override_bloom_convolution_intensity: False, override_bloom_convolution_texture: False, override_bloom_convolution_scatter_dispersion: False, override_bloom_convolution_size: False, override_bloom_convolution_center_uv: False, override_bloom_convolution_pre_filter_min: False, override_bloom_convolution_pre_filter_max: False, override_bloom_convolution_pre_filter_mult: False, override_bloom_convolution_buffer_scale: False, override_bloom_dirt_mask_intensity: False, override_bloom_dirt_mask_tint: False, override_bloom_dirt_mask: False, override_camera_shutter_speed: False, override_camera_iso: False, override_auto_exposure_method: False, override_auto_exposure_low_percent: False, override_auto_exposure_high_percent: False, override_auto_exposure_min_brightness: False, override_auto_exposure_max_brightness: False, override_auto_exposure_speed_up: False, override_auto_exposure_speed_down: False, override_auto_exposure_bias: False, override_auto_exposure_bias_curve: False, override_auto_exposure_meter_mask: False, override_auto_exposure_apply_physical_camera_exposure: False, override_histogram_log_min: False, override_histogram_log_max: False, override_local_exposure_method: False, override_local_exposure_highlight_contrast_scale: False, override_local_exposure_shadow_contrast_scale: False, override_local_exposure_highlight_contrast_curve: False, override_local_exposure_shadow_contrast_curve: False, override_local_exposure_highlight_threshold: False, override_local_exposure_shadow_threshold: False, override_local_exposure_detail_strength: False, override_local_exposure_blurred_luminance_blend: False, override_local_exposure_blurred_luminance_kernel_size_percent: False, override_local_exposure_highlight_threshold_strength: False, override_local_exposure_shadow_threshold_strength: False, override_local_exposure_middle_grey_bias: False, override_lens_flare_intensity: False, override_lens_flare_tint: False, override_lens_flare_tints: False, override_lens_flare_bokeh_size: False, override_lens_flare_bokeh_shape: False, override_lens_flare_threshold: False, override_vignette_intensity: False, override_vignette_type: False, override_vignette_center: False, override_vignette_color: False, override_vignette_size: False, override_vignette_softness: False, override_vignette_texture: False, override_sharpen: False, override_film_grain_intensity: False, override_film_grain_intensity_shadows: False, override_film_grain_intensity_midtones: False, override_film_grain_intensity_highlights: False, override_film_grain_shadows_max: False, override_film_grain_highlights_min: False, override_film_grain_highlights_max: False, override_film_grain_scale: False, override_film_grain_texture: False, override_ambient_occlusion_intensity: False, override_ambient_occlusion_static_fraction: False, override_ambient_occlusion_radius: False, override_ambient_occlusion_fade_distance: False, override_ambient_occlusion_fade_radius: False, override_ambient_occlusion_radius_in_ws: False, override_ambient_occlusion_power: False, override_ambient_occlusion_bias: False, override_ambient_occlusion_quality: False, override_ambient_occlusion_mip_blend: False, override_ambient_occlusion_mip_scale: False, override_ambient_occlusion_mip_threshold: False, override_ambient_occlusion_temporal_blend_weight: False, override_ray_tracing_ao: False, override_ray_tracing_ao_samples_per_pixel: False, override_ray_tracing_ao_intensity: False, override_ray_tracing_ao_radius: False, override_indirect_lighting_color: False, override_indirect_lighting_intensity: False, override_color_grading_intensity: False, override_color_grading_lut: False, override_depth_of_field_enabled: False, override_depth_of_field_focal_distance: False, override_depth_of_field_fstop: False, override_depth_of_field_min_fstop: False, override_depth_of_field_blade_count: False, override_depth_of_field_sensor_width: False, override_depth_of_field_squeeze_factor: False, override_depth_of_field_depth_blur_radius: False, override_depth_of_field_use_hair_depth: False, override_depth_of_field_petzval_bokeh: False, override_depth_of_field_petzval_bokeh_falloff: False, override_depth_of_field_petzval_exclusion_box_extents: False, override_depth_of_field_petzval_exclusion_box_radius: False, override_depth_of_field_aspect_ratio_scalar: False, override_depth_of_field_matte_box_flags: False, override_depth_of_field_barrel_radius: False, override_depth_of_field_barrel_length: False, override_depth_of_field_depth_blur_amount: False, override_depth_of_field_focal_region: False, override_depth_of_field_near_transition_region: False, override_depth_of_field_far_transition_region: False, override_depth_of_field_scale: False, override_depth_of_field_near_blur_size: False, override_depth_of_field_far_blur_size: False, override_mobile_hq_gaussian: False, override_depth_of_field_occlusion: False, override_depth_of_field_sky_focus_distance: False, override_depth_of_field_vignette_size: False, override_motion_blur_amount: False, override_motion_blur_max: False, override_motion_blur_target_fps: False, override_motion_blur_per_object_size: False, override_reflection_method: False, override_lumen_reflection_quality: False, override_screen_space_reflection_intensity: False, override_screen_space_reflection_quality: False, override_screen_space_reflection_max_roughness: False, override_user_flags: False, override_translucency_type: False, override_ray_tracing_translucency_max_roughness: False, override_ray_tracing_translucency_refraction_rays: False, override_ray_tracing_translucency_samples_per_pixel: False, override_ray_tracing_translucency_shadows: False, override_ray_tracing_translucency_refraction: False, override_ray_tracing_translucency_max_primary_hit_events: False, override_ray_tracing_translucency_max_secondary_hit_events: False, override_ray_tracing_translucency_use_ray_traced_refraction: False, override_dynamic_global_illumination_method: False, override_lumen_scene_lighting_quality: False, override_lumen_scene_detail: False, override_lumen_scene_view_distance: False, override_lumen_scene_lighting_update_speed: False, override_lumen_final_gather_quality: False, override_lumen_final_gather_lighting_update_speed: False, override_lumen_final_gather_screen_traces: False, override_lumen_max_trace_distance: False, override_lumen_diffuse_color_boost: False, override_lumen_ambient_occlusion_intensity: False, override_lumen_skylight_leaking: False, override_lumen_skylight_leaking_tint: False, override_lumen_full_skylight_leaking_distance: False, override_lumen_ray_lighting_mode: False, override_lumen_reflections_screen_traces: False, override_lumen_front_layer_translucency_reflections: False, override_lumen_max_roughness_to_trace_reflections: False, override_lumen_max_reflection_bounces: False, override_lumen_max_refraction_bounces: False, override_lumen_surface_cache_resolution: False, override_path_tracing_max_bounces: False, override_path_tracing_samples_per_pixel: False, override_path_tracing_max_path_intensity: False, override_path_tracing_enable_emissive_materials: False, override_path_tracing_enable_reference_dof: False, override_path_tracing_enable_reference_atmosphere: False, override_path_tracing_enable_denoiser: False, override_path_tracing_include_emissive: False, override_path_tracing_include_diffuse: False, override_path_tracing_include_indirect_diffuse: False, override_path_tracing_include_specular: False, override_path_tracing_include_indirect_specular: False, override_path_tracing_include_volume: False, override_path_tracing_include_indirect_volume: False, mobile_hq_gaussian: False, bloom_method: BM_SOG, auto_exposure_method: AEM_Histogram, temperature_type: TEMP_WhiteBalance, white_temp: 6500.000000, white_tint: 0.000000, color_saturation: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_contrast: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_gamma: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_gain: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_offset: {x: 0.000000, y: 0.000000, z: 0.000000, w: 0.000000}, color_saturation_shadows: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_contrast_shadows: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_gamma_shadows: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_gain_shadows: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_offset_shadows: {x: 0.000000, y: 0.000000, z: 0.000000, w: 0.000000}, color_saturation_midtones: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_contrast_midtones: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_gamma_midtones: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_gain_midtones: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_offset_midtones: {x: 0.000000, y: 0.000000, z: 0.000000, w: 0.000000}, color_saturation_highlights: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_contrast_highlights: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_gamma_highlights: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_gain_highlights: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_offset_highlights: {x: 0.000000, y: 0.000000, z: 0.000000, w: 0.000000}, color_correction_highlights_min: 0.500000, color_correction_highlights_max: 1.000000, color_correction_shadows_max: 0.090000, blue_correction: 0.600000, expand_gamut: 1.000000, tone_curve_amount: 1.000000, tonemapping_method: Filmic, film_slope: 0.880000, film_toe: 0.550000, film_shoulder: 0.260000, film_black_clip: 0.000000, film_white_clip: 0.040000, scene_color_tint: {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}, scene_fringe_intensity: 0.000000, chromatic_aberration_start_offset: 0.000000, bloom_intensity: 0.675000, bloom_gaussian_intensity: 1.000000, bloom_threshold: -1.000000, bloom_size_scale: 4.000000, bloom1_size: 0.300000, bloom2_size: 1.000000, bloom3_size: 2.000000, bloom4_size: 10.000000, bloom5_size: 30.000000, bloom6_size: 64.000000, bloom1_tint: {r: 0.346500, g: 0.346500, b: 0.346500, a: 1.000000}, bloom2_tint: {r: 0.138000, g: 0.138000, b: 0.138000, a: 1.000000}, bloom3_tint: {r: 0.117600, g: 0.117600, b: 0.117600, a: 1.000000}, bloom4_tint: {r: 0.066000, g: 0.066000, b: 0.066000, a: 1.000000}, bloom5_tint: {r: 0.066000, g: 0.066000, b: 0.066000, a: 1.000000}, bloom6_tint: {r: 0.061000, g: 0.061000, b: 0.061000, a: 1.000000}, bloom_convolution_intensity: 1.000000, bloom_convolution_scatter_dispersion: 1.000000, bloom_convolution_size: 1.000000, bloom_convolution_texture: None, bloom_convolution_center_uv: {x: 0.500000, y: 0.500000}, bloom_convolution_pre_filter_min: 7.000000, bloom_convolution_pre_filter_max: 15000.000000, bloom_convolution_pre_filter_mult: 15.000000, bloom_convolution_buffer_scale: 0.133000, bloom_dirt_mask: None, bloom_dirt_mask_intensity: 0.000000, bloom_dirt_mask_tint: {r: 0.500000, g: 0.500000, b: 0.500000, a: 1.000000}, dynamic_global_illumination_method: Lumen, indirect_lighting_color: {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}, indirect_lighting_intensity: 1.000000, lumen_ray_lighting_mode: Default, lumen_scene_lighting_quality: 1.000000, lumen_scene_detail: 1.000000, lumen_scene_view_distance: 20000.000000, lumen_scene_lighting_update_speed: 1.000000, lumen_final_gather_quality: 1.000000, lumen_final_gather_lighting_update_speed: 1.000000, lumen_final_gather_screen_traces: True, lumen_max_trace_distance: 20000.000000, lumen_diffuse_color_boost: 1.000000, lumen_ambient_occlusion_intensity: 1.000000, lumen_skylight_leaking: 0.000000, lumen_skylight_leaking_tint: {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}, lumen_full_skylight_leaking_distance: 1000.000000, lumen_surface_cache_resolution: 1.000000, reflection_method: Lumen, lumen_reflection_quality: 1.000000, lumen_reflections_screen_traces: True, lumen_front_layer_translucency_reflections: False, lumen_max_roughness_to_trace_reflections: 0.400000, lumen_max_reflection_bounces: 1, lumen_max_refraction_bounces: 0, screen_space_reflection_intensity: 100.000000, screen_space_reflection_quality: 50.000000, screen_space_reflection_max_roughness: 0.600000, mega_lights: True, mega_lights_front_layer_translucency: False, ambient_cubemap_tint: {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}, ambient_cubemap_intensity: 1.000000, ambient_cubemap: None, camera_shutter_speed: 60.000000, camera_iso: 100.000000, depth_of_field_fstop: 4.000000, depth_of_field_min_fstop: 1.200000, depth_of_field_blade_count: 5, auto_exposure_bias: 1.000000, auto_exposure_apply_physical_camera_exposure: True, auto_exposure_bias_curve: None, auto_exposure_meter_mask: None, auto_exposure_low_percent: 10.000000, auto_exposure_high_percent: 90.000000, auto_exposure_min_brightness: -10.000000, auto_exposure_max_brightness: 20.000000, auto_exposure_speed_up: 3.000000, auto_exposure_speed_down: 1.000000, histogram_log_min: -10.000000, histogram_log_max: 20.000000, local_exposure_method: Bilateral, local_exposure_highlight_contrast_scale: 1.000000, local_exposure_shadow_contrast_scale: 1.000000, local_exposure_highlight_contrast_curve: None, local_exposure_shadow_contrast_curve: None, local_exposure_highlight_threshold: 0.000000, local_exposure_shadow_threshold: 0.000000, local_exposure_detail_strength: 1.000000, local_exposure_blurred_luminance_blend: 0.600000, local_exposure_blurred_luminance_kernel_size_percent: 50.000000, local_exposure_highlight_threshold_strength: 1.000000, local_exposure_shadow_threshold_strength: 1.000000, local_exposure_middle_grey_bias: 0.000000, lens_flare_intensity: 1.000000, lens_flare_tint: {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}, lens_flare_bokeh_size: 3.000000, lens_flare_threshold: 8.000000, lens_flare_bokeh_shape: None, vignette_intensity: 0.400000, vignette_type: CosineFourthLaw, vignette_center: {}, vignette_color: {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}, vignette_size: {}, vignette_softness: 5.000000, vignette_texture: None, sharpen: 0.000000, film_grain_intensity: 0.000000, film_grain_intensity_shadows: 1.000000, film_grain_intensity_midtones: 1.000000, film_grain_intensity_highlights: 1.000000, film_grain_shadows_max: 0.090000, film_grain_highlights_min: 0.500000, film_grain_highlights_max: 1.000000, film_grain_scale: {}, film_grain_texture: None, ambient_occlusion_intensity: 0.500000, ambient_occlusion_static_fraction: 1.000000, ambient_occlusion_radius: 200.000000, ambient_occlusion_radius_in_ws: False, ambient_occlusion_fade_distance: 8000.000000, ambient_occlusion_fade_radius: 5000.000000, ambient_occlusion_power: 2.000000, ambient_occlusion_bias: 3.000000, ambient_occlusion_quality: 50.000000, ambient_occlusion_mip_blend: 0.600000, ambient_occlusion_mip_scale: 1.700000, ambient_occlusion_mip_threshold: 0.010000, ambient_occlusion_temporal_blend_weight: 0.100000, ray_tracing_ao: False, ray_tracing_ao_samples_per_pixel: 1, ray_tracing_ao_intensity: 1.000000, ray_tracing_ao_radius: 200.000000, color_grading_intensity: 1.000000, color_grading_lut: None, depth_of_field_enabled: True, depth_of_field_sensor_width: 24.576000, depth_of_field_squeeze_factor: 1.000000, depth_of_field_focal_distance: 0.000000, depth_of_field_depth_blur_amount: 1.000000, depth_of_field_depth_blur_radius: 0.000000, depth_of_field_use_hair_depth: False, depth_of_field_petzval_bokeh: 0.000000, depth_of_field_petzval_bokeh_falloff: 1.000000, depth_of_field_petzval_exclusion_box_extents: {}, depth_of_field_petzval_exclusion_box_radius: 0.000000, depth_of_field_aspect_ratio_scalar: 1.000000, depth_of_field_barrel_radius: 5.000000, depth_of_field_barrel_length: 0.000000, depth_of_field_focal_region: 0.000000, depth_of_field_near_transition_region: 300.000000, depth_of_field_far_transition_region: 500.000000, depth_of_field_scale: 0.000000, depth_of_field_near_blur_size: 15.000000, depth_of_field_far_blur_size: 15.000000, depth_of_field_occlusion: 0.400000, depth_of_field_sky_focus_distance: 0.000000, depth_of_field_vignette_size: 200.000000, motion_blur_amount: 0.500000, motion_blur_max: 5.000000, motion_blur_target_fps: 30, motion_blur_per_object_size: 0.000000, translucency_type: Raster, ray_tracing_translucency_max_roughness: 0.600000, ray_tracing_translucency_refraction_rays: 3, ray_tracing_translucency_samples_per_pixel: 1, ray_tracing_translucency_max_primary_hit_events: 4, ray_tracing_translucency_max_secondary_hit_events: 2, ray_tracing_translucency_shadows: Hard_shadows, ray_tracing_translucency_refraction: True, ray_tracing_translucency_use_ray_traced_refraction: False, path_tracing_max_bounces: 32, path_tracing_samples_per_pixel: 2048, path_tracing_max_path_intensity: 24.000000, path_tracing_enable_emissive_materials: True, path_tracing_enable_reference_dof: False, path_tracing_enable_reference_atmosphere: False, path_tracing_enable_denoiser: True, path_tracing_include_emissive: True, path_tracing_include_diffuse: True, path_tracing_include_indirect_diffuse: True, path_tracing_include_specular: True, path_tracing_include_indirect_specular: True, path_tracing_include_volume: True, path_tracing_include_indirect_volume: True, user_flags: 0, weighted_blendables: {array: }}>"
+        }
+      },
+      "all": {
+        "absolute_location": "False",
+        "absolute_rotation": "False",
+        "absolute_scale": "False",
+        "auto_activate": "False",
+        "b_absolute_translation": "False",
+        "blend_radius": "100.0",
+        "blend_weight": "1.0",
+        "detail_mode": "<DetailMode.DM_LOW: 0>",
+        "enabled": "True",
+        "hidden_in_game": "False",
+        "is_editor_only": "False",
+        "mobility": "<ComponentMobility.MOVABLE: 2>",
+        "modify_frequency": "<ComponentMobility.MOVABLE: 2>",
+        "priority": "1.0",
+        "relative_location": "<Struct 'Vector' (0x0000025C3C1A7980) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+        "relative_rotation": "<Struct 'Rotator' (0x0000025C3C1A7998) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>",
+        "relative_scale3d": "<Struct 'Vector' (0x0000025C3C1A79B0) {x: 1.000000, y: 1.000000, z: 1.000000}>",
+        "relative_translation": "<Struct 'Vector' (0x0000025C3C1A7980) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+        "settings": "<Struct 'PostProcessSettings' (0x0000025C3C1A7AA0) {override_temperature_type: False, override_white_temp: False, override_white_tint: False, override_color_saturation: False, override_color_contrast: False, override_color_gamma: False, override_color_gain: False, override_color_offset: False, override_color_saturation_shadows: False, override_color_contrast_shadows: False, override_color_gamma_shadows: False, override_color_gain_shadows: False, override_color_offset_shadows: False, override_color_saturation_midtones: False, override_color_contrast_midtones: False, override_color_gamma_midtones: False, override_color_gain_midtones: False, override_color_offset_midtones: False, override_color_saturation_highlights: False, override_color_contrast_highlights: False, override_color_gamma_highlights: False, override_color_gain_highlights: False, override_color_offset_highlights: False, override_color_correction_shadows_max: False, override_color_correction_highlights_min: False, override_color_correction_highlights_max: False, override_blue_correction: False, override_expand_gamut: False, override_tone_curve_amount: False, override_tonemapping_method: False, override_film_slope: False, override_film_toe: False, override_film_shoulder: False, override_film_black_clip: False, override_film_white_clip: False, override_scene_color_tint: False, override_scene_fringe_intensity: False, override_chromatic_aberration_start_offset: False, override_b_mega_lights: False, override_mega_lights_front_layer_translucency: False, override_ambient_cubemap_tint: False, override_ambient_cubemap_intensity: False, override_bloom_method: False, override_bloom_intensity: False, override_bloom_gaussian_intensity: False, override_bloom_threshold: False, override_bloom1_tint: False, override_bloom1_size: False, override_bloom2_size: False, override_bloom2_tint: False, override_bloom3_tint: False, override_bloom3_size: False, override_bloom4_tint: False, override_bloom4_size: False, override_bloom5_tint: False, override_bloom5_size: False, override_bloom6_tint: False, override_bloom6_size: False, override_bloom_size_scale: False, override_bloom_convolution_intensity: False, override_bloom_convolution_texture: False, override_bloom_convolution_scatter_dispersion: False, override_bloom_convolution_size: False, override_bloom_convolution_center_uv: False, override_bloom_convolution_pre_filter_min: False, override_bloom_convolution_pre_filter_max: False, override_bloom_convolution_pre_filter_mult: False, override_bloom_convolution_buffer_scale: False, override_bloom_dirt_mask_intensity: False, override_bloom_dirt_mask_tint: False, override_bloom_dirt_mask: False, override_camera_shutter_speed: False, override_camera_iso: False, override_auto_exposure_method: True, override_auto_exposure_low_percent: False, override_auto_exposure_high_percent: False, override_auto_exposure_min_brightness: True, override_auto_exposure_max_brightness: True, override_auto_exposure_speed_up: False, override_auto_exposure_speed_down: False, override_auto_exposure_bias: True, override_auto_exposure_bias_curve: True, override_auto_exposure_meter_mask: False, override_auto_exposure_apply_physical_camera_exposure: False, override_histogram_log_min: False, override_histogram_log_max: False, override_local_exposure_method: False, override_local_exposure_highlight_contrast_scale: False, override_local_exposure_shadow_contrast_scale: False, override_local_exposure_highlight_contrast_curve: False, override_local_exposure_shadow_contrast_curve: False, override_local_exposure_highlight_threshold: False, override_local_exposure_shadow_threshold: False, override_local_exposure_detail_strength: False, override_local_exposure_blurred_luminance_blend: False, override_local_exposure_blurred_luminance_kernel_size_percent: False, override_local_exposure_highlight_threshold_strength: False, override_local_exposure_shadow_threshold_strength: False, override_local_exposure_middle_grey_bias: False, override_lens_flare_intensity: False, override_lens_flare_tint: False, override_lens_flare_tints: False, override_lens_flare_bokeh_size: False, override_lens_flare_bokeh_shape: False, override_lens_flare_threshold: False, override_vignette_intensity: False, override_vignette_type: False, override_vignette_center: False, override_vignette_color: False, override_vignette_size: False, override_vignette_softness: False, override_vignette_texture: False, override_sharpen: False, override_film_grain_intensity: False, override_film_grain_intensity_shadows: False, override_film_grain_intensity_midtones: False, override_film_grain_intensity_highlights: False, override_film_grain_shadows_max: False, override_film_grain_highlights_min: False, override_film_grain_highlights_max: False, override_film_grain_scale: False, override_film_grain_texture: False, override_ambient_occlusion_intensity: False, override_ambient_occlusion_static_fraction: False, override_ambient_occlusion_radius: False, override_ambient_occlusion_fade_distance: False, override_ambient_occlusion_fade_radius: False, override_ambient_occlusion_radius_in_ws: False, override_ambient_occlusion_power: False, override_ambient_occlusion_bias: False, override_ambient_occlusion_quality: False, override_ambient_occlusion_mip_blend: False, override_ambient_occlusion_mip_scale: False, override_ambient_occlusion_mip_threshold: False, override_ambient_occlusion_temporal_blend_weight: False, override_ray_tracing_ao: False, override_ray_tracing_ao_samples_per_pixel: False, override_ray_tracing_ao_intensity: False, override_ray_tracing_ao_radius: False, override_indirect_lighting_color: False, override_indirect_lighting_intensity: False, override_color_grading_intensity: False, override_color_grading_lut: False, override_depth_of_field_enabled: False, override_depth_of_field_focal_distance: False, override_depth_of_field_fstop: False, override_depth_of_field_min_fstop: False, override_depth_of_field_blade_count: False, override_depth_of_field_sensor_width: False, override_depth_of_field_squeeze_factor: False, override_depth_of_field_depth_blur_radius: False, override_depth_of_field_use_hair_depth: False, override_depth_of_field_petzval_bokeh: False, override_depth_of_field_petzval_bokeh_falloff: False, override_depth_of_field_petzval_exclusion_box_extents: False, override_depth_of_field_petzval_exclusion_box_radius: False, override_depth_of_field_aspect_ratio_scalar: False, override_depth_of_field_matte_box_flags: False, override_depth_of_field_barrel_radius: False, override_depth_of_field_barrel_length: False, override_depth_of_field_depth_blur_amount: False, override_depth_of_field_focal_region: False, override_depth_of_field_near_transition_region: False, override_depth_of_field_far_transition_region: False, override_depth_of_field_scale: False, override_depth_of_field_near_blur_size: False, override_depth_of_field_far_blur_size: False, override_mobile_hq_gaussian: False, override_depth_of_field_occlusion: False, override_depth_of_field_sky_focus_distance: False, override_depth_of_field_vignette_size: False, override_motion_blur_amount: False, override_motion_blur_max: False, override_motion_blur_target_fps: False, override_motion_blur_per_object_size: False, override_reflection_method: False, override_lumen_reflection_quality: False, override_screen_space_reflection_intensity: False, override_screen_space_reflection_quality: False, override_screen_space_reflection_max_roughness: False, override_user_flags: False, override_translucency_type: False, override_ray_tracing_translucency_max_roughness: False, override_ray_tracing_translucency_refraction_rays: False, override_ray_tracing_translucency_samples_per_pixel: False, override_ray_tracing_translucency_shadows: False, override_ray_tracing_translucency_refraction: False, override_ray_tracing_translucency_max_primary_hit_events: False, override_ray_tracing_translucency_max_secondary_hit_events: False, override_ray_tracing_translucency_use_ray_traced_refraction: False, override_dynamic_global_illumination_method: False, override_lumen_scene_lighting_quality: False, override_lumen_scene_detail: False, override_lumen_scene_view_distance: False, override_lumen_scene_lighting_update_speed: False, override_lumen_final_gather_quality: False, override_lumen_final_gather_lighting_update_speed: False, override_lumen_final_gather_screen_traces: False, override_lumen_max_trace_distance: False, override_lumen_diffuse_color_boost: False, override_lumen_ambient_occlusion_intensity: False, override_lumen_skylight_leaking: False, override_lumen_skylight_leaking_tint: False, override_lumen_full_skylight_leaking_distance: False, override_lumen_ray_lighting_mode: False, override_lumen_reflections_screen_traces: False, override_lumen_front_layer_translucency_reflections: False, override_lumen_max_roughness_to_trace_reflections: False, override_lumen_max_reflection_bounces: False, override_lumen_max_refraction_bounces: False, override_lumen_surface_cache_resolution: False, override_path_tracing_max_bounces: False, override_path_tracing_samples_per_pixel: False, override_path_tracing_max_path_intensity: False, override_path_tracing_enable_emissive_materials: False, override_path_tracing_enable_reference_dof: False, override_path_tracing_enable_reference_atmosphere: False, override_path_tracing_enable_denoiser: False, override_path_tracing_include_emissive: False, override_path_tracing_include_diffuse: False, override_path_tracing_include_indirect_diffuse: False, override_path_tracing_include_specular: False, override_path_tracing_include_indirect_specular: False, override_path_tracing_include_volume: False, override_path_tracing_include_indirect_volume: False, mobile_hq_gaussian: False, bloom_method: BM_SOG, auto_exposure_method: AEM_Histogram, temperature_type: TEMP_WhiteBalance, white_temp: 6500.000000, white_tint: 0.000000, color_saturation: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_contrast: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_gamma: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_gain: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_offset: {x: 0.000000, y: 0.000000, z: 0.000000, w: 0.000000}, color_saturation_shadows: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_contrast_shadows: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_gamma_shadows: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_gain_shadows: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_offset_shadows: {x: 0.000000, y: 0.000000, z: 0.000000, w: 0.000000}, color_saturation_midtones: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_contrast_midtones: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_gamma_midtones: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_gain_midtones: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_offset_midtones: {x: 0.000000, y: 0.000000, z: 0.000000, w: 0.000000}, color_saturation_highlights: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_contrast_highlights: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_gamma_highlights: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_gain_highlights: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}, color_offset_highlights: {x: 0.000000, y: 0.000000, z: 0.000000, w: 0.000000}, color_correction_highlights_min: 0.500000, color_correction_highlights_max: 1.000000, color_correction_shadows_max: 0.090000, blue_correction: 0.600000, expand_gamut: 1.000000, tone_curve_amount: 1.000000, tonemapping_method: Filmic, film_slope: 0.880000, film_toe: 0.550000, film_shoulder: 0.260000, film_black_clip: 0.000000, film_white_clip: 0.040000, scene_color_tint: {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}, scene_fringe_intensity: 0.000000, chromatic_aberration_start_offset: 0.000000, bloom_intensity: 0.675000, bloom_gaussian_intensity: 1.000000, bloom_threshold: -1.000000, bloom_size_scale: 4.000000, bloom1_size: 0.300000, bloom2_size: 1.000000, bloom3_size: 2.000000, bloom4_size: 10.000000, bloom5_size: 30.000000, bloom6_size: 64.000000, bloom1_tint: {r: 0.346500, g: 0.346500, b: 0.346500, a: 1.000000}, bloom2_tint: {r: 0.138000, g: 0.138000, b: 0.138000, a: 1.000000}, bloom3_tint: {r: 0.117600, g: 0.117600, b: 0.117600, a: 1.000000}, bloom4_tint: {r: 0.066000, g: 0.066000, b: 0.066000, a: 1.000000}, bloom5_tint: {r: 0.066000, g: 0.066000, b: 0.066000, a: 1.000000}, bloom6_tint: {r: 0.061000, g: 0.061000, b: 0.061000, a: 1.000000}, bloom_convolution_intensity: 1.000000, bloom_convolution_scatter_dispersion: 1.000000, bloom_convolution_size: 1.000000, bloom_convolution_texture: None, bloom_convolution_center_uv: {x: 0.500000, y: 0.500000}, bloom_convolution_pre_filter_min: 7.000000, bloom_convolution_pre_filter_max: 15000.000000, bloom_convolution_pre_filter_mult: 15.000000, bloom_convolution_buffer_scale: 0.133000, bloom_dirt_mask: None, bloom_dirt_mask_intensity: 0.000000, bloom_dirt_mask_tint: {r: 0.500000, g: 0.500000, b: 0.500000, a: 1.000000}, dynamic_global_illumination_method: Lumen, indirect_lighting_color: {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}, indirect_lighting_intensity: 1.000000, lumen_ray_lighting_mode: Default, lumen_scene_lighting_quality: 1.000000, lumen_scene_detail: 1.000000, lumen_scene_view_distance: 20000.000000, lumen_scene_lighting_update_speed: 1.000000, lumen_final_gather_quality: 1.000000, lumen_final_gather_lighting_update_speed: 1.000000, lumen_final_gather_screen_traces: True, lumen_max_trace_distance: 20000.000000, lumen_diffuse_color_boost: 1.000000, lumen_ambient_occlusion_intensity: 1.000000, lumen_skylight_leaking: 0.000000, lumen_skylight_leaking_tint: {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}, lumen_full_skylight_leaking_distance: 1000.000000, lumen_surface_cache_resolution: 1.000000, reflection_method: Lumen, lumen_reflection_quality: 1.000000, lumen_reflections_screen_traces: True, lumen_front_layer_translucency_reflections: False, lumen_max_roughness_to_trace_reflections: 0.400000, lumen_max_reflection_bounces: 1, lumen_max_refraction_bounces: 0, screen_space_reflection_intensity: 100.000000, screen_space_reflection_quality: 50.000000, screen_space_reflection_max_roughness: 0.600000, mega_lights: True, mega_lights_front_layer_translucency: False, ambient_cubemap_tint: {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}, ambient_cubemap_intensity: 1.000000, ambient_cubemap: None, camera_shutter_speed: 60.000000, camera_iso: 100.000000, depth_of_field_fstop: 4.000000, depth_of_field_min_fstop: 1.200000, depth_of_field_blade_count: 5, auto_exposure_bias: 0.000000, auto_exposure_apply_physical_camera_exposure: True, auto_exposure_bias_curve: \"/Script/Engine.CurveFloat'/Game/UltraDynamicSky/Materials/Float_Curves/Exposure_Compensation_Curve.Exposure_Compensation_Curve'\", auto_exposure_meter_mask: None, auto_exposure_low_percent: 10.000000, auto_exposure_high_percent: 90.000000, auto_exposure_min_brightness: -10.000000, auto_exposure_max_brightness: 20.000000, auto_exposure_speed_up: 3.000000, auto_exposure_speed_down: 1.000000, histogram_log_min: -10.000000, histogram_log_max: 20.000000, local_exposure_method: Bilateral, local_exposure_highlight_contrast_scale: 1.000000, local_exposure_shadow_contrast_scale: 1.000000, local_exposure_highlight_contrast_curve: None, local_exposure_shadow_contrast_curve: None, local_exposure_highlight_threshold: 0.000000, local_exposure_shadow_threshold: 0.000000, local_exposure_detail_strength: 1.000000, local_exposure_blurred_luminance_blend: 0.600000, local_exposure_blurred_luminance_kernel_size_percent: 50.000000, local_exposure_highlight_threshold_strength: 1.000000, local_exposure_shadow_threshold_strength: 1.000000, local_exposure_middle_grey_bias: 0.000000, lens_flare_intensity: 1.000000, lens_flare_tint: {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}, lens_flare_bokeh_size: 3.000000, lens_flare_threshold: 8.000000, lens_flare_bokeh_shape: None, vignette_intensity: 0.400000, vignette_type: CosineFourthLaw, vignette_center: {}, vignette_color: {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}, vignette_size: {}, vignette_softness: 5.000000, vignette_texture: None, sharpen: 0.000000, film_grain_intensity: 0.000000, film_grain_intensity_shadows: 1.000000, film_grain_intensity_midtones: 1.000000, film_grain_intensity_highlights: 1.000000, film_grain_shadows_max: 0.090000, film_grain_highlights_min: 0.500000, film_grain_highlights_max: 1.000000, film_grain_scale: {}, film_grain_texture: None, ambient_occlusion_intensity: 0.500000, ambient_occlusion_static_fraction: 1.000000, ambient_occlusion_radius: 200.000000, ambient_occlusion_radius_in_ws: False, ambient_occlusion_fade_distance: 8000.000000, ambient_occlusion_fade_radius: 5000.000000, ambient_occlusion_power: 2.000000, ambient_occlusion_bias: 3.000000, ambient_occlusion_quality: 50.000000, ambient_occlusion_mip_blend: 0.600000, ambient_occlusion_mip_scale: 1.700000, ambient_occlusion_mip_threshold: 0.010000, ambient_occlusion_temporal_blend_weight: 0.100000, ray_tracing_ao: False, ray_tracing_ao_samples_per_pixel: 1, ray_tracing_ao_intensity: 1.000000, ray_tracing_ao_radius: 200.000000, color_grading_intensity: 1.000000, color_grading_lut: None, depth_of_field_enabled: True, depth_of_field_sensor_width: 24.576000, depth_of_field_squeeze_factor: 1.000000, depth_of_field_focal_distance: 0.000000, depth_of_field_depth_blur_amount: 1.000000, depth_of_field_depth_blur_radius: 0.000000, depth_of_field_use_hair_depth: False, depth_of_field_petzval_bokeh: 0.000000, depth_of_field_petzval_bokeh_falloff: 1.000000, depth_of_field_petzval_exclusion_box_extents: {}, depth_of_field_petzval_exclusion_box_radius: 0.000000, depth_of_field_aspect_ratio_scalar: 1.000000, depth_of_field_barrel_radius: 5.000000, depth_of_field_barrel_length: 0.000000, depth_of_field_focal_region: 0.000000, depth_of_field_near_transition_region: 300.000000, depth_of_field_far_transition_region: 500.000000, depth_of_field_scale: 0.000000, depth_of_field_near_blur_size: 15.000000, depth_of_field_far_blur_size: 15.000000, depth_of_field_occlusion: 0.400000, depth_of_field_sky_focus_distance: 0.000000, depth_of_field_vignette_size: 200.000000, motion_blur_amount: 0.500000, motion_blur_max: 5.000000, motion_blur_target_fps: 30, motion_blur_per_object_size: 0.000000, translucency_type: Raster, ray_tracing_translucency_max_roughness: 0.600000, ray_tracing_translucency_refraction_rays: 3, ray_tracing_translucency_samples_per_pixel: 1, ray_tracing_translucency_max_primary_hit_events: 4, ray_tracing_translucency_max_secondary_hit_events: 2, ray_tracing_translucency_shadows: Hard_shadows, ray_tracing_translucency_refraction: True, ray_tracing_translucency_use_ray_traced_refraction: False, path_tracing_max_bounces: 32, path_tracing_samples_per_pixel: 2048, path_tracing_max_path_intensity: 24.000000, path_tracing_enable_emissive_materials: True, path_tracing_enable_reference_dof: False, path_tracing_enable_reference_atmosphere: False, path_tracing_enable_denoiser: True, path_tracing_include_emissive: True, path_tracing_include_diffuse: True, path_tracing_include_indirect_diffuse: True, path_tracing_include_specular: True, path_tracing_include_indirect_specular: True, path_tracing_include_volume: True, path_tracing_include_indirect_volume: True, user_flags: 0, weighted_blendables: {array: }}>",
+        "unbound": "True",
+        "visible": "True"
+      },
+      "pp_overrides_enabled": [
+        "override_auto_exposure_bias",
+        "override_auto_exposure_bias_curve",
+        "override_auto_exposure_max_brightness",
+        "override_auto_exposure_method",
+        "override_auto_exposure_min_brightness"
+      ],
+      "pp_applied_values": {
+        "auto_exposure_bias": "0.0",
+        "auto_exposure_bias_curve": "<Object '/Game/UltraDynamicSky/Materials/Float_Curves/Exposure_Compensation_Curve.Exposure_Compensation_Curve' (0x0000025C08326100) Class 'CurveFloat'>",
+        "auto_exposure_max_brightness": "20.0",
+        "auto_exposure_method": "<AutoExposureMethod.AEM_HISTOGRAM: 0>",
+        "auto_exposure_min_brightness": "-10.0"
+      }
+    },
+    "SkyAtmosphere [SkyAtmosphereComponent]": {
+      "world_rotation": "<Struct 'Rotator' (0x0000025C06C45C30) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>",
+      "transform_error": "'SkyAtmosphereComponent' object has no attribute 'get_relative_rotation'",
+      "non_default": {
+        "aerial_pespective_view_distance_scale": {
+          "value": "0.0",
+          "default": "1.0"
+        },
+        "ground_albedo": {
+          "value": "<Struct 'Color' (0x0000025C39ECE698) {b: 170, g: 170, r: 170, a: 255}>",
+          "default": "<Struct 'Color' (0x0000025BD3B70698) {b: 170, g: 170, r: 170, a: 255}>"
+        },
+        "height_fog_contribution": {
+          "value": "2.299999952316284",
+          "default": "1.0"
+        },
+        "mie_absorption": {
+          "value": "<Struct 'LinearColor' (0x0000025C39ECE6D8) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>",
+          "default": "<Struct 'LinearColor' (0x0000025BD3B706D8) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>"
+        },
+        "mie_anisotropy": {
+          "value": "0.75",
+          "default": "0.800000011920929"
+        },
+        "mie_scattering": {
+          "value": "<Struct 'LinearColor' (0x0000025C39ECE6C4) {r: 0.802083, g: 0.879982, b: 1.000000, a: 1.000000}>",
+          "default": "<Struct 'LinearColor' (0x0000025BD3B706C4) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>"
+        },
+        "mie_scattering_scale": {
+          "value": "0.013996000401675701",
+          "default": "0.003996000159531832"
+        },
+        "other_absorption": {
+          "value": "<Struct 'LinearColor' (0x0000025C39ECE6F4) {r: 0.897238, g: 1.000000, b: 0.095307, a: 0.002000}>",
+          "default": "<Struct 'LinearColor' (0x0000025BD3B706F4) {r: 0.345561, g: 1.000000, b: 0.045189, a: 531.632080}>"
+        },
+        "other_absorption_scale": {
+          "value": "0.0020000000949949026",
+          "default": "0.0018810000037774444"
+        },
+        "other_tent_distribution": {
+          "value": "<Struct 'TentDistribution' (0x0000025C39ECE704) {tip_altitude: 25.000000, tip_value: 1.000000, width: 15.000000}>",
+          "default": "<Struct 'TentDistribution' (0x0000025BD3B70704) {tip_altitude: 25.000000, tip_value: 1.000000, width: 15.000000}>"
+        },
+        "rayleigh_scattering": {
+          "value": "<Struct 'LinearColor' (0x0000025C39ECE6AC) {r: 0.168627, g: 0.407843, b: 1.000000, a: 1.000000}>",
+          "default": "<Struct 'LinearColor' (0x0000025BD3B706AC) {r: 0.175287, g: 0.409607, b: 1.000000, a: 30.211479}>"
+        },
+        "rayleigh_scattering_scale": {
+          "value": "0.03999999910593033",
+          "default": "0.03310000151395798"
+        },
+        "relative_location": {
+          "value": "<Struct 'Vector' (0x0000025C39ECE580) {x: 98.206455, y: 585.503629, z: 0.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BD3B70580) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+        },
+        "relative_rotation": {
+          "value": "<Struct 'Rotator' (0x0000025C39ECE598) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>",
+          "default": "<Struct 'Rotator' (0x0000025BD3B70598) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>"
+        },
+        "relative_scale3d": {
+          "value": "<Struct 'Vector' (0x0000025C39ECE5B0) {x: 1.000000, y: 1.000000, z: 1.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BD3B705B0) {x: 1.000000, y: 1.000000, z: 1.000000}>"
+        },
+        "relative_translation": {
+          "value": "<Struct 'Vector' (0x0000025C39ECE580) {x: 98.206455, y: 585.503629, z: 0.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BD3B70580) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+        },
+        "sky_and_aerial_perspective_luminance_factor": {
+          "value": "<Struct 'LinearColor' (0x0000025C39ECE720) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>",
+          "default": "<Struct 'LinearColor' (0x0000025BD3B70720) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>"
+        },
+        "sky_luminance_factor": {
+          "value": "<Struct 'LinearColor' (0x0000025C39ECE710) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>",
+          "default": "<Struct 'LinearColor' (0x0000025BD3B70710) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>"
+        },
+        "transform_mode": {
+          "value": "<SkyAtmosphereTransformMode.PLANET_TOP_AT_COMPONENT_TRANSFORM: 1>",
+          "default": "<SkyAtmosphereTransformMode.PLANET_TOP_AT_ABSOLUTE_WORLD_ORIGIN: 0>"
+        }
+      },
+      "all": {
+        "absolute_location": "False",
+        "absolute_rotation": "False",
+        "absolute_scale": "False",
+        "aerial_perspective_start_depth": "0.10000000149011612",
+        "aerial_pespective_view_distance_scale": "0.0",
+        "atmosphere_height": "60.0",
+        "auto_activate": "False",
+        "b_absolute_translation": "False",
+        "bottom_radius": "6360.0",
+        "detail_mode": "<DetailMode.DM_LOW: 0>",
+        "ground_albedo": "<Struct 'Color' (0x0000025C39ECE698) {b: 170, g: 170, r: 170, a: 255}>",
+        "height_fog_contribution": "2.299999952316284",
+        "hidden_in_game": "False",
+        "holdout": "False",
+        "is_editor_only": "False",
+        "mie_absorption": "<Struct 'LinearColor' (0x0000025C39ECE6D8) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>",
+        "mie_absorption_scale": "0.0004440000047907233",
+        "mie_anisotropy": "0.75",
+        "mie_exponential_distribution": "1.2000000476837158",
+        "mie_scattering": "<Struct 'LinearColor' (0x0000025C39ECE6C4) {r: 0.802083, g: 0.879982, b: 1.000000, a: 1.000000}>",
+        "mie_scattering_scale": "0.013996000401675701",
+        "mobility": "<ComponentMobility.MOVABLE: 2>",
+        "modify_frequency": "<ComponentMobility.MOVABLE: 2>",
+        "multi_scattering_factor": "1.0",
+        "other_absorption": "<Struct 'LinearColor' (0x0000025C39ECE6F4) {r: 0.897238, g: 1.000000, b: 0.095307, a: 0.002000}>",
+        "other_absorption_scale": "0.0020000000949949026",
+        "other_tent_distribution": "<Struct 'TentDistribution' (0x0000025C39ECE704) {tip_altitude: 25.000000, tip_value: 1.000000, width: 15.000000}>",
+        "rayleigh_exponential_distribution": "8.0",
+        "rayleigh_scattering": "<Struct 'LinearColor' (0x0000025C39ECE6AC) {r: 0.168627, g: 0.407843, b: 1.000000, a: 1.000000}>",
+        "rayleigh_scattering_scale": "0.03999999910593033",
+        "relative_location": "<Struct 'Vector' (0x0000025C39ECE580) {x: 98.206455, y: 585.503629, z: 0.000000}>",
+        "relative_rotation": "<Struct 'Rotator' (0x0000025C39ECE598) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>",
+        "relative_scale3d": "<Struct 'Vector' (0x0000025C39ECE5B0) {x: 1.000000, y: 1.000000, z: 1.000000}>",
+        "relative_translation": "<Struct 'Vector' (0x0000025C39ECE580) {x: 98.206455, y: 585.503629, z: 0.000000}>",
+        "render_in_main_pass": "True",
+        "sky_and_aerial_perspective_luminance_factor": "<Struct 'LinearColor' (0x0000025C39ECE720) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>",
+        "sky_luminance_factor": "<Struct 'LinearColor' (0x0000025C39ECE710) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>",
+        "trace_sample_count_scale": "1.0",
+        "transform_mode": "<SkyAtmosphereTransformMode.PLANET_TOP_AT_COMPONENT_TRANSFORM: 1>",
+        "transmittance_min_light_elevation_angle": "-90.0",
+        "visible": "True"
+      }
+    },
+    "Captured Scene Sky Light [SkyLightComponent]": {
+      "world_rotation": "<Struct 'Rotator' (0x0000025C06C47710) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>",
+      "transform_error": "'SkyLightComponent' object has no attribute 'get_relative_rotation'",
+      "non_default": {
+        "cast_shadows": {
+          "value": "False",
+          "default": "True"
+        },
+        "light_color": {
+          "value": "<Struct 'Color' (0x0000025C3C4D02B8) {b: 255, g: 255, r: 255, a: 255}>",
+          "default": "<Struct 'Color' (0x0000025BD3B257B8) {b: 255, g: 255, r: 255, a: 255}>"
+        },
+        "lower_hemisphere_color": {
+          "value": "<Struct 'LinearColor' (0x0000025C3C4D0318) {r: 0.034535, g: 0.054886, b: 0.088408, a: 1.000000}>",
+          "default": "<Struct 'LinearColor' (0x0000025BD3B25818) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>"
+        },
+        "mobility": {
+          "value": "<ComponentMobility.MOVABLE: 2>",
+          "default": "<ComponentMobility.STATIONARY: 1>"
+        },
+        "modify_frequency": {
+          "value": "<ComponentMobility.MOVABLE: 2>",
+          "default": "<ComponentMobility.STATIONARY: 1>"
+        },
+        "occlusion_tint": {
+          "value": "<Struct 'Color' (0x0000025C3C4D0338) {b: 0, g: 0, r: 0, a: 255}>",
+          "default": "<Struct 'Color' (0x0000025BD3B25838) {b: 0, g: 0, r: 0, a: 255}>"
+        },
+        "real_time_capture": {
+          "value": "True",
+          "default": "False"
+        },
+        "relative_location": {
+          "value": "<Struct 'Vector' (0x0000025C3C4D0180) {x: 0.000000, y: 0.000000, z: -150.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BD3B25680) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+        },
+        "relative_rotation": {
+          "value": "<Struct 'Rotator' (0x0000025C3C4D0198) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>",
+          "default": "<Struct 'Rotator' (0x0000025BD3B25698) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>"
+        },
+        "relative_scale3d": {
+          "value": "<Struct 'Vector' (0x0000025C3C4D01B0) {x: 1.000000, y: 1.000000, z: 1.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BD3B256B0) {x: 1.000000, y: 1.000000, z: 1.000000}>"
+        },
+        "relative_translation": {
+          "value": "<Struct 'Vector' (0x0000025C3C4D0180) {x: 0.000000, y: 0.000000, z: -150.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BD3B25680) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+        }
+      },
+      "all": {
+        "absolute_location": "False",
+        "absolute_rotation": "False",
+        "absolute_scale": "False",
+        "affect_global_illumination": "True",
+        "affect_reflection": "True",
+        "affect_translucent_lighting": "False",
+        "affects_world": "True",
+        "auto_activate": "False",
+        "b_absolute_translation": "False",
+        "brightness": "1.0",
+        "capture_emissive_only": "False",
+        "cast_deep_shadow": "False",
+        "cast_dynamic_shadows": "True",
+        "cast_raytraced_shadow": "<CastRayTracedShadow.USE_PROJECT_SETTING: 1>",
+        "cast_shadows": "False",
+        "cast_static_shadows": "True",
+        "cast_volumetric_shadow": "True",
+        "cloud_ambient_occlusion": "False",
+        "cloud_ambient_occlusion_aperture_scale": "0.05000000074505806",
+        "cloud_ambient_occlusion_extent": "150.0",
+        "cloud_ambient_occlusion_map_resolution_scale": "1.0",
+        "cloud_ambient_occlusion_strength": "1.0",
+        "contrast": "0.0",
+        "cubemap": "None",
+        "cubemap_resolution": "128",
+        "deep_shadow_layer_distribution": "0.5",
+        "detail_mode": "<DetailMode.DM_LOW: 0>",
+        "hidden_in_game": "False",
+        "indirect_lighting_intensity": "1.0",
+        "intensity": "1.0",
+        "is_editor_only": "False",
+        "light_color": "<Struct 'Color' (0x0000025C3C4D02B8) {b: 255, g: 255, r: 255, a: 255}>",
+        "lower_hemisphere_color": "<Struct 'LinearColor' (0x0000025C3C4D0318) {r: 0.034535, g: 0.054886, b: 0.088408, a: 1.000000}>",
+        "lower_hemisphere_is_black": "True",
+        "min_occlusion": "0.0",
+        "mobility": "<ComponentMobility.MOVABLE: 2>",
+        "modify_frequency": "<ComponentMobility.MOVABLE: 2>",
+        "occlusion_combine_mode": "<OcclusionCombineMode.OCM_MINIMUM: 0>",
+        "occlusion_exponent": "1.0",
+        "occlusion_max_distance": "1000.0",
+        "occlusion_tint": "<Struct 'Color' (0x0000025C3C4D0338) {b: 0, g: 0, r: 0, a: 255}>",
+        "real_time_capture": "True",
+        "relative_location": "<Struct 'Vector' (0x0000025C3C4D0180) {x: 0.000000, y: 0.000000, z: -150.000000}>",
+        "relative_rotation": "<Struct 'Rotator' (0x0000025C3C4D0198) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>",
+        "relative_scale3d": "<Struct 'Vector' (0x0000025C3C4D01B0) {x: 1.000000, y: 1.000000, z: 1.000000}>",
+        "relative_translation": "<Struct 'Vector' (0x0000025C3C4D0180) {x: 0.000000, y: 0.000000, z: -150.000000}>",
+        "samples_per_pixel": "4",
+        "sky_distance_threshold": "150000.0",
+        "source_cubemap_angle": "0.0",
+        "source_type": "<SkyLightSourceType.SLS_CAPTURED_SCENE: 0>",
+        "transmission": "False",
+        "visible": "True",
+        "volumetric_scattering_intensity": "1.0"
+      }
+    },
+    "Cubemap Sky Light [SkyLightComponent]": {
+      "world_rotation": "<Struct 'Rotator' (0x0000025C06C470D0) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>",
+      "transform_error": "'SkyLightComponent' object has no attribute 'get_relative_rotation'",
+      "non_default": {
+        "light_color": {
+          "value": "<Struct 'Color' (0x0000025C3C4D07B8) {b: 255, g: 255, r: 255, a: 255}>",
+          "default": "<Struct 'Color' (0x0000025BD3B257B8) {b: 255, g: 255, r: 255, a: 255}>"
+        },
+        "lower_hemisphere_color": {
+          "value": "<Struct 'LinearColor' (0x0000025C3C4D0818) {r: 0.000000, g: 0.000000, b: 0.000000, a: 0.850000}>",
+          "default": "<Struct 'LinearColor' (0x0000025BD3B25818) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>"
+        },
+        "mobility": {
+          "value": "<ComponentMobility.MOVABLE: 2>",
+          "default": "<ComponentMobility.STATIONARY: 1>"
+        },
+        "modify_frequency": {
+          "value": "<ComponentMobility.MOVABLE: 2>",
+          "default": "<ComponentMobility.STATIONARY: 1>"
+        },
+        "occlusion_tint": {
+          "value": "<Struct 'Color' (0x0000025C3C4D0838) {b: 0, g: 0, r: 0, a: 255}>",
+          "default": "<Struct 'Color' (0x0000025BD3B25838) {b: 0, g: 0, r: 0, a: 255}>"
+        },
+        "relative_location": {
+          "value": "<Struct 'Vector' (0x0000025C3C4D0680) {x: 0.000000, y: 0.000000, z: -150.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BD3B25680) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+        },
+        "relative_rotation": {
+          "value": "<Struct 'Rotator' (0x0000025C3C4D0698) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>",
+          "default": "<Struct 'Rotator' (0x0000025BD3B25698) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>"
+        },
+        "relative_scale3d": {
+          "value": "<Struct 'Vector' (0x0000025C3C4D06B0) {x: 1.000000, y: 1.000000, z: 1.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BD3B256B0) {x: 1.000000, y: 1.000000, z: 1.000000}>"
+        },
+        "relative_translation": {
+          "value": "<Struct 'Vector' (0x0000025C3C4D0680) {x: 0.000000, y: 0.000000, z: -150.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BD3B25680) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+        },
+        "source_type": {
+          "value": "<SkyLightSourceType.SLS_SPECIFIED_CUBEMAP: 1>",
+          "default": "<SkyLightSourceType.SLS_CAPTURED_SCENE: 0>"
+        },
+        "visible": {
+          "value": "False",
+          "default": "True"
+        }
+      },
+      "all": {
+        "absolute_location": "False",
+        "absolute_rotation": "False",
+        "absolute_scale": "False",
+        "affect_global_illumination": "True",
+        "affect_reflection": "True",
+        "affect_translucent_lighting": "False",
+        "affects_world": "True",
+        "auto_activate": "False",
+        "b_absolute_translation": "False",
+        "brightness": "1.0",
+        "capture_emissive_only": "False",
+        "cast_deep_shadow": "False",
+        "cast_dynamic_shadows": "True",
+        "cast_raytraced_shadow": "<CastRayTracedShadow.USE_PROJECT_SETTING: 1>",
+        "cast_shadows": "True",
+        "cast_static_shadows": "True",
+        "cast_volumetric_shadow": "True",
+        "cloud_ambient_occlusion": "False",
+        "cloud_ambient_occlusion_aperture_scale": "0.05000000074505806",
+        "cloud_ambient_occlusion_extent": "150.0",
+        "cloud_ambient_occlusion_map_resolution_scale": "1.0",
+        "cloud_ambient_occlusion_strength": "1.0",
+        "contrast": "0.0",
+        "cubemap": "None",
+        "cubemap_resolution": "128",
+        "deep_shadow_layer_distribution": "0.5",
+        "detail_mode": "<DetailMode.DM_LOW: 0>",
+        "hidden_in_game": "False",
+        "indirect_lighting_intensity": "1.0",
+        "intensity": "1.0",
+        "is_editor_only": "False",
+        "light_color": "<Struct 'Color' (0x0000025C3C4D07B8) {b: 255, g: 255, r: 255, a: 255}>",
+        "lower_hemisphere_color": "<Struct 'LinearColor' (0x0000025C3C4D0818) {r: 0.000000, g: 0.000000, b: 0.000000, a: 0.850000}>",
+        "lower_hemisphere_is_black": "True",
+        "min_occlusion": "0.0",
+        "mobility": "<ComponentMobility.MOVABLE: 2>",
+        "modify_frequency": "<ComponentMobility.MOVABLE: 2>",
+        "occlusion_combine_mode": "<OcclusionCombineMode.OCM_MINIMUM: 0>",
+        "occlusion_exponent": "1.0",
+        "occlusion_max_distance": "1000.0",
+        "occlusion_tint": "<Struct 'Color' (0x0000025C3C4D0838) {b: 0, g: 0, r: 0, a: 255}>",
+        "real_time_capture": "False",
+        "relative_location": "<Struct 'Vector' (0x0000025C3C4D0680) {x: 0.000000, y: 0.000000, z: -150.000000}>",
+        "relative_rotation": "<Struct 'Rotator' (0x0000025C3C4D0698) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>",
+        "relative_scale3d": "<Struct 'Vector' (0x0000025C3C4D06B0) {x: 1.000000, y: 1.000000, z: 1.000000}>",
+        "relative_translation": "<Struct 'Vector' (0x0000025C3C4D0680) {x: 0.000000, y: 0.000000, z: -150.000000}>",
+        "samples_per_pixel": "4",
+        "sky_distance_threshold": "150000.0",
+        "source_cubemap_angle": "0.0",
+        "source_type": "<SkyLightSourceType.SLS_SPECIFIED_CUBEMAP: 1>",
+        "transmission": "False",
+        "visible": "False",
+        "volumetric_scattering_intensity": "1.0"
+      }
+    },
+    "VolumetricCloud [VolumetricCloudComponent]": {
+      "world_rotation": "<Struct 'Rotator' (0x0000025C06C46B80) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>",
+      "transform_error": "'VolumetricCloudComponent' object has no attribute 'get_relative_rotation'",
+      "non_default": {
+        "ground_albedo": {
+          "value": "<Struct 'Color' (0x0000025C3C3E222C) {b: 170, g: 170, r: 170, a: 255}>",
+          "default": "<Struct 'Color' (0x0000025BF05FC6AC) {b: 170, g: 170, r: 170, a: 255}>"
+        },
+        "layer_bottom_altitude": {
+          "value": "0.6000000238418579",
+          "default": "5.0"
+        },
+        "layer_height": {
+          "value": "0.699999988079071",
+          "default": "10.0"
+        },
+        "material": {
+          "value": "<Object '/Game/Levels/LV_Park_01.LV_Park_01:PersistentLevel.Ultra_Dynamic_Sky_C_1.MID_Volumetric_Clouds_default_0' (0x0000025C3C3F0800) Class 'MaterialInstanceDynamic'>",
+          "default": "<Object '/Engine/EngineSky/VolumetricClouds/m_SimpleVolumetricCloud_Inst.m_SimpleVolumetricCloud_Inst' (0x0000025C2F156800) Class 'MaterialInstanceConstant'>"
+        },
+        "reflection_view_sample_count_scale_value": {
+          "value": "2.0",
+          "default": "1.0"
+        },
+        "relative_location": {
+          "value": "<Struct 'Vector' (0x0000025C3C3E2100) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BF05FC580) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+        },
+        "relative_rotation": {
+          "value": "<Struct 'Rotator' (0x0000025C3C3E2118) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>",
+          "default": "<Struct 'Rotator' (0x0000025BF05FC598) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>"
+        },
+        "relative_scale3d": {
+          "value": "<Struct 'Vector' (0x0000025C3C3E2130) {x: 1.000000, y: 1.000000, z: 1.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BF05FC5B0) {x: 1.000000, y: 1.000000, z: 1.000000}>"
+        },
+        "relative_translation": {
+          "value": "<Struct 'Vector' (0x0000025C3C3E2100) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+          "default": "<Struct 'Vector' (0x0000025BF05FC580) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+        },
+        "shadow_reflection_view_sample_count_scale_value": {
+          "value": "0.30000001192092896",
+          "default": "1.0"
+        },
+        "shadow_tracing_distance": {
+          "value": "0.15585669875144958",
+          "default": "15.0"
+        },
+        "shadow_view_sample_count_scale": {
+          "value": "0.4000000059604645",
+          "default": "1.0"
+        },
+        "sky_light_cloud_bottom_occlusion": {
+          "value": "0.0",
+          "default": "0.5"
+        },
+        "tracing_max_distance": {
+          "value": "20.0",
+          "default": "50.0"
+        },
+        "tracing_start_max_distance": {
+          "value": "100.0",
+          "default": "350.0"
+        },
+        "view_sample_count_scale": {
+          "value": "1.8700000047683716",
+          "default": "1.0"
+        }
+      },
+      "all": {
+        "absolute_location": "False",
+        "absolute_rotation": "False",
+        "absolute_scale": "False",
+        "aerial_pespective_mie_scattering_fade_distance": "0.0",
+        "aerial_pespective_mie_scattering_start_distance": "0.0",
+        "aerial_pespective_rayleigh_scattering_fade_distance": "0.0",
+        "aerial_pespective_rayleigh_scattering_start_distance": "0.0",
+        "auto_activate": "False",
+        "b_absolute_translation": "False",
+        "detail_mode": "<DetailMode.DM_LOW: 0>",
+        "ground_albedo": "<Struct 'Color' (0x0000025C3C3E222C) {b: 170, g: 170, r: 170, a: 255}>",
+        "hidden_in_game": "False",
+        "holdout": "False",
+        "is_editor_only": "False",
+        "layer_bottom_altitude": "0.6000000238418579",
+        "layer_height": "0.699999988079071",
+        "material": "<Object '/Game/Levels/LV_Park_01.LV_Park_01:PersistentLevel.Ultra_Dynamic_Sky_C_1.MID_Volumetric_Clouds_default_0' (0x0000025C3C3F0800) Class 'MaterialInstanceDynamic'>",
+        "mobility": "<ComponentMobility.MOVABLE: 2>",
+        "modify_frequency": "<ComponentMobility.MOVABLE: 2>",
+        "planet_radius": "6360.0",
+        "reflection_view_sample_count_scale_value": "2.0",
+        "relative_location": "<Struct 'Vector' (0x0000025C3C3E2100) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+        "relative_rotation": "<Struct 'Rotator' (0x0000025C3C3E2118) {pitch: 0.000000, yaw: 0.000000, roll: 0.000000}>",
+        "relative_scale3d": "<Struct 'Vector' (0x0000025C3C3E2130) {x: 1.000000, y: 1.000000, z: 1.000000}>",
+        "relative_translation": "<Struct 'Vector' (0x0000025C3C3E2100) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+        "render_in_main_pass": "True",
+        "shadow_reflection_view_sample_count_scale_value": "0.30000001192092896",
+        "shadow_tracing_distance": "0.15585669875144958",
+        "shadow_view_sample_count_scale": "0.4000000059604645",
+        "sky_light_cloud_bottom_occlusion": "0.0",
+        "stop_tracing_transmittance_threshold": "0.004999999888241291",
+        "tracing_max_distance": "20.0",
+        "tracing_max_distance_mode": "<VolumetricCloudTracingMaxDistanceMode.DISTANCE_FROM_CLOUD_LAYER_ENTRY_POINT: 0>",
+        "tracing_start_distance_from_camera": "0.0",
+        "tracing_start_max_distance": "100.0",
+        "use_per_sample_atmospheric_light_transmittance": "False",
+        "view_sample_count_scale": "1.8700000047683716",
+        "visible": "True",
+        "visible_in_real_time_sky_captures": "True"
+      }
+    }
+  }
+}

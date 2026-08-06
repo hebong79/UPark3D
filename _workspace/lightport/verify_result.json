@@ -1,0 +1,89 @@
+{
+  "map": "/Game/Maps/PresetMaker1",
+  "verify": {
+    "DirectionalLight": {
+      "use_temperature": "True",
+      "temperature": "6500.0",
+      "light_source_angle": "1.2000000476837158",
+      "light_source_soft_angle": "1.2000000476837158",
+      "indirect_lighting_intensity": "2.0",
+      "specular_scale": "0.9990000128746033",
+      "dynamic_shadow_distance_movable_light": "20000.0",
+      "movable_whole_scene_dynamic_shadow_radius": "20000.0",
+      "dynamic_shadow_cascades": "4",
+      "cascade_distribution_exponent": "3.0",
+      "volumetric_scattering_intensity": "1.0",
+      "atmosphere_sun_light": "True",
+      "atmosphere_sun_light_index": "0",
+      "forward_shading_priority": "2"
+    },
+    "SkyLight": {
+      "real_time_capture": "True",
+      "source_type": "<SkyLightSourceType.SLS_CAPTURED_SCENE: 0>",
+      "cast_shadows": "False",
+      "lower_hemisphere_is_black": "True",
+      "lower_hemisphere_color": "<Struct 'LinearColor' (0x000002685DFAFD18) {r: 0.034535, g: 0.054886, b: 0.088408, a: 1.000000}>",
+      "cubemap_resolution": "128",
+      "sky_distance_threshold": "150000.0",
+      "occlusion_max_distance": "1000.0"
+    },
+    "SkyAtmosphere": {
+      "rayleigh_scattering_scale": "0.03999999910593033",
+      "rayleigh_scattering": "<Struct 'LinearColor' (0x00000267D69DAAAC) {r: 0.168627, g: 0.407843, b: 1.000000, a: 30.211479}>",
+      "mie_scattering_scale": "0.013996000401675701",
+      "mie_scattering": "<Struct 'LinearColor' (0x00000267D69DAAC4) {r: 0.802083, g: 0.879982, b: 1.000000, a: 1.000000}>",
+      "mie_absorption": "<Struct 'LinearColor' (0x00000267D69DAAD8) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>",
+      "mie_anisotropy": "0.75",
+      "other_absorption_scale": "0.0020000000949949026",
+      "other_absorption": "<Struct 'LinearColor' (0x00000267D69DAAF4) {r: 0.897238, g: 1.000000, b: 0.095307, a: 531.632080}>",
+      "other_tent_distribution": "<Struct 'TentDistribution' (0x00000267D69DAB04) {tip_altitude: 25.000000, tip_value: 1.000000, width: 15.000000}>",
+      "ground_albedo": "<Struct 'Color' (0x00000267D69DAA98) {b: 170, g: 170, r: 170, a: 255}>",
+      "height_fog_contribution": "2.299999952316284",
+      "aerial_pespective_view_distance_scale": "0.0"
+    },
+    "ExponentialHeightFog": {
+      "<actor.location.z>": "-150.0",
+      "fog_density": "0.005510000046342611",
+      "fog_height_falloff": "0.05999999865889549",
+      "fog_max_opacity": "1.0",
+      "start_distance": "10295.083984375",
+      "fog_cutoff_distance": "0.0",
+      "fog_inscattering_luminance": "<Struct 'LinearColor' (0x00000267D69DBAB4) {r: 0.000000, g: 0.000000, b: 0.000000, a: 0.000000}>",
+      "directional_inscattering_exponent": "5.0",
+      "directional_inscattering_luminance": "<Struct 'LinearColor' (0x00000267D69DBB1C) {r: 0.788098, g: 0.642447, b: 0.555445, a: 5.712000}>",
+      "directional_inscattering_start_distance": "10000.0",
+      "inscattering_texture_tint": "<Struct 'LinearColor' (0x00000267D69DBAEC) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>",
+      "second_fog_data": "<Struct 'ExponentialHeightFogData' (0x00000267D69DBA98) {fog_density: 0.000000, fog_height_falloff: 0.100000, fog_height_offset: 0.000000}>",
+      "volumetric_fog_scattering_distribution": "0.20000000298023224",
+      "volumetric_fog_albedo": "<Struct 'Color' (0x00000267D69DBB44) {b: 255, g: 255, r: 255, a: 255}>",
+      "volumetric_fog_emissive": "<Struct 'LinearColor' (0x00000267D69DBB48) {r: 0.000000, g: 0.000000, b: 0.000000, a: 0.000000}>",
+      "volumetric_fog_extinction_scale": "2.0",
+      "volumetric_fog_distance": "8000.0"
+    },
+    "VolumetricCloud": {
+      "layer_bottom_altitude": "0.6000000238418579",
+      "layer_height": "0.699999988079071",
+      "tracing_start_max_distance": "100.0",
+      "tracing_max_distance": "20.0",
+      "ground_albedo": "<Struct 'Color' (0x000002684896452C) {b: 170, g: 170, r: 170, a: 255}>",
+      "view_sample_count_scale": "1.8700000047683716",
+      "reflection_view_sample_count_scale_value": "2.0",
+      "shadow_view_sample_count_scale": "0.4000000059604645",
+      "shadow_reflection_view_sample_count_scale_value": "0.30000001192092896",
+      "shadow_tracing_distance": "0.15585669875144958",
+      "sky_light_cloud_bottom_occlusion": "0.0"
+    },
+    "SkySphere": {
+      "hidden": "True",
+      "component_visible": "False"
+    }
+  },
+  "a_layer_on_level": {
+    "sun_pitch": -55.00000000000004,
+    "sun_yaw": 43.73194417391007,
+    "sun_roll": 112.36067199707443,
+    "sun_intensity": 20.0,
+    "sun_light_color": "<Struct 'Color' (0x00000268488C2CB8) {b: 255, g: 255, r: 255, a: 255}>",
+    "sky_intensity": 1.5
+  }
+}

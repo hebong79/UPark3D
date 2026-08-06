@@ -42,6 +42,10 @@ allow와 ask가 겹치면 ask가 이긴다.
 | RPC | `mcp__park3d-rpc__*`, `curl`/`Invoke-RestMethod` → `localhost`·`127.0.0.1` (포트 무관) |
 | MCP 브리지 | `uv run ...server.py`, `uv pip list`, `python -c` |
 | 상태 조회 | `tasklist`, `netstat`(Bash·PowerShell 양쪽), `Get-NetTCPConnection`, `Get-Process`, `Test-Path`, `Get-Date` |
+| 헤드리스 에디터 | `UnrealEditor-Cmd.exe ... -run=pythonscript -script=... -NullRHI` (액터 조회·수정 스크립트) |
+| 측정·계측 | `python` 스크립트 전반(측정·캡처·RPC 클라이언트), 창 캡처 스크립트 |
+| Bash 경유 PowerShell 조회 | `powershell -NoProfile -Command "Get-*` — **조회형만.** `Stop-Process` 등 변경형은 Bash 경유라도 §1에 따라 ask |
+| 파일 조회·생성 | `mkdir -p`, `printf`, `find`, `du -sh` (삭제·이동은 §1에서 ask) |
 | 시스템 **조회** | `Get-Service`, `Get-NetFirewallRule`, `Get-WindowsCapability` (변경형은 §1에서 ask) |
 | 읽기 전용 git | `git status/diff/log/show/branch/rev-parse/check-ignore` |
 | 로그 분석 | `grep`, `awk`, `head`, `cat`, `Select-String`(프로젝트 경로 한정) |

@@ -1,0 +1,5981 @@
+{
+  "/Game/Levels/LV_Park_01": {
+    "total_actors": 165,
+    "lighting_actors": [
+      {
+        "actor": "Ultra_Dynamic_Sky",
+        "class": "Ultra_Dynamic_Sky_C",
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "Moon",
+            "class": "DirectionalLightComponent"
+          },
+          {
+            "comp": "Sun",
+            "class": "DirectionalLightComponent"
+          },
+          {
+            "comp": "HeightFog",
+            "class": "ExponentialHeightFogComponent"
+          },
+          {
+            "comp": "PostProcess",
+            "class": "PostProcessComponent"
+          },
+          {
+            "comp": "SkyAtmosphere",
+            "class": "SkyAtmosphereComponent"
+          },
+          {
+            "comp": "Captured Scene Sky Light",
+            "class": "SkyLightComponent"
+          },
+          {
+            "comp": "Cubemap Sky Light",
+            "class": "SkyLightComponent"
+          },
+          {
+            "comp": "VolumetricCloud",
+            "class": "VolumetricCloudComponent"
+          }
+        ],
+        "uds_non_default": {
+          "actor_guid": {
+            "instance": "<Struct 'Guid' (0x0000019663773A50) {}>",
+            "default": "<Struct 'Guid' (0x0000019663777250) {}>"
+          },
+          "actor_instance_guid": {
+            "instance": "<Struct 'Guid' (0x0000019663773A60) {}>",
+            "default": "<Struct 'Guid' (0x0000019663777260) {}>"
+          },
+          "content_bundle_guid": {
+            "instance": "<Struct 'Guid' (0x0000019663773A70) {}>",
+            "default": "<Struct 'Guid' (0x0000019663777270) {}>"
+          },
+          "pivot_offset": {
+            "instance": "<Struct 'Vector' (0x00000196637739F8) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+            "default": "<Struct 'Vector' (0x00000196637771F8) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+          },
+          "root_component": {
+            "instance": "<Object '/Game/Levels/LV_Park_01.LV_Park_01:PersistentLevel.Ultra_Dynamic_Sky_C_1.SkyRoot' (0x0000019663FC1200) Class 'SceneComponent'>",
+            "default": "None"
+          }
+        },
+        "uds_all": {
+          "actor_guid": "<Struct 'Guid' (0x0000019663773A50) {}>",
+          "actor_instance_guid": "<Struct 'Guid' (0x0000019663773A60) {}>",
+          "always_relevant": "True",
+          "auto_destroy_when_finished": "False",
+          "can_be_damaged": "False",
+          "content_bundle_guid": "<Struct 'Guid' (0x0000019663773A70) {}>",
+          "custom_time_dilation": "1.0",
+          "enable_auto_lod_generation": "False",
+          "find_camera_component_when_view_target": "True",
+          "generate_overlap_events_during_level_streaming": "False",
+          "hidden": "False",
+          "initial_life_span": "0.0",
+          "instigator": "None",
+          "is_spatially_loaded": "False",
+          "life_span": "0.0",
+          "min_net_update_frequency": "2.0",
+          "net_cull_distance_squared": "225000000.0",
+          "net_dormancy": "<NetDormancy.DORM_AWAKE: 1>",
+          "net_priority": "1.0",
+          "net_update_frequency": "60.0",
+          "net_use_owner_relevancy": "False",
+          "only_relevant_to_owner": "False",
+          "pivot_offset": "<Struct 'Vector' (0x00000196637739F8) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+          "replicate_using_registered_sub_object_list": "False",
+          "replicates": "True",
+          "root_component": "<Object '/Game/Levels/LV_Park_01.LV_Park_01:PersistentLevel.Ultra_Dynamic_Sky_C_1.SkyRoot' (0x0000019663FC1200) Class 'SceneComponent'>",
+          "runtime_grid": "None",
+          "spawn_collision_handling_method": "<SpawnActorCollisionHandlingMethod.ALWAYS_SPAWN: 1>",
+          "sprite_scale": "1.0",
+          "tags": "[]"
+        }
+      }
+    ],
+    "counts": {
+      "Ultra_Dynamic_Sky_C": 1
+    }
+  },
+  "/Game/Levels/LV_Park_02": {
+    "total_actors": 334,
+    "lighting_actors": [
+      {
+        "actor": "Ultra_Dynamic_Sky",
+        "class": "Ultra_Dynamic_Sky_C",
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "Moon",
+            "class": "DirectionalLightComponent"
+          },
+          {
+            "comp": "Sun",
+            "class": "DirectionalLightComponent"
+          },
+          {
+            "comp": "HeightFog",
+            "class": "ExponentialHeightFogComponent"
+          },
+          {
+            "comp": "PostProcess",
+            "class": "PostProcessComponent"
+          },
+          {
+            "comp": "SkyAtmosphere",
+            "class": "SkyAtmosphereComponent"
+          },
+          {
+            "comp": "Captured Scene Sky Light",
+            "class": "SkyLightComponent"
+          },
+          {
+            "comp": "Cubemap Sky Light",
+            "class": "SkyLightComponent"
+          },
+          {
+            "comp": "VolumetricCloud",
+            "class": "VolumetricCloudComponent"
+          }
+        ],
+        "uds_non_default": {
+          "actor_guid": {
+            "instance": "<Struct 'Guid' (0x00000196557D3A50) {}>",
+            "default": "<Struct 'Guid' (0x0000019663777250) {}>"
+          },
+          "actor_instance_guid": {
+            "instance": "<Struct 'Guid' (0x00000196557D3A60) {}>",
+            "default": "<Struct 'Guid' (0x0000019663777260) {}>"
+          },
+          "content_bundle_guid": {
+            "instance": "<Struct 'Guid' (0x00000196557D3A70) {}>",
+            "default": "<Struct 'Guid' (0x0000019663777270) {}>"
+          },
+          "pivot_offset": {
+            "instance": "<Struct 'Vector' (0x00000196557D39F8) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+            "default": "<Struct 'Vector' (0x00000196637771F8) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+          },
+          "root_component": {
+            "instance": "<Object '/Game/Levels/LV_Park_02.LV_Park_02:PersistentLevel.Ultra_Dynamic_Sky_C_1.SkyRoot' (0x000001965CCAD500) Class 'SceneComponent'>",
+            "default": "None"
+          }
+        },
+        "uds_all": {
+          "actor_guid": "<Struct 'Guid' (0x00000196557D3A50) {}>",
+          "actor_instance_guid": "<Struct 'Guid' (0x00000196557D3A60) {}>",
+          "always_relevant": "True",
+          "auto_destroy_when_finished": "False",
+          "can_be_damaged": "False",
+          "content_bundle_guid": "<Struct 'Guid' (0x00000196557D3A70) {}>",
+          "custom_time_dilation": "1.0",
+          "enable_auto_lod_generation": "False",
+          "find_camera_component_when_view_target": "True",
+          "generate_overlap_events_during_level_streaming": "False",
+          "hidden": "False",
+          "initial_life_span": "0.0",
+          "instigator": "None",
+          "is_spatially_loaded": "False",
+          "life_span": "0.0",
+          "min_net_update_frequency": "2.0",
+          "net_cull_distance_squared": "225000000.0",
+          "net_dormancy": "<NetDormancy.DORM_AWAKE: 1>",
+          "net_priority": "1.0",
+          "net_update_frequency": "60.0",
+          "net_use_owner_relevancy": "False",
+          "only_relevant_to_owner": "False",
+          "pivot_offset": "<Struct 'Vector' (0x00000196557D39F8) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+          "replicate_using_registered_sub_object_list": "False",
+          "replicates": "True",
+          "root_component": "<Object '/Game/Levels/LV_Park_02.LV_Park_02:PersistentLevel.Ultra_Dynamic_Sky_C_1.SkyRoot' (0x000001965CCAD500) Class 'SceneComponent'>",
+          "runtime_grid": "None",
+          "spawn_collision_handling_method": "<SpawnActorCollisionHandlingMethod.ALWAYS_SPAWN: 1>",
+          "sprite_scale": "1.0",
+          "tags": "[]"
+        }
+      }
+    ],
+    "counts": {
+      "Ultra_Dynamic_Sky_C": 1
+    }
+  },
+  "/Game/Levels/LV_Park_03": {
+    "total_actors": 156,
+    "lighting_actors": [
+      {
+        "actor": "Ultra_Dynamic_Sky",
+        "class": "Ultra_Dynamic_Sky_C",
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          41.00000000000001,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "Moon",
+            "class": "DirectionalLightComponent"
+          },
+          {
+            "comp": "Sun",
+            "class": "DirectionalLightComponent"
+          },
+          {
+            "comp": "HeightFog",
+            "class": "ExponentialHeightFogComponent"
+          },
+          {
+            "comp": "PostProcess",
+            "class": "PostProcessComponent"
+          },
+          {
+            "comp": "SkyAtmosphere",
+            "class": "SkyAtmosphereComponent"
+          },
+          {
+            "comp": "Captured Scene Sky Light",
+            "class": "SkyLightComponent"
+          },
+          {
+            "comp": "Cubemap Sky Light",
+            "class": "SkyLightComponent"
+          },
+          {
+            "comp": "VolumetricCloud",
+            "class": "VolumetricCloudComponent"
+          }
+        ],
+        "uds_non_default": {
+          "actor_guid": {
+            "instance": "<Struct 'Guid' (0x000001965B8D7250) {}>",
+            "default": "<Struct 'Guid' (0x0000019663777250) {}>"
+          },
+          "actor_instance_guid": {
+            "instance": "<Struct 'Guid' (0x000001965B8D7260) {}>",
+            "default": "<Struct 'Guid' (0x0000019663777260) {}>"
+          },
+          "content_bundle_guid": {
+            "instance": "<Struct 'Guid' (0x000001965B8D7270) {}>",
+            "default": "<Struct 'Guid' (0x0000019663777270) {}>"
+          },
+          "pivot_offset": {
+            "instance": "<Struct 'Vector' (0x000001965B8D71F8) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+            "default": "<Struct 'Vector' (0x00000196637771F8) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+          },
+          "root_component": {
+            "instance": "<Object '/Game/Levels/LV_Park_03.LV_Park_03:PersistentLevel.Ultra_Dynamic_Sky_C_1.SkyRoot' (0x000001965BB6EA00) Class 'SceneComponent'>",
+            "default": "None"
+          }
+        },
+        "uds_all": {
+          "actor_guid": "<Struct 'Guid' (0x000001965B8D7250) {}>",
+          "actor_instance_guid": "<Struct 'Guid' (0x000001965B8D7260) {}>",
+          "always_relevant": "True",
+          "auto_destroy_when_finished": "False",
+          "can_be_damaged": "False",
+          "content_bundle_guid": "<Struct 'Guid' (0x000001965B8D7270) {}>",
+          "custom_time_dilation": "1.0",
+          "enable_auto_lod_generation": "False",
+          "find_camera_component_when_view_target": "True",
+          "generate_overlap_events_during_level_streaming": "False",
+          "hidden": "False",
+          "initial_life_span": "0.0",
+          "instigator": "None",
+          "is_spatially_loaded": "False",
+          "life_span": "0.0",
+          "min_net_update_frequency": "2.0",
+          "net_cull_distance_squared": "225000000.0",
+          "net_dormancy": "<NetDormancy.DORM_AWAKE: 1>",
+          "net_priority": "1.0",
+          "net_update_frequency": "60.0",
+          "net_use_owner_relevancy": "False",
+          "only_relevant_to_owner": "False",
+          "pivot_offset": "<Struct 'Vector' (0x000001965B8D71F8) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+          "replicate_using_registered_sub_object_list": "False",
+          "replicates": "True",
+          "root_component": "<Object '/Game/Levels/LV_Park_03.LV_Park_03:PersistentLevel.Ultra_Dynamic_Sky_C_1.SkyRoot' (0x000001965BB6EA00) Class 'SceneComponent'>",
+          "runtime_grid": "None",
+          "spawn_collision_handling_method": "<SpawnActorCollisionHandlingMethod.ALWAYS_SPAWN: 1>",
+          "sprite_scale": "1.0",
+          "tags": "[]"
+        }
+      }
+    ],
+    "counts": {
+      "Ultra_Dynamic_Sky_C": 1
+    }
+  },
+  "/Game/Levels/LV_Park_04": {
+    "total_actors": 606,
+    "lighting_actors": [
+      {
+        "actor": "RoadTFLight_5type_Control",
+        "class": "BP_RoadTFLight_5type_Control_C",
+        "location": [
+          912.6103714089662,
+          1110.4686992701872,
+          297.26194953245187
+        ],
+        "rotation": [
+          0.0,
+          -90.00000000000001,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "GreenLightTime",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control8",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          954.6103714089663,
+          708.4686992701871,
+          549.2619495324519
+        ],
+        "rotation": [
+          0.0,
+          180.0,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control7",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          954.6103714089663,
+          338.4686992701876,
+          549.2619495324519
+        ],
+        "rotation": [
+          0.0,
+          180.0,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control9",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          -575.1285556148963,
+          1550.7445365414774,
+          549.2619146075874
+        ],
+        "rotation": [
+          0.0,
+          -90.00000069717272,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_5type_Control2",
+        "class": "BP_RoadTFLight_5type_Control_C",
+        "location": [
+          -977.1285566370058,
+          1508.7445463245206,
+          297.2619146075876
+        ],
+        "rotation": [
+          0.0,
+          -6.971729362703627e-07,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "GreenLightTime",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control10",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          -205.1285556148967,
+          1550.7445275371838,
+          549.2619146075874
+        ],
+        "rotation": [
+          0.0,
+          -90.00000069717272,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control11",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          462.36729017526216,
+          -1251.7485934456083,
+          549.2619210584689
+        ],
+        "rotation": [
+          0.0,
+          89.99999760565407,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_5type_Control3",
+        "class": "BP_RoadTFLight_5type_Control_C",
+        "location": [
+          864.3672932194792,
+          -1209.748622011695,
+          297.26192105846883
+        ],
+        "rotation": [
+          0.0,
+          179.99999760565396,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "GreenLightTime",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control12",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          92.3672901752634,
+          -1251.7485664370213,
+          549.2619210584689
+        ],
+        "rotation": [
+          0.0,
+          89.99999760565407,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control13",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          -1330.985677242528,
+          -398.3611775383208,
+          549.2619274495534
+        ],
+        "rotation": [
+          0.0,
+          -1.3028271155235414e-06,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_5type_Control4",
+        "class": "BP_RoadTFLight_5type_Control_C",
+        "location": [
+          -1288.9856954594854,
+          -800.3611795162128,
+          297.26192744955335
+        ],
+        "rotation": [
+          0.0,
+          89.999998697173,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "GreenLightTime",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control14",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          -1330.985659246822,
+          -28.36117753832059,
+          549.2619274495534
+        ],
+        "rotation": [
+          0.0,
+          -1.3028271155235414e-06,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control15",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          455.92226488599397,
+          -13218.591786679188,
+          549.261957339605
+        ],
+        "rotation": [
+          0.0,
+          90.00000069717281,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_5type_Control5",
+        "class": "BP_RoadTFLight_5type_Control_C",
+        "location": [
+          857.9222638638845,
+          -13176.591776896146,
+          297.2619573396049
+        ],
+        "rotation": [
+          0.0,
+          -179.999999302827,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "GreenLightTime",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control16",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          85.92226488599513,
+          -13218.591795683484,
+          549.261957339605
+        ],
+        "rotation": [
+          0.0,
+          90.00000069717281,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control17",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          1984.2761591279916,
+          -14093.716658967633,
+          549.2619608834549
+        ],
+        "rotation": [
+          0.0,
+          -179.99999969717305,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_5type_Control6",
+        "class": "BP_RoadTFLight_5type_Control_C",
+        "location": [
+          1942.2761599110331,
+          -13691.716658945523,
+          297.2619608834552
+        ],
+        "rotation": [
+          0.0,
+          -89.99999969717288,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "GreenLightTime",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control18",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          1984.2761591236977,
+          -14463.71665896763,
+          549.2619608834549
+        ],
+        "rotation": [
+          0.0,
+          -179.99999969717305,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control19",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          -1590.9450071618924,
+          -15410.392000592246,
+          549.2619568346947
+        ],
+        "rotation": [
+          0.0,
+          -1.3943457020104686e-06,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_5type_Control7",
+        "class": "BP_RoadTFLight_5type_Control_C",
+        "location": [
+          -1548.9450267279813,
+          -15812.392002636463,
+          297.26195683469433
+        ],
+        "rotation": [
+          0.0,
+          89.99999860565407,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "GreenLightTime",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control20",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          -1590.9449891533047,
+          -15040.392000592246,
+          549.2619568346947
+        ],
+        "rotation": [
+          0.0,
+          -1.3943457020104686e-06,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control21",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          -507.0454409044745,
+          10197.31197414162,
+          549.261920245753
+        ],
+        "rotation": [
+          0.0,
+          -90.00000100000001,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_5type_Control8",
+        "class": "BP_RoadTFLight_5type_Control_C",
+        "location": [
+          -909.0454419044743,
+          10155.31198314162,
+          297.26192024575295
+        ],
+        "rotation": [
+          0.0,
+          -9.999999974752425e-07,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "GreenLightTime",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control22",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          -137.04544090447467,
+          10197.31196514162,
+          549.261920245753
+        ],
+        "rotation": [
+          0.0,
+          -90.00000100000001,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control25",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          491.95977762978674,
+          6642.008930577703,
+          549.2619200000004
+        ],
+        "rotation": [
+          0.0,
+          89.99999730282696,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_5type_Control10",
+        "class": "BP_RoadTFLight_5type_Control_C",
+        "location": [
+          893.959780651894,
+          6684.008901794661,
+          297.2619200000003
+        ],
+        "rotation": [
+          0.0,
+          179.999997302827,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "GreenLightTime",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control26",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          121.95977762978818,
+          6642.008957581997,
+          549.2619200000004
+        ],
+        "rotation": [
+          0.0,
+          89.99999730282696,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control27",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          1559.7096697338811,
+          16972.066265053185,
+          549.2619336092271
+        ],
+        "rotation": [
+          0.0,
+          179.9999996971732,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_5type_Control11",
+        "class": "BP_RoadTFLight_5type_Control_C",
+        "location": [
+          1517.7096689508367,
+          17374.066265031073,
+          297.26193360922684
+        ],
+        "rotation": [
+          0.0,
+          -90.00000030282706,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "GreenLightTime",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control28",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          1559.7096697381744,
+          16602.06626505318,
+          549.2619336092271
+        ],
+        "rotation": [
+          0.0,
+          179.9999996971732,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control23",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          -550.6058866119513,
+          14938.81741873586,
+          549.261920000004
+        ],
+        "rotation": [
+          0.0,
+          -90.00000100000001,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_5type_Control9",
+        "class": "BP_RoadTFLight_5type_Control_C",
+        "location": [
+          -952.6058876119513,
+          14896.81742773586,
+          297.26192000000395
+        ],
+        "rotation": [
+          0.0,
+          -9.999999974752425e-07,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "GreenLightTime",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control24",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          -180.60588661195126,
+          14938.81740973586,
+          549.261920000004
+        ],
+        "rotation": [
+          0.0,
+          -90.00000100000001,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "Ultra_Dynamic_Sky",
+        "class": "Ultra_Dynamic_Sky_C",
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "Moon",
+            "class": "DirectionalLightComponent"
+          },
+          {
+            "comp": "Sun",
+            "class": "DirectionalLightComponent"
+          },
+          {
+            "comp": "HeightFog",
+            "class": "ExponentialHeightFogComponent"
+          },
+          {
+            "comp": "PostProcess",
+            "class": "PostProcessComponent"
+          },
+          {
+            "comp": "SkyAtmosphere",
+            "class": "SkyAtmosphereComponent"
+          },
+          {
+            "comp": "Captured Scene Sky Light",
+            "class": "SkyLightComponent"
+          },
+          {
+            "comp": "Cubemap Sky Light",
+            "class": "SkyLightComponent"
+          },
+          {
+            "comp": "VolumetricCloud",
+            "class": "VolumetricCloudComponent"
+          }
+        ],
+        "uds_non_default": {
+          "actor_guid": {
+            "instance": "<Struct 'Guid' (0x000001967C757250) {}>",
+            "default": "<Struct 'Guid' (0x0000019663777250) {}>"
+          },
+          "actor_instance_guid": {
+            "instance": "<Struct 'Guid' (0x000001967C757260) {}>",
+            "default": "<Struct 'Guid' (0x0000019663777260) {}>"
+          },
+          "content_bundle_guid": {
+            "instance": "<Struct 'Guid' (0x000001967C757270) {}>",
+            "default": "<Struct 'Guid' (0x0000019663777270) {}>"
+          },
+          "pivot_offset": {
+            "instance": "<Struct 'Vector' (0x000001967C7571F8) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+            "default": "<Struct 'Vector' (0x00000196637771F8) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+          },
+          "root_component": {
+            "instance": "<Object '/Game/Levels/LV_Park_04.LV_Park_04:PersistentLevel.Ultra_Dynamic_Sky_C_1.SkyRoot' (0x00000198048AC000) Class 'SceneComponent'>",
+            "default": "None"
+          }
+        },
+        "uds_all": {
+          "actor_guid": "<Struct 'Guid' (0x000001967C757250) {}>",
+          "actor_instance_guid": "<Struct 'Guid' (0x000001967C757260) {}>",
+          "always_relevant": "True",
+          "auto_destroy_when_finished": "False",
+          "can_be_damaged": "False",
+          "content_bundle_guid": "<Struct 'Guid' (0x000001967C757270) {}>",
+          "custom_time_dilation": "1.0",
+          "enable_auto_lod_generation": "False",
+          "find_camera_component_when_view_target": "True",
+          "generate_overlap_events_during_level_streaming": "False",
+          "hidden": "False",
+          "initial_life_span": "0.0",
+          "instigator": "None",
+          "is_spatially_loaded": "False",
+          "life_span": "0.0",
+          "min_net_update_frequency": "2.0",
+          "net_cull_distance_squared": "225000000.0",
+          "net_dormancy": "<NetDormancy.DORM_AWAKE: 1>",
+          "net_priority": "1.0",
+          "net_update_frequency": "60.0",
+          "net_use_owner_relevancy": "False",
+          "only_relevant_to_owner": "False",
+          "pivot_offset": "<Struct 'Vector' (0x000001967C7571F8) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+          "replicate_using_registered_sub_object_list": "False",
+          "replicates": "True",
+          "root_component": "<Object '/Game/Levels/LV_Park_04.LV_Park_04:PersistentLevel.Ultra_Dynamic_Sky_C_1.SkyRoot' (0x00000198048AC000) Class 'SceneComponent'>",
+          "runtime_grid": "None",
+          "spawn_collision_handling_method": "<SpawnActorCollisionHandlingMethod.ALWAYS_SPAWN: 1>",
+          "sprite_scale": "1.0",
+          "tags": "[]"
+        }
+      },
+      {
+        "actor": "street_light_Bottom_lamp_20",
+        "class": "street_light_Bottom_lamp_2_C",
+        "location": [
+          -729.4700544958213,
+          -9302.73301682577,
+          15.953442253207285
+        ],
+        "rotation": [
+          0.0,
+          89.99999930282722,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_10",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          -729.4700544958213,
+          -9302.73301682577,
+          15.953442253207285
+        ],
+        "rotation": [
+          -0.0,
+          -89.9999993028268,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_11",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          -794.2413392786259,
+          -3995.0259828470857,
+          15.95344763439094
+        ],
+        "rotation": [
+          -0.0,
+          -69.99999945775414,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_12",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          -794.2413392786259,
+          -3995.0259828470857,
+          15.95344763439094
+        ],
+        "rotation": [
+          -0.0,
+          -129.99999883804486,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_21",
+        "class": "street_light_Bottom_lamp_2_C",
+        "location": [
+          -794.2413392786259,
+          -3995.0259828470857,
+          155.95344763439095
+        ],
+        "rotation": [
+          -0.0,
+          -140.0000017041998,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_10",
+        "class": "street_light_Bottom_lamp_1_C",
+        "location": [
+          -729.4700619420184,
+          -7556.528816989252,
+          15.953442253207285
+        ],
+        "rotation": [
+          0.0,
+          1.2086107789561366e-13,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_11",
+        "class": "street_light_Bottom_lamp_1_C",
+        "location": [
+          -729.4700619420184,
+          -7556.528816989252,
+          15.953442253207285
+        ],
+        "rotation": [
+          0.0,
+          119.99999907043612,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_13",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          -729.4700619420184,
+          -7556.528816989252,
+          15.953442253207285
+        ],
+        "rotation": [
+          -0.0,
+          -89.9999993028268,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_1540",
+        "class": "street_light_Bottom_lamp_1_C",
+        "location": [
+          -914.1331188050119,
+          -1558.6709154353862,
+          15.953431064735113
+        ],
+        "rotation": [
+          0.0,
+          3.0282690872041076e-07,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_1541",
+        "class": "street_light_Bottom_lamp_1_C",
+        "location": [
+          -914.1331188050119,
+          -1558.6709154353862,
+          15.953431064735113
+        ],
+        "rotation": [
+          0.0,
+          119.99999937326288,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_1857",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          -914.1331188050119,
+          -1558.6709154353862,
+          15.953431064735113
+        ],
+        "rotation": [
+          -0.0,
+          -89.999999,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_1994",
+        "class": "street_light_Bottom_lamp_1_C",
+        "location": [
+          803.1507713898444,
+          -7771.166575332651,
+          15.953430317503333
+        ],
+        "rotation": [
+          0.0,
+          179.99999890848082,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_1995",
+        "class": "street_light_Bottom_lamp_1_C",
+        "location": [
+          803.1507713898444,
+          -7771.166575332651,
+          15.953430317503333
+        ],
+        "rotation": [
+          -0.0,
+          -60.00000202108324,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_11258",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          803.1507713898444,
+          -7771.166575332651,
+          15.953430317503333
+        ],
+        "rotation": [
+          0.0,
+          89.99999960565393,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_11259",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          830.1650488641501,
+          -4632.602258948332,
+          15.953447317503333
+        ],
+        "rotation": [
+          0.0,
+          109.99999945072655,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_11260",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          830.1650488641501,
+          -4632.602258948332,
+          15.953447317503333
+        ],
+        "rotation": [
+          0.0,
+          50.00000007043581,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_2555",
+        "class": "street_light_Bottom_lamp_2_C",
+        "location": [
+          830.1650488641501,
+          -4632.602258948332,
+          155.95344731750333
+        ],
+        "rotation": [
+          0.0,
+          39.99999720428087,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_1996",
+        "class": "street_light_Bottom_lamp_1_C",
+        "location": [
+          830.165301600744,
+          -2798.2860862523703,
+          15.953386566986396
+        ],
+        "rotation": [
+          0.0,
+          179.99999890848082,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_1997",
+        "class": "street_light_Bottom_lamp_1_C",
+        "location": [
+          830.165301600744,
+          -2798.2860862523703,
+          15.953386566986396
+        ],
+        "rotation": [
+          -0.0,
+          -60.00000202108324,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_11261",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          830.165301600744,
+          -2798.2860862523703,
+          15.953386566986396
+        ],
+        "rotation": [
+          0.0,
+          89.99999960565393,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_2880",
+        "class": "street_light_Bottom_lamp_2_C",
+        "location": [
+          1027.945405723746,
+          5937.105100843258,
+          12.021646999997582
+        ],
+        "rotation": [
+          0.0,
+          -90.00000139434601,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_12010",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          1027.945405723746,
+          5937.105100843258,
+          12.021646999997582
+        ],
+        "rotation": [
+          0.0,
+          90.00000000000001,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_2928",
+        "class": "street_light_Bottom_lamp_2_C",
+        "location": [
+          1027.9453938766135,
+          8874.886227424118,
+          12.021647000003039
+        ],
+        "rotation": [
+          0.0,
+          -90.00000139434601,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_12058",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          1027.9453938766135,
+          8874.886227424118,
+          12.021647000003039
+        ],
+        "rotation": [
+          0.0,
+          90.00000000000001,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_2989",
+        "class": "street_light_Bottom_lamp_2_C",
+        "location": [
+          -1957.883577585569,
+          10795.28571225632,
+          12.021642061526844
+        ],
+        "rotation": [
+          0.0,
+          -2.788691835190164e-06,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_12119",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          -1957.883577585569,
+          10795.28571225632,
+          12.021642061526844
+        ],
+        "rotation": [
+          0.0,
+          179.99999860565416,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_21079",
+        "class": "street_light_Bottom_lamp_2_C",
+        "location": [
+          -4765.544979593571,
+          9723.148251667757,
+          12.021642061509564
+        ],
+        "rotation": [
+          0.0,
+          -2.394346004899107e-06,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_12209",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          -4765.544979593571,
+          9723.148251667757,
+          12.021642061509564
+        ],
+        "rotation": [
+          0.0,
+          179.999999,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_21125",
+        "class": "street_light_Bottom_lamp_2_C",
+        "location": [
+          -7206.201257594994,
+          10795.28575946021,
+          12.021610586687812
+        ],
+        "rotation": [
+          0.0,
+          -2.394346004899107e-06,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_12255",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          -7206.201257594994,
+          10795.28575946021,
+          12.021610586687812
+        ],
+        "rotation": [
+          0.0,
+          179.999999,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_21233",
+        "class": "street_light_Bottom_lamp_2_C",
+        "location": [
+          -6782.521670846279,
+          1040.9929134651043,
+          12.021706164102259
+        ],
+        "rotation": [
+          0.0,
+          -2.394346004899107e-06,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_12363",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          -6782.521670846279,
+          1040.9929134651043,
+          12.021706164102259
+        ],
+        "rotation": [
+          0.0,
+          179.999999,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_21234",
+        "class": "street_light_Bottom_lamp_2_C",
+        "location": [
+          -5186.002690597092,
+          1040.9929203842048,
+          12.021737164103168
+        ],
+        "rotation": [
+          0.0,
+          -2.394346004899107e-06,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_12364",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          -5186.002690597092,
+          1040.9929203842048,
+          12.021737164103168
+        ],
+        "rotation": [
+          0.0,
+          179.999999,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_21235",
+        "class": "street_light_Bottom_lamp_2_C",
+        "location": [
+          -1534.2039908462796,
+          1040.9928664651047,
+          12.021737164102259
+        ],
+        "rotation": [
+          0.0,
+          -2.394346004899107e-06,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_12365",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          -1534.2039908462796,
+          1040.9928664651047,
+          12.021737164102259
+        ],
+        "rotation": [
+          0.0,
+          179.999999,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_21537",
+        "class": "street_light_Bottom_lamp_2_C",
+        "location": [
+          -7012.896431503967,
+          -849.1658755117012,
+          14.07199726595061
+        ],
+        "rotation": [
+          0.0,
+          179.999998605654,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_12667",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          -7012.896431503967,
+          -849.1658755117012,
+          14.07199726595061
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_21604",
+        "class": "street_light_Bottom_lamp_2_C",
+        "location": [
+          -3872.248863042821,
+          -849.1658760000007,
+          14.071936693771264
+        ],
+        "rotation": [
+          0.0,
+          179.999998605654,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_12734",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          -3872.248863042821,
+          -849.1658760000007,
+          14.071936693771264
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_21668",
+        "class": "street_light_Bottom_lamp_2_C",
+        "location": [
+          -2078.5679771233704,
+          -13552.606194275768,
+          12.021451633442949
+        ],
+        "rotation": [
+          0.0,
+          -2.394346004899107e-06,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_12798",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          -2078.5679771233704,
+          -13552.606194275768,
+          12.021451633442949
+        ],
+        "rotation": [
+          0.0,
+          179.999999,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_21783",
+        "class": "street_light_Bottom_lamp_2_C",
+        "location": [
+          -4623.641409992918,
+          -13552.606194313306,
+          12.021397595227715
+        ],
+        "rotation": [
+          0.0,
+          -2.394346004899107e-06,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_12913",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          -4623.641409992918,
+          -13552.606194313306,
+          12.021397595227715
+        ],
+        "rotation": [
+          0.0,
+          179.999999,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_21827",
+        "class": "street_light_Bottom_lamp_2_C",
+        "location": [
+          2591.7812650197866,
+          17253.847741024845,
+          15.431185804641032
+        ],
+        "rotation": [
+          0.0,
+          -2.394346004899107e-06,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_12957",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          2591.7812650197866,
+          17253.847741024845,
+          15.431185804641032
+        ],
+        "rotation": [
+          0.0,
+          179.999999,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_21828",
+        "class": "street_light_Bottom_lamp_2_C",
+        "location": [
+          4355.7726677387245,
+          17120.64482400507,
+          15.431148300929877
+        ],
+        "rotation": [
+          0.0,
+          -2.394346004899107e-06,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_12958",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          4355.7726677387245,
+          17120.64482400507,
+          15.431148300929877
+        ],
+        "rotation": [
+          0.0,
+          179.999999,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_21829",
+        "class": "street_light_Bottom_lamp_2_C",
+        "location": [
+          -2656.5364165397427,
+          17576.857550699802,
+          15.431154804641032
+        ],
+        "rotation": [
+          0.0,
+          -2.394346004899107e-06,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_12959",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          -2656.5364165397427,
+          17576.857550699802,
+          15.431154804641032
+        ],
+        "rotation": [
+          0.0,
+          179.999999,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_1897",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          830.1650430982729,
+          -11207.342464035664,
+          15.953446999996004
+        ],
+        "rotation": [
+          0.0,
+          109.99999984507265,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_1898",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          830.1650430982729,
+          -11207.342464035664,
+          15.953446999996004
+        ],
+        "rotation": [
+          0.0,
+          50.00000046478191,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_2892",
+        "class": "street_light_Bottom_lamp_2_C",
+        "location": [
+          830.1650430982729,
+          -11207.342464035664,
+          155.953446999996
+        ],
+        "rotation": [
+          0.0,
+          39.999997598626955,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      }
+    ],
+    "counts": {
+      "BP_RoadTFLight_5type_Control_C": 11,
+      "BP_RoadTFLight_2typeA_Control_C": 22,
+      "Ultra_Dynamic_Sky_C": 1,
+      "street_light_Bottom_lamp_2_C": 19,
+      "street_light_top_lamp_1_C": 26,
+      "street_light_Bottom_lamp_1_C": 8
+    }
+  },
+  "/Game/Levels/LV_Park_05": {
+    "total_actors": 306,
+    "lighting_actors": [
+      {
+        "actor": "RectLight27",
+        "class": "RectLight",
+        "location": [
+          -726.8182735920791,
+          -859.4072011264914,
+          461.28372986927184
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight30",
+        "class": "RectLight",
+        "location": [
+          75.85845330062392,
+          -859.4072014424291,
+          461.2837121526809
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight32",
+        "class": "RectLight",
+        "location": [
+          1640.2731642740437,
+          -965.2707554424295,
+          461.28371593930433
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight33",
+        "class": "RectLight",
+        "location": [
+          1640.273164000001,
+          -1623.6327490596325,
+          461.2837160077329
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight34",
+        "class": "RectLight",
+        "location": [
+          960.1792369092793,
+          -1623.6327493523088,
+          432.4990523895897
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight35",
+        "class": "RectLight",
+        "location": [
+          125.99065983689454,
+          -1623.6327492292364,
+          461.28370271083486
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight36",
+        "class": "RectLight",
+        "location": [
+          -715.888746124405,
+          -1623.6327492292364,
+          461.2836994922425
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight37",
+        "class": "RectLight",
+        "location": [
+          -1520.6777715690346,
+          -1623.6327492292364,
+          461.2837033626512
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight38",
+        "class": "RectLight",
+        "location": [
+          -2340.4976415565525,
+          -1623.6327492292364,
+          461.28370323208173
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight39",
+        "class": "RectLight",
+        "location": [
+          -2730.8626476419504,
+          -571.9363509925711,
+          461.2837105430049
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight40",
+        "class": "RectLight",
+        "location": [
+          -2701.4847199795613,
+          115.26155831138297,
+          461.2836915099301
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight41",
+        "class": "RectLight",
+        "location": [
+          -1611.3135571588432,
+          -249.44587944242906,
+          461.2836857526347
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight42",
+        "class": "RectLight",
+        "location": [
+          -883.4553799324015,
+          -249.44587944242872,
+          461.2836824023776
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight43",
+        "class": "RectLight",
+        "location": [
+          124.0784966537307,
+          -249.445879442429,
+          461.28364386849705
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight44",
+        "class": "RectLight",
+        "location": [
+          957.8454037105217,
+          -249.44587944242912,
+          461.2836407128648
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight45",
+        "class": "RectLight",
+        "location": [
+          1731.3602730725324,
+          -249.44587944242923,
+          461.28364483420455
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight46",
+        "class": "RectLight",
+        "location": [
+          2709.82374811789,
+          -249.445879442429,
+          461.2836547886568
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight47",
+        "class": "RectLight",
+        "location": [
+          2457.138606454166,
+          -862.5721573696075,
+          461.2836500408057
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight48",
+        "class": "RectLight",
+        "location": [
+          -2340.497598946544,
+          399.63159738766785,
+          461.28369109326115
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight49",
+        "class": "RectLight",
+        "location": [
+          -1556.7336428349172,
+          454.44790918455317,
+          461.28368538971256
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight50",
+        "class": "RectLight",
+        "location": [
+          -883.455336946544,
+          399.63159738766785,
+          461.2836820932612
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight51",
+        "class": "RectLight",
+        "location": [
+          124.07854005345601,
+          399.63159738766785,
+          461.28364409326116
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight52",
+        "class": "RectLight",
+        "location": [
+          957.845447053456,
+          399.63159738766785,
+          461.28364109326117
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight53",
+        "class": "RectLight",
+        "location": [
+          2068.2103726336477,
+          399.63159738766853,
+          461.2836378073117
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight54",
+        "class": "RectLight",
+        "location": [
+          2709.823791053456,
+          399.63159738766785,
+          461.28365509326113
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight55",
+        "class": "RectLight",
+        "location": [
+          1050.1172247476802,
+          -788.8446629957228,
+          461.28364575641706
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight56",
+        "class": "RectLight",
+        "location": [
+          -1488.298271112847,
+          -753.4294908077218,
+          461.28366372243863
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RectLight57",
+        "class": "RectLight",
+        "location": [
+          2457.1386112257087,
+          -1545.4811492038637,
+          461.28365009326126
+        ],
+        "rotation": [
+          -90.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "LightComponent0",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "Ultra_Dynamic_Sky",
+        "class": "Ultra_Dynamic_Sky_C",
+        "location": [
+          2376.856139664498,
+          1306.8004025319615,
+          89.99998101700112
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "Moon",
+            "class": "DirectionalLightComponent"
+          },
+          {
+            "comp": "Sun",
+            "class": "DirectionalLightComponent"
+          },
+          {
+            "comp": "HeightFog",
+            "class": "ExponentialHeightFogComponent"
+          },
+          {
+            "comp": "PostProcess",
+            "class": "PostProcessComponent"
+          },
+          {
+            "comp": "SkyAtmosphere",
+            "class": "SkyAtmosphereComponent"
+          },
+          {
+            "comp": "Captured Scene Sky Light",
+            "class": "SkyLightComponent"
+          },
+          {
+            "comp": "Cubemap Sky Light",
+            "class": "SkyLightComponent"
+          },
+          {
+            "comp": "VolumetricCloud",
+            "class": "VolumetricCloudComponent"
+          }
+        ],
+        "uds_non_default": {
+          "actor_guid": {
+            "instance": "<Struct 'Guid' (0x0000019663770250) {}>",
+            "default": "<Struct 'Guid' (0x0000019663777250) {}>"
+          },
+          "actor_instance_guid": {
+            "instance": "<Struct 'Guid' (0x0000019663770260) {}>",
+            "default": "<Struct 'Guid' (0x0000019663777260) {}>"
+          },
+          "content_bundle_guid": {
+            "instance": "<Struct 'Guid' (0x0000019663770270) {}>",
+            "default": "<Struct 'Guid' (0x0000019663777270) {}>"
+          },
+          "pivot_offset": {
+            "instance": "<Struct 'Vector' (0x00000196637701F8) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+            "default": "<Struct 'Vector' (0x00000196637771F8) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+          },
+          "root_component": {
+            "instance": "<Object '/Game/Levels/LV_Park_05.LV_Park_05:PersistentLevel.Ultra_Dynamic_Sky_C_2.SkyRoot' (0x000001986AAB6300) Class 'SceneComponent'>",
+            "default": "None"
+          }
+        },
+        "uds_all": {
+          "actor_guid": "<Struct 'Guid' (0x0000019663770250) {}>",
+          "actor_instance_guid": "<Struct 'Guid' (0x0000019663770260) {}>",
+          "always_relevant": "True",
+          "auto_destroy_when_finished": "False",
+          "can_be_damaged": "False",
+          "content_bundle_guid": "<Struct 'Guid' (0x0000019663770270) {}>",
+          "custom_time_dilation": "1.0",
+          "enable_auto_lod_generation": "False",
+          "find_camera_component_when_view_target": "True",
+          "generate_overlap_events_during_level_streaming": "False",
+          "hidden": "False",
+          "initial_life_span": "0.0",
+          "instigator": "None",
+          "is_spatially_loaded": "False",
+          "life_span": "0.0",
+          "min_net_update_frequency": "2.0",
+          "net_cull_distance_squared": "225000000.0",
+          "net_dormancy": "<NetDormancy.DORM_AWAKE: 1>",
+          "net_priority": "1.0",
+          "net_update_frequency": "60.0",
+          "net_use_owner_relevancy": "False",
+          "only_relevant_to_owner": "False",
+          "pivot_offset": "<Struct 'Vector' (0x00000196637701F8) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+          "replicate_using_registered_sub_object_list": "False",
+          "replicates": "True",
+          "root_component": "<Object '/Game/Levels/LV_Park_05.LV_Park_05:PersistentLevel.Ultra_Dynamic_Sky_C_2.SkyRoot' (0x000001986AAB6300) Class 'SceneComponent'>",
+          "runtime_grid": "None",
+          "spawn_collision_handling_method": "<SpawnActorCollisionHandlingMethod.ALWAYS_SPAWN: 1>",
+          "sprite_scale": "1.0",
+          "tags": "[]"
+        }
+      }
+    ],
+    "counts": {
+      "RectLight": 28,
+      "Ultra_Dynamic_Sky_C": 1
+    }
+  },
+  "/Game/Levels/LV_Park_06": {
+    "total_actors": 1172,
+    "lighting_actors": [
+      {
+        "actor": "BP_Lamp_Post",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          18240.525479182932,
+          3396.059699398341,
+          5.3916513479634887e-05
+        ],
+        "rotation": [
+          0.0,
+          90.00000000000001,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post2",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          18240.525479,
+          6084.747664834038,
+          4.9630702734672466e-05
+        ],
+        "rotation": [
+          0.0,
+          90.00000000000001,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post3",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          18240.525479,
+          8401.756676984287,
+          5.571185933040397e-05
+        ],
+        "rotation": [
+          0.0,
+          90.00000000000001,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post4",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          18240.525479,
+          10556.086891066268,
+          5.490419167059008e-05
+        ],
+        "rotation": [
+          0.0,
+          90.00000000000001,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post5",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          18240.525479,
+          12833.5475905837,
+          5.3213141683578444e-05
+        ],
+        "rotation": [
+          0.0,
+          90.00000000000001,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post6",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          18240.525479,
+          15061.302950289077,
+          5.5782991488814447e-05
+        ],
+        "rotation": [
+          0.0,
+          90.00000000000001,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post7",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          18240.525479,
+          17211.13040189063,
+          6.676849548553583e-05
+        ],
+        "rotation": [
+          0.0,
+          90.00000000000001,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_5type_Control6",
+        "class": "BP_RoadTFLight_5type_Control_C",
+        "location": [
+          17003.347951766773,
+          -2092.5929403021382,
+          286.9035590513595
+        ],
+        "rotation": [
+          0.0,
+          25.437530272703054,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "GreenLightTime",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control12",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          19369.12530421443,
+          -1536.5419331103355,
+          686.8489780524544
+        ],
+        "rotation": [
+          0.0,
+          -151.32829061632273,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control11",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          19549.046682706088,
+          -1865.5606218829582,
+          686.8489780524544
+        ],
+        "rotation": [
+          0.0,
+          -151.32829061632273,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post8",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          18850.890603038304,
+          -1066.1633160688639,
+          14.63609593194095
+        ],
+        "rotation": [
+          0.0,
+          151.7641433791903,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_5type_Control7",
+        "class": "BP_RoadTFLight_5type_Control_C",
+        "location": [
+          18267.466516336943,
+          -722.7600825179084,
+          287.3329428852556
+        ],
+        "rotation": [
+          0.0,
+          -149.48942501060137,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "GreenLightTime",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post9",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          19065.310184075257,
+          -5961.700798065473,
+          23.363862272877178
+        ],
+        "rotation": [
+          0.0,
+          94.9481303052326,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control13",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          18200.930578635864,
+          -5556.402314033072,
+          686.8490071602248
+        ],
+        "rotation": [
+          0.0,
+          118.59484468192807,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control14",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          18530.19034021155,
+          -5376.922483022266,
+          686.8490071602248
+        ],
+        "rotation": [
+          0.0,
+          118.59484468192807,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post10",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          20046.32527035282,
+          -4451.169377119547,
+          23.36386200000012
+        ],
+        "rotation": [
+          0.0,
+          31.248497742301744,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post11",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          21928.591627533573,
+          -3449.727311946017,
+          23.36386199999921
+        ],
+        "rotation": [
+          0.0,
+          29.54944123961559,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post12",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          24721.132362472574,
+          -1866.6012585250837,
+          23.3638619999983
+        ],
+        "rotation": [
+          0.0,
+          29.54944100000001,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post13",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          27891.703424627605,
+          -131.22149360806318,
+          23.363861999989204
+        ],
+        "rotation": [
+          0.0,
+          29.54944100000001,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post14",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          30322.72830618499,
+          1196.4577211122046,
+          23.363862000005575
+        ],
+        "rotation": [
+          0.0,
+          29.54944100000001,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post15",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          21155.35337787515,
+          128.72127387242463,
+          14.63609599999571
+        ],
+        "rotation": [
+          0.0,
+          -149.24646543549883,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post16",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          24472.103687876413,
+          2102.257420456267,
+          14.636095999999348
+        ],
+        "rotation": [
+          0.0,
+          -149.246465,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post17",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          27961.924943374495,
+          4178.774425301383,
+          14.636095999999348
+        ],
+        "rotation": [
+          0.0,
+          -149.246465,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control15",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          17282.14558660575,
+          -5274.842627246267,
+          686.849007
+        ],
+        "rotation": [
+          0.0,
+          28.594845697172904,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control16",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          17102.665763618596,
+          -4945.582861878457,
+          686.849007
+        ],
+        "rotation": [
+          0.0,
+          28.594845697173017,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control17",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          8870.566202152031,
+          -7776.162412483974,
+          686.8489616107521
+        ],
+        "rotation": [
+          0.0,
+          -151.32829099999944,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control18",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          9050.48758115203,
+          -8105.181101483974,
+          686.8489616107521
+        ],
+        "rotation": [
+          0.0,
+          -151.32829099999944,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_5type_Control8",
+        "class": "BP_RoadTFLight_5type_Control_C",
+        "location": [
+          8497.85549317218,
+          -6418.223426611202,
+          286.9033790619639
+        ],
+        "rotation": [
+          0.0,
+          -179.93682687136413,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "GreenLightTime",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_5type_Control9",
+        "class": "BP_RoadTFLight_5type_Control_C",
+        "location": [
+          8591.752310114283,
+          -7143.368446671939,
+          286.9033775206383
+        ],
+        "rotation": [
+          0.0,
+          -57.5365091508533,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "GreenLightTime",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_5type_Control10",
+        "class": "BP_RoadTFLight_5type_Control_C",
+        "location": [
+          10792.443196305274,
+          -9581.586169217588,
+          286.9033825755141
+        ],
+        "rotation": [
+          0.0,
+          124.35438699190269,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "GreenLightTime",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control19",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          8644.803251888437,
+          -11291.81281571236,
+          701.1559553404219
+        ],
+        "rotation": [
+          0.0,
+          92.29802473087558,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control20",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          8270.104835044043,
+          -11306.84932949876,
+          701.1559553404219
+        ],
+        "rotation": [
+          0.0,
+          92.29802473087558,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control21",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          6720.462036982818,
+          -12305.356200417587,
+          687.4460046906801
+        ],
+        "rotation": [
+          0.0,
+          -87.70197360565419,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control22",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          6345.75209239883,
+          -12320.105454876879,
+          687.4460046906801
+        ],
+        "rotation": [
+          0.0,
+          -87.70197360565419,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control23",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          5016.57644504059,
+          -11336.276306570315,
+          683.8733515075613
+        ],
+        "rotation": [
+          0.0,
+          32.59070912045258,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control24",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          5217.7821756278145,
+          -11652.728698858178,
+          683.8733515075613
+        ],
+        "rotation": [
+          0.0,
+          32.59070912045258,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control25",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          5410.084889537601,
+          -11953.531519746435,
+          683.8733512668645
+        ],
+        "rotation": [
+          0.0,
+          32.59070900000002,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control26",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          5967.406620155308,
+          -12335.288329284935,
+          687.4460060273626
+        ],
+        "rotation": [
+          0.0,
+          -87.70197400000002,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control27",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          5212.040844650983,
+          -7930.385560647643,
+          687.4460059999988
+        ],
+        "rotation": [
+          0.0,
+          -87.70197400000002,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control28",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          5590.386316650983,
+          -7915.202686647643,
+          687.4460049999988
+        ],
+        "rotation": [
+          0.0,
+          -87.70197400000002,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control29",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          5965.096261650983,
+          -7900.453431647641,
+          687.4460049999988
+        ],
+        "rotation": [
+          0.0,
+          -87.70197400000002,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control30",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          -1625.1713980476031,
+          -13515.676859064444,
+          686.8489620000013
+        ],
+        "rotation": [
+          0.0,
+          -151.32829060565402,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_2type_Control31",
+        "class": "BP_RoadTFLight_2typeA_Control_C",
+        "location": [
+          -1445.2500190476037,
+          -13844.695548064445,
+          686.8489620000013
+        ],
+        "rotation": [
+          0.0,
+          -61.32829130282697,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "YellowLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "RoadTFLight_5type_Control11",
+        "class": "BP_RoadTFLight_5type_Control_C",
+        "location": [
+          4905.160637489237,
+          -7875.036820038234,
+          286.9033767395855
+        ],
+        "rotation": [
+          0.0,
+          0.06317160565396307,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "GreenLightTime",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "GreenLight",
+            "class": "RectLightComponent"
+          },
+          {
+            "comp": "RedLight",
+            "class": "RectLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post18",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          4877.705043347303,
+          -5966.301844271431,
+          14.636096000000455
+        ],
+        "rotation": [
+          0.0,
+          -85.78876448666898,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post19",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          4672.446080585013,
+          -3178.690389993073,
+          14.636094957345042
+        ],
+        "rotation": [
+          0.0,
+          -85.78876400000001,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post20",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          4462.362815008841,
+          -325.5609770339788,
+          14.63610007564789
+        ],
+        "rotation": [
+          0.0,
+          -85.78876400000001,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post21",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          4201.934024326485,
+          3211.3082693354986,
+          14.636099446782325
+        ],
+        "rotation": [
+          0.0,
+          -85.78876400000001,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post22",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          3946.1389860958043,
+          6685.246770917404,
+          14.636083868946157
+        ],
+        "rotation": [
+          0.0,
+          -85.78876400000001,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post23",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          3743.346762418232,
+          9439.356933426265,
+          14.636070664068502
+        ],
+        "rotation": [
+          0.0,
+          -85.78876400000001,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post24",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          2942.129178882936,
+          -9795.310744217608,
+          14.636095999997726
+        ],
+        "rotation": [
+          0.0,
+          -148.5757513096081,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post25",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          1203.511769477008,
+          -11000.817242349583,
+          14.636096000005912
+        ],
+        "rotation": [
+          0.0,
+          -148.575751,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post26",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          -410.2195069978597,
+          -12019.019394896055,
+          14.636096000003183
+        ],
+        "rotation": [
+          0.0,
+          -148.575751,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post27",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          -3489.1901997667915,
+          -13973.785724822676,
+          14.636096
+        ],
+        "rotation": [
+          0.0,
+          -148.575751,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post28",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          -5690.892648364321,
+          -15438.368901097103,
+          14.636096
+        ],
+        "rotation": [
+          0.0,
+          -148.575751,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post29",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          -8499.181096822353,
+          -17885.870287134057,
+          14.636096
+        ],
+        "rotation": [
+          0.0,
+          -125.08546365625914,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post30",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          -9935.655697049557,
+          -20229.81434147321,
+          14.636096
+        ],
+        "rotation": [
+          0.0,
+          -125.08546399999999,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post31",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          3120.398369005377,
+          -14028.300958564223,
+          -230.4864417534988
+        ],
+        "rotation": [
+          0.0,
+          31.284030670816424,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post32",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          182.55217347318518,
+          -15813.418114967253,
+          -230.48644200000007
+        ],
+        "rotation": [
+          0.0,
+          31.284031,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post33",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          -3157.5810380071925,
+          -17976.76633507005,
+          -230.48644199999825
+        ],
+        "rotation": [
+          0.0,
+          31.284031,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post34",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          -5893.445550077681,
+          -20306.670174254,
+          -230.486442
+        ],
+        "rotation": [
+          0.0,
+          31.284031,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post35",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          5599.385909067875,
+          -15027.198833679828,
+          25.046202530473067
+        ],
+        "rotation": [
+          0.0,
+          -89.52398319582268,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post36",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          5753.598185717779,
+          -19021.862444450748,
+          25.04620253047443
+        ],
+        "rotation": [
+          0.0,
+          -87.26282547935949,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post37",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          5920.989605989975,
+          -22523.109008033734,
+          25.046202999997888
+        ],
+        "rotation": [
+          0.0,
+          -87.26282500000003,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post38",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          6398.816543657179,
+          -27715.670702259864,
+          25.0462023005137
+        ],
+        "rotation": [
+          0.0,
+          -87.26282500000003,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post39",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          7078.7035511810045,
+          -31523.422877180594,
+          25.04620839290221
+        ],
+        "rotation": [
+          0.0,
+          -87.26282500000003,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post40",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          7892.3483311231685,
+          -36526.8198737755,
+          25.046208
+        ],
+        "rotation": [
+          0.0,
+          -87.26282500000003,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post41",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          8839.58261189574,
+          -42206.6097872783,
+          25.046208
+        ],
+        "rotation": [
+          0.0,
+          -87.26282500000003,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post43",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          9310.360564101371,
+          -18851.816747515146,
+          25.046170292804455
+        ],
+        "rotation": [
+          0.0,
+          91.99888906531575,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post44",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          9175.351476693095,
+          -14983.51193241303,
+          25.04617000000173
+        ],
+        "rotation": [
+          0.0,
+          91.998889,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post45",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          9544.861575577093,
+          -22118.421881749717,
+          25.04616999999991
+        ],
+        "rotation": [
+          0.0,
+          91.998889,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post46",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          9605.465693551905,
+          -24602.18555067036,
+          25.04617
+        ],
+        "rotation": [
+          0.0,
+          91.998889,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post47",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          10046.475007912206,
+          -27911.491920625078,
+          25.04617
+        ],
+        "rotation": [
+          0.0,
+          91.998889,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post48",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          10482.240608404561,
+          -30810.65367284713,
+          25.04617
+        ],
+        "rotation": [
+          0.0,
+          91.998889,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post49",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          11056.102788046242,
+          -34206.89194303198,
+          25.04617
+        ],
+        "rotation": [
+          0.0,
+          91.998889,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post50",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          11546.66438484147,
+          -37705.37192013982,
+          25.04617
+        ],
+        "rotation": [
+          0.0,
+          91.998889,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post51",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          9005.376705535402,
+          -1682.110574156035,
+          14.636075174102693
+        ],
+        "rotation": [
+          0.0,
+          -92.96214634590963,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post52",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          7718.593650346034,
+          5721.03692044257,
+          25.561881882440318
+        ],
+        "rotation": [
+          0.0,
+          102.56064514492418,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post53",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          7479.263752559261,
+          7694.174354982786,
+          25.56190815182864
+        ],
+        "rotation": [
+          0.0,
+          102.560645,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post54",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          7104.6306312970555,
+          10266.236652184138,
+          25.56194248410403
+        ],
+        "rotation": [
+          0.0,
+          102.560645,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post55",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          6811.474362461352,
+          12593.092771794565,
+          25.561973001682155
+        ],
+        "rotation": [
+          0.0,
+          96.60032113861277,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post56",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          6400.51534380987,
+          15246.016779599951,
+          25.562011079923167
+        ],
+        "rotation": [
+          0.0,
+          96.60032100000002,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post57",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          5950.69791743045,
+          18409.634287280758,
+          14.636108
+        ],
+        "rotation": [
+          0.0,
+          111.11677817873833,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post58",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          4957.440895049549,
+          21625.835494034083,
+          14.636108
+        ],
+        "rotation": [
+          0.0,
+          111.11677800000001,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post59",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          8900.27558636286,
+          3460.184459526711,
+          14.636075388431488
+        ],
+        "rotation": [
+          0.0,
+          -92.96214600000005,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post60",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          7367.077385497346,
+          13325.896752360328,
+          25.56197286907501
+        ],
+        "rotation": [
+          0.0,
+          -81.26722416170655,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post61",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          7090.694924733733,
+          16313.10710888865,
+          9.92812456104275e-05
+        ],
+        "rotation": [
+          0.0,
+          -119.5801028636875,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "BP_Lamp_Post62",
+        "class": "BP_Lamp_Post_C",
+        "location": [
+          16043.245335785406,
+          -1903.9406226111623,
+          15.35660334953629
+        ],
+        "rotation": [
+          0.0,
+          99.71850158569538,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "NODE_AddSpotLightComponent-0",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "Ultra_Dynamic_Sky",
+        "class": "Ultra_Dynamic_Sky_C",
+        "location": [
+          3724.222973641572,
+          7682.990741232557,
+          102.00000334893502
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "Moon",
+            "class": "DirectionalLightComponent"
+          },
+          {
+            "comp": "Sun",
+            "class": "DirectionalLightComponent"
+          },
+          {
+            "comp": "HeightFog",
+            "class": "ExponentialHeightFogComponent"
+          },
+          {
+            "comp": "PostProcess",
+            "class": "PostProcessComponent"
+          },
+          {
+            "comp": "SkyAtmosphere",
+            "class": "SkyAtmosphereComponent"
+          },
+          {
+            "comp": "Captured Scene Sky Light",
+            "class": "SkyLightComponent"
+          },
+          {
+            "comp": "Cubemap Sky Light",
+            "class": "SkyLightComponent"
+          },
+          {
+            "comp": "VolumetricCloud",
+            "class": "VolumetricCloudComponent"
+          }
+        ],
+        "uds_non_default": {
+          "actor_guid": {
+            "instance": "<Struct 'Guid' (0x00000196CD6DAA50) {}>",
+            "default": "<Struct 'Guid' (0x0000019663777250) {}>"
+          },
+          "actor_instance_guid": {
+            "instance": "<Struct 'Guid' (0x00000196CD6DAA60) {}>",
+            "default": "<Struct 'Guid' (0x0000019663777260) {}>"
+          },
+          "content_bundle_guid": {
+            "instance": "<Struct 'Guid' (0x00000196CD6DAA70) {}>",
+            "default": "<Struct 'Guid' (0x0000019663777270) {}>"
+          },
+          "pivot_offset": {
+            "instance": "<Struct 'Vector' (0x00000196CD6DA9F8) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+            "default": "<Struct 'Vector' (0x00000196637771F8) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+          },
+          "root_component": {
+            "instance": "<Object '/Game/Levels/LV_Park_06.LV_Park_06:PersistentLevel.Ultra_Dynamic_Sky_C_2.SkyRoot' (0x000001969489E100) Class 'SceneComponent'>",
+            "default": "None"
+          }
+        },
+        "uds_all": {
+          "actor_guid": "<Struct 'Guid' (0x00000196CD6DAA50) {}>",
+          "actor_instance_guid": "<Struct 'Guid' (0x00000196CD6DAA60) {}>",
+          "always_relevant": "True",
+          "auto_destroy_when_finished": "False",
+          "can_be_damaged": "False",
+          "content_bundle_guid": "<Struct 'Guid' (0x00000196CD6DAA70) {}>",
+          "custom_time_dilation": "1.0",
+          "enable_auto_lod_generation": "False",
+          "find_camera_component_when_view_target": "True",
+          "generate_overlap_events_during_level_streaming": "False",
+          "hidden": "False",
+          "initial_life_span": "0.0",
+          "instigator": "None",
+          "is_spatially_loaded": "False",
+          "life_span": "0.0",
+          "min_net_update_frequency": "2.0",
+          "net_cull_distance_squared": "225000000.0",
+          "net_dormancy": "<NetDormancy.DORM_AWAKE: 1>",
+          "net_priority": "1.0",
+          "net_update_frequency": "60.0",
+          "net_use_owner_relevancy": "False",
+          "only_relevant_to_owner": "False",
+          "pivot_offset": "<Struct 'Vector' (0x00000196CD6DA9F8) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+          "replicate_using_registered_sub_object_list": "False",
+          "replicates": "True",
+          "root_component": "<Object '/Game/Levels/LV_Park_06.LV_Park_06:PersistentLevel.Ultra_Dynamic_Sky_C_2.SkyRoot' (0x000001969489E100) Class 'SceneComponent'>",
+          "runtime_grid": "None",
+          "spawn_collision_handling_method": "<SpawnActorCollisionHandlingMethod.ALWAYS_SPAWN: 1>",
+          "sprite_scale": "1.0",
+          "tags": "[]"
+        }
+      },
+      {
+        "actor": "Ultra_Dynamic_Weather",
+        "class": "Ultra_Dynamic_Weather_C",
+        "location": [
+          2978.4544630954524,
+          11008.814591537444,
+          102.00000171944885
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "Lightning Light",
+            "class": "DirectionalLightComponent"
+          },
+          {
+            "comp": "PostProcess",
+            "class": "PostProcessComponent"
+          },
+          {
+            "comp": "Lightning Spawn Manager",
+            "class": "UDW_Lightning_Spawn_Manager_C"
+          }
+        ],
+        "uds_non_default": {
+          "actor_guid": {
+            "instance": "<Struct 'Guid' (0x000001982AF17A50) {}>",
+            "default": "<Struct 'Guid' (0x00000198F74AA250) {}>"
+          },
+          "actor_instance_guid": {
+            "instance": "<Struct 'Guid' (0x000001982AF17A60) {}>",
+            "default": "<Struct 'Guid' (0x00000198F74AA260) {}>"
+          },
+          "content_bundle_guid": {
+            "instance": "<Struct 'Guid' (0x000001982AF17A70) {}>",
+            "default": "<Struct 'Guid' (0x00000198F74AA270) {}>"
+          },
+          "pivot_offset": {
+            "instance": "<Struct 'Vector' (0x000001982AF179F8) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+            "default": "<Struct 'Vector' (0x00000198F74AA1F8) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+          },
+          "root_component": {
+            "instance": "<Object '/Game/Levels/LV_Park_06.LV_Park_06:PersistentLevel.Ultra_Dynamic_Weather_C_3.WeatherRoot' (0x000001982D04A200) Class 'SceneComponent'>",
+            "default": "None"
+          }
+        },
+        "uds_all": {
+          "actor_guid": "<Struct 'Guid' (0x000001982AF17A50) {}>",
+          "actor_instance_guid": "<Struct 'Guid' (0x000001982AF17A60) {}>",
+          "always_relevant": "True",
+          "auto_destroy_when_finished": "False",
+          "can_be_damaged": "True",
+          "content_bundle_guid": "<Struct 'Guid' (0x000001982AF17A70) {}>",
+          "custom_time_dilation": "1.0",
+          "enable_auto_lod_generation": "False",
+          "find_camera_component_when_view_target": "True",
+          "generate_overlap_events_during_level_streaming": "False",
+          "hidden": "False",
+          "initial_life_span": "0.0",
+          "instigator": "None",
+          "is_spatially_loaded": "False",
+          "life_span": "0.0",
+          "min_net_update_frequency": "2.0",
+          "net_cull_distance_squared": "225000000.0",
+          "net_dormancy": "<NetDormancy.DORM_AWAKE: 1>",
+          "net_priority": "1.0",
+          "net_update_frequency": "100.0",
+          "net_use_owner_relevancy": "False",
+          "only_relevant_to_owner": "False",
+          "pivot_offset": "<Struct 'Vector' (0x000001982AF179F8) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+          "replicate_using_registered_sub_object_list": "False",
+          "replicates": "True",
+          "root_component": "<Object '/Game/Levels/LV_Park_06.LV_Park_06:PersistentLevel.Ultra_Dynamic_Weather_C_3.WeatherRoot' (0x000001982D04A200) Class 'SceneComponent'>",
+          "runtime_grid": "None",
+          "spawn_collision_handling_method": "<SpawnActorCollisionHandlingMethod.ALWAYS_SPAWN: 1>",
+          "sprite_scale": "1.0",
+          "tags": "[]"
+        }
+      },
+      {
+        "actor": "street_light_Bottom_lamp_1220",
+        "class": "street_light_Bottom_lamp_1_C",
+        "location": [
+          16588.025259296337,
+          -2366.1423501471386,
+          23.286745888811243
+        ],
+        "rotation": [
+          -0.0,
+          -64.42952785397986,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_1221",
+        "class": "street_light_Bottom_lamp_1_C",
+        "location": [
+          16588.025259296337,
+          -2366.1423501471386,
+          23.286745888811243
+        ],
+        "rotation": [
+          0.0,
+          55.57047121645614,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_1110",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          16588.025259296337,
+          -2366.1423501471386,
+          23.286745888811243
+        ],
+        "rotation": [
+          -0.0,
+          -154.42952715680676,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_1654",
+        "class": "street_light_Bottom_lamp_1_C",
+        "location": [
+          13105.241019492702,
+          -4336.9571890616735,
+          36.34479953005428
+        ],
+        "rotation": [
+          -0.0,
+          -64.42952769717311,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_1655",
+        "class": "street_light_Bottom_lamp_1_C",
+        "location": [
+          13105.241019492702,
+          -4336.9571890616735,
+          36.34479953005428
+        ],
+        "rotation": [
+          0.0,
+          55.57047137326292,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_1327",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          13105.241019492702,
+          -4336.9571890616735,
+          36.34479953005428
+        ],
+        "rotation": [
+          -0.0,
+          -154.429527,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_1786",
+        "class": "street_light_Bottom_lamp_1_C",
+        "location": [
+          11628.836798563476,
+          -5187.636782963853,
+          44.09750041088697
+        ],
+        "rotation": [
+          -0.0,
+          -64.42952769717311,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_1787",
+        "class": "street_light_Bottom_lamp_1_C",
+        "location": [
+          11628.836798563476,
+          -5187.636782963853,
+          44.09750041088697
+        ],
+        "rotation": [
+          0.0,
+          55.57047137326292,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_1393",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          11628.836798563476,
+          -5187.636782963853,
+          44.09750041088697
+        ],
+        "rotation": [
+          -0.0,
+          -154.429527,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_1256",
+        "class": "street_light_Bottom_lamp_1_C",
+        "location": [
+          13304.221950348443,
+          -8125.111441393761,
+          44.0974925934578
+        ],
+        "rotation": [
+          0.0,
+          115.57047369717303,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_1257",
+        "class": "street_light_Bottom_lamp_1_C",
+        "location": [
+          13304.221950348443,
+          -8125.111441393761,
+          44.0974925934578
+        ],
+        "rotation": [
+          -0.0,
+          -124.42952723239102,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_1128",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          13304.221950348443,
+          -8125.111441393761,
+          44.0974925934578
+        ],
+        "rotation": [
+          0.0,
+          25.570474394346107,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_1334",
+        "class": "street_light_Bottom_lamp_1_C",
+        "location": [
+          11711.52400171245,
+          -8999.360348393013,
+          44.097494846485475
+        ],
+        "rotation": [
+          0.0,
+          115.57047330282694,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_1335",
+        "class": "street_light_Bottom_lamp_1_C",
+        "location": [
+          11711.52400171245,
+          -8999.360348393013,
+          44.097494846485475
+        ],
+        "rotation": [
+          -0.0,
+          -124.42952762673714,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_1167",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          11711.52400171245,
+          -8999.360348393013,
+          44.097494846485475
+        ],
+        "rotation": [
+          0.0,
+          25.57047400000001,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_1372",
+        "class": "street_light_Bottom_lamp_1_C",
+        "location": [
+          15605.048219049784,
+          -6864.999355230034,
+          44.09748683728448
+        ],
+        "rotation": [
+          0.0,
+          115.57047330282694,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_1373",
+        "class": "street_light_Bottom_lamp_1_C",
+        "location": [
+          15605.048219049784,
+          -6864.999355230034,
+          44.09748683728448
+        ],
+        "rotation": [
+          -0.0,
+          -124.42952762673714,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_1186",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          15605.048219049784,
+          -6864.999355230034,
+          44.09748683728448
+        ],
+        "rotation": [
+          0.0,
+          25.57047400000001,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_1446",
+        "class": "street_light_Bottom_lamp_1_C",
+        "location": [
+          9405.663601140492,
+          -10907.368969933697,
+          44.09751587647243
+        ],
+        "rotation": [
+          0.0,
+          161.9904030764979,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_1447",
+        "class": "street_light_Bottom_lamp_1_C",
+        "location": [
+          9405.663601140492,
+          -10907.368969933697,
+          44.09751587647243
+        ],
+        "rotation": [
+          -0.0,
+          -78.00959785306614,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_1223",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          9405.663601140492,
+          -10907.368969933697,
+          44.09751587647243
+        ],
+        "rotation": [
+          0.0,
+          71.990403773671,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_1664",
+        "class": "street_light_Bottom_lamp_1_C",
+        "location": [
+          4862.469441070308,
+          -8197.352580778834,
+          -15.035754191644827
+        ],
+        "rotation": [
+          -0.0,
+          -42.07325123486742,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_Bottom_lamp_1665",
+        "class": "street_light_Bottom_lamp_1_C",
+        "location": [
+          4862.469441070308,
+          -8197.352580778834,
+          -15.035754191644827
+        ],
+        "rotation": [
+          0.0,
+          77.92674783556858,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "1",
+            "class": "SpotLightComponent"
+          }
+        ]
+      },
+      {
+        "actor": "street_light_top_lamp_1332",
+        "class": "street_light_top_lamp_1_C",
+        "location": [
+          4862.469441070308,
+          -8197.352580778834,
+          -15.035754191644827
+        ],
+        "rotation": [
+          -0.0,
+          -132.07325053769432,
+          -0.0
+        ],
+        "components": [
+          {
+            "comp": "2",
+            "class": "SpotLightComponent"
+          }
+        ]
+      }
+    ],
+    "counts": {
+      "BP_Lamp_Post_C": 61,
+      "BP_RoadTFLight_5type_Control_C": 6,
+      "BP_RoadTFLight_2typeA_Control_C": 21,
+      "Ultra_Dynamic_Sky_C": 1,
+      "Ultra_Dynamic_Weather_C": 1,
+      "street_light_Bottom_lamp_1_C": 16,
+      "street_light_top_lamp_1_C": 8
+    }
+  },
+  "/Game/Levels/LV_Park_07": {
+    "total_actors": 0,
+    "lighting_actors": [],
+    "counts": {}
+  },
+  "/Game/Levels/LV_Park_08": {
+    "total_actors": 224,
+    "lighting_actors": [
+      {
+        "actor": "Ultra_Dynamic_Sky",
+        "class": "Ultra_Dynamic_Sky_C",
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "Moon",
+            "class": "DirectionalLightComponent"
+          },
+          {
+            "comp": "Sun",
+            "class": "DirectionalLightComponent"
+          },
+          {
+            "comp": "HeightFog",
+            "class": "ExponentialHeightFogComponent"
+          },
+          {
+            "comp": "PostProcess",
+            "class": "PostProcessComponent"
+          },
+          {
+            "comp": "SkyAtmosphere",
+            "class": "SkyAtmosphereComponent"
+          },
+          {
+            "comp": "Captured Scene Sky Light",
+            "class": "SkyLightComponent"
+          },
+          {
+            "comp": "Cubemap Sky Light",
+            "class": "SkyLightComponent"
+          },
+          {
+            "comp": "VolumetricCloud",
+            "class": "VolumetricCloudComponent"
+          }
+        ],
+        "uds_non_default": {
+          "actor_guid": {
+            "instance": "<Struct 'Guid' (0x000001982D79AA50) {}>",
+            "default": "<Struct 'Guid' (0x0000019663777250) {}>"
+          },
+          "actor_instance_guid": {
+            "instance": "<Struct 'Guid' (0x000001982D79AA60) {}>",
+            "default": "<Struct 'Guid' (0x0000019663777260) {}>"
+          },
+          "content_bundle_guid": {
+            "instance": "<Struct 'Guid' (0x000001982D79AA70) {}>",
+            "default": "<Struct 'Guid' (0x0000019663777270) {}>"
+          },
+          "pivot_offset": {
+            "instance": "<Struct 'Vector' (0x000001982D79A9F8) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+            "default": "<Struct 'Vector' (0x00000196637771F8) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+          },
+          "root_component": {
+            "instance": "<Object '/Game/Levels/LV_Park_08.LV_Park_08:PersistentLevel.Ultra_Dynamic_Sky_C_1.SkyRoot' (0x000001982D420C00) Class 'SceneComponent'>",
+            "default": "None"
+          }
+        },
+        "uds_all": {
+          "actor_guid": "<Struct 'Guid' (0x000001982D79AA50) {}>",
+          "actor_instance_guid": "<Struct 'Guid' (0x000001982D79AA60) {}>",
+          "always_relevant": "True",
+          "auto_destroy_when_finished": "False",
+          "can_be_damaged": "False",
+          "content_bundle_guid": "<Struct 'Guid' (0x000001982D79AA70) {}>",
+          "custom_time_dilation": "1.0",
+          "enable_auto_lod_generation": "False",
+          "find_camera_component_when_view_target": "True",
+          "generate_overlap_events_during_level_streaming": "False",
+          "hidden": "False",
+          "initial_life_span": "0.0",
+          "instigator": "None",
+          "is_spatially_loaded": "False",
+          "life_span": "0.0",
+          "min_net_update_frequency": "2.0",
+          "net_cull_distance_squared": "225000000.0",
+          "net_dormancy": "<NetDormancy.DORM_AWAKE: 1>",
+          "net_priority": "1.0",
+          "net_update_frequency": "60.0",
+          "net_use_owner_relevancy": "False",
+          "only_relevant_to_owner": "False",
+          "pivot_offset": "<Struct 'Vector' (0x000001982D79A9F8) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+          "replicate_using_registered_sub_object_list": "False",
+          "replicates": "True",
+          "root_component": "<Object '/Game/Levels/LV_Park_08.LV_Park_08:PersistentLevel.Ultra_Dynamic_Sky_C_1.SkyRoot' (0x000001982D420C00) Class 'SceneComponent'>",
+          "runtime_grid": "None",
+          "spawn_collision_handling_method": "<SpawnActorCollisionHandlingMethod.ALWAYS_SPAWN: 1>",
+          "sprite_scale": "1.0",
+          "tags": "[]"
+        }
+      }
+    ],
+    "counts": {
+      "Ultra_Dynamic_Sky_C": 1
+    }
+  },
+  "/Game/Level/LV_Park_08_Sign": {
+    "total_actors": 113,
+    "lighting_actors": [
+      {
+        "actor": "Ultra_Dynamic_Sky",
+        "class": "Ultra_Dynamic_Sky_C",
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "components": [
+          {
+            "comp": "Moon",
+            "class": "DirectionalLightComponent"
+          },
+          {
+            "comp": "Sun",
+            "class": "DirectionalLightComponent"
+          },
+          {
+            "comp": "HeightFog",
+            "class": "ExponentialHeightFogComponent"
+          },
+          {
+            "comp": "PostProcess",
+            "class": "PostProcessComponent"
+          },
+          {
+            "comp": "SkyAtmosphere",
+            "class": "SkyAtmosphereComponent"
+          },
+          {
+            "comp": "Captured Scene Sky Light",
+            "class": "SkyLightComponent"
+          },
+          {
+            "comp": "Cubemap Sky Light",
+            "class": "SkyLightComponent"
+          },
+          {
+            "comp": "VolumetricCloud",
+            "class": "VolumetricCloudComponent"
+          }
+        ],
+        "uds_non_default": {
+          "actor_guid": {
+            "instance": "<Struct 'Guid' (0x0000019973927250) {}>",
+            "default": "<Struct 'Guid' (0x0000019663777250) {}>"
+          },
+          "actor_instance_guid": {
+            "instance": "<Struct 'Guid' (0x0000019973927260) {}>",
+            "default": "<Struct 'Guid' (0x0000019663777260) {}>"
+          },
+          "content_bundle_guid": {
+            "instance": "<Struct 'Guid' (0x0000019973927270) {}>",
+            "default": "<Struct 'Guid' (0x0000019663777270) {}>"
+          },
+          "pivot_offset": {
+            "instance": "<Struct 'Vector' (0x00000199739271F8) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+            "default": "<Struct 'Vector' (0x00000196637771F8) {x: 0.000000, y: 0.000000, z: 0.000000}>"
+          },
+          "root_component": {
+            "instance": "<Object '/Game/Level/LV_Park_08_Sign.LV_Park_08_Sign:PersistentLevel.Ultra_Dynamic_Sky_C_1.SkyRoot' (0x000001982D429300) Class 'SceneComponent'>",
+            "default": "None"
+          }
+        },
+        "uds_all": {
+          "actor_guid": "<Struct 'Guid' (0x0000019973927250) {}>",
+          "actor_instance_guid": "<Struct 'Guid' (0x0000019973927260) {}>",
+          "always_relevant": "True",
+          "auto_destroy_when_finished": "False",
+          "can_be_damaged": "False",
+          "content_bundle_guid": "<Struct 'Guid' (0x0000019973927270) {}>",
+          "custom_time_dilation": "1.0",
+          "enable_auto_lod_generation": "False",
+          "find_camera_component_when_view_target": "True",
+          "generate_overlap_events_during_level_streaming": "False",
+          "hidden": "False",
+          "initial_life_span": "0.0",
+          "instigator": "None",
+          "is_spatially_loaded": "False",
+          "life_span": "0.0",
+          "min_net_update_frequency": "2.0",
+          "net_cull_distance_squared": "225000000.0",
+          "net_dormancy": "<NetDormancy.DORM_AWAKE: 1>",
+          "net_priority": "1.0",
+          "net_update_frequency": "60.0",
+          "net_use_owner_relevancy": "False",
+          "only_relevant_to_owner": "False",
+          "pivot_offset": "<Struct 'Vector' (0x00000199739271F8) {x: 0.000000, y: 0.000000, z: 0.000000}>",
+          "replicate_using_registered_sub_object_list": "False",
+          "replicates": "True",
+          "root_component": "<Object '/Game/Level/LV_Park_08_Sign.LV_Park_08_Sign:PersistentLevel.Ultra_Dynamic_Sky_C_1.SkyRoot' (0x000001982D429300) Class 'SceneComponent'>",
+          "runtime_grid": "None",
+          "spawn_collision_handling_method": "<SpawnActorCollisionHandlingMethod.ALWAYS_SPAWN: 1>",
+          "sprite_scale": "1.0",
+          "tags": "[]"
+        }
+      }
+    ],
+    "counts": {
+      "Ultra_Dynamic_Sky_C": 1
+    }
+  }
+}

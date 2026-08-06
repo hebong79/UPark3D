@@ -11,6 +11,7 @@
 #include "../CameraControlTypes.h"
 #include "../CameraControlManager.h"
 #include "../PTZCameraActor.h"
+#include "Components/SceneCaptureComponent2D.h"   // TP-FOV: SetZoom 후 Capture->FOVAngle 절대값 단정
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "HAL/PlatformFileManager.h"
@@ -64,28 +65,97 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCameraControlFovTest,
 
 bool FCameraControlFovTest::RunTest(const FString& Parameters)
 {
-	// 경계값: zoom=1→58, 2→29, 36→≈1.611.
-	TestEqual(TEXT("zoom1→58"), UCameraControlLibrary::ZoomToHFov(1.f), 58.f, 1e-3f);
-	TestEqual(TEXT("zoom2→29"), UCameraControlLibrary::ZoomToHFov(2.f), 29.f, 1e-3f);
-	TestEqual(TEXT("zoom36→1.611"), UCameraControlLibrary::ZoomToHFov(36.f), 58.f / 36.f, 1e-3f);
+	// 탄젠트 광학 모델(HNR-2036LA 규격 정정 설계 §6.1): hfov = 2·atan(tan(56.5°/2)/z).
+	// 기대값은 구현식을 베끼지 않도록 독립 계산한 소수 5자리 리터럴(절삭 오차 ≤5e-6) — 허용치 1e-3 유지.
+	TestEqual(TEXT("zoom1→56.500"), UCameraControlLibrary::ZoomToHFov(1.f), 56.50000f, 1e-3f);
+	TestEqual(TEXT("zoom2→30.076"), UCameraControlLibrary::ZoomToHFov(2.f), 30.07595f, 1e-3f);
+	TestEqual(TEXT("zoom3→20.309"), UCameraControlLibrary::ZoomToHFov(3.f), 20.30875f, 1e-3f);
+	TestEqual(TEXT("zoom4→15.301"), UCameraControlLibrary::ZoomToHFov(4.f), 15.30147f, 1e-3f);
+	TestEqual(TEXT("zoom5→12.267"), UCameraControlLibrary::ZoomToHFov(5.f), 12.26737f, 1e-3f);
+	TestEqual(TEXT("zoom8→7.685"), UCameraControlLibrary::ZoomToHFov(8.f), 7.68499f, 1e-3f);
+	TestEqual(TEXT("zoom16→3.847"), UCameraControlLibrary::ZoomToHFov(16.f), 3.84682f, 1e-3f);
+	TestEqual(TEXT("zoom20→3.078"), UCameraControlLibrary::ZoomToHFov(20.f), 3.07787f, 1e-3f);
+	TestEqual(TEXT("zoom36→1.710"), UCameraControlLibrary::ZoomToHFov(36.f), 1.71021f, 1e-3f);
 
-	// clamp: zoom<1(0 포함) → 1 선클램프 → 58, zoom>36 → 36 → ≈1.611.
-	TestEqual(TEXT("zoom0→58(선클램프)"), UCameraControlLibrary::ZoomToHFov(0.f), 58.f, 1e-3f);
-	TestEqual(TEXT("zoom-5→58(선클램프)"), UCameraControlLibrary::ZoomToHFov(-5.f), 58.f, 1e-3f);
-	TestEqual(TEXT("zoom100→36클램프"), UCameraControlLibrary::ZoomToHFov(100.f), 58.f / 36.f, 1e-3f);
+	// clamp(설계 §6.2 — 기존 계약 전부 보존): zoom<1(0 포함) → 1 선클램프 → 56.5, zoom>36 → 36 → ≈1.710.
+	TestEqual(TEXT("zoom0→56.5(선클램프)"), UCameraControlLibrary::ZoomToHFov(0.f), 56.50000f, 1e-3f);
+	TestEqual(TEXT("zoom-5→56.5(선클램프)"), UCameraControlLibrary::ZoomToHFov(-5.f), 56.50000f, 1e-3f);
+	TestEqual(TEXT("zoom0.999→56.5(하한 경계)"), UCameraControlLibrary::ZoomToHFov(0.999f), 56.50000f, 1e-3f);
+	TestEqual(TEXT("zoom100→36클램프"), UCameraControlLibrary::ZoomToHFov(100.f), 1.71021f, 1e-3f);
+	TestEqual(TEXT("MaxZoom0.5→1보정"), UCameraControlLibrary::ZoomToHFov(10.f, 0.5f), 56.50000f, 1e-3f);
 
-	// 역함수: HFovToZoom.
-	TestEqual(TEXT("hfov58→1"), UCameraControlLibrary::HFovToZoom(58.f), 1.f, 1e-3f);
-	TestEqual(TEXT("hfov29→2"), UCameraControlLibrary::HFovToZoom(29.f), 2.f, 1e-3f);
-	TestEqual(TEXT("hfov1.611→36"), UCameraControlLibrary::HFovToZoom(58.f / 36.f), 36.f, 1e-3f);
-	TestEqual(TEXT("hfov0→36클램프"), UCameraControlLibrary::HFovToZoom(0.f), 36.f, 1e-3f);
+	// 역함수: HFovToZoom (설계 §6.3).
+	TestEqual(TEXT("hfov56.5→1"), UCameraControlLibrary::HFovToZoom(56.50000f), 1.f, 1e-3f);
+	TestEqual(TEXT("hfov30.076→2"), UCameraControlLibrary::HFovToZoom(30.07595f), 2.f, 1e-3f);
+	TestEqual(TEXT("hfov20.309→3"), UCameraControlLibrary::HFovToZoom(20.30875f), 3.f, 1e-3f);
+	TestEqual(TEXT("hfov15.301→4"), UCameraControlLibrary::HFovToZoom(15.30147f), 4.f, 1e-3f);
+	TestEqual(TEXT("hfov12.267→5"), UCameraControlLibrary::HFovToZoom(12.26737f), 5.f, 1e-3f);
+	TestEqual(TEXT("hfov7.685→8"), UCameraControlLibrary::HFovToZoom(7.68499f), 8.f, 1e-3f);
+	TestEqual(TEXT("hfov3.847→16"), UCameraControlLibrary::HFovToZoom(3.84682f), 16.f, 1e-3f);
+	TestEqual(TEXT("hfov3.078→20"), UCameraControlLibrary::HFovToZoom(3.07787f), 20.f, 1e-3f);
+	TestEqual(TEXT("hfov1.710→36"), UCameraControlLibrary::HFovToZoom(1.71021f), 36.f, 1e-3f);
 
-	// 라운드트립: HFovToZoom(ZoomToHFov(z)) ≈ z (z ∈ [1,36]).
+	// 정의역 방어(규격 정정 설계 §3.2 W1~W3, 영향도 G-5): 탄젠트 특이점에서 0나눗셈·부호반전·발산이 없어야 한다.
+	TestEqual(TEXT("hfov0→36(조기반환)"), UCameraControlLibrary::HFovToZoom(0.f), 36.f, 1e-3f);
+	TestEqual(TEXT("hfov-1→36(음수)"), UCameraControlLibrary::HFovToZoom(-1.f), 36.f, 1e-3f);
+	TestEqual(TEXT("hfov0.0001→36(상한 클램프)"), UCameraControlLibrary::HFovToZoom(0.0001f), 36.f, 1e-3f);
+	TestEqual(TEXT("hfov90→1(기본보다 광각)"), UCameraControlLibrary::HFovToZoom(90.f), 1.f, 1e-3f);
+	TestEqual(TEXT("hfov180→1(발산 방어 W3)"), UCameraControlLibrary::HFovToZoom(180.f), 1.f, 1e-3f);
+	TestEqual(TEXT("hfov200→1(부호반전 방어 W2)"), UCameraControlLibrary::HFovToZoom(200.f), 1.f, 1e-3f);
+	TestEqual(TEXT("hfov360→1(0나눗셈 방어 W1)"), UCameraControlLibrary::HFovToZoom(360.f), 1.f, 1e-3f);
+	TestEqual(TEXT("MaxZoom0.5→1보정(역방향)"), UCameraControlLibrary::HFovToZoom(30.f, 0.5f), 1.f, 1e-3f);
+
+	// DefaultHFov 정의역 이탈(W5 — EditAnywhere UPROPERTY 라 0·200 설정이 가능하다).
+	const float DegenerateHFov = UCameraControlLibrary::ZoomToHFov(1.f, 36.f, 0.f);
+	TestTrue(TEXT("DefaultHFov0→(0,1) 유한 양수 화각(음수·NaN 없음)"), DegenerateHFov > 0.f && DegenerateHFov < 1.f);
+	const float WideHFov = UCameraControlLibrary::ZoomToHFov(1.f, 36.f, 200.f);
+	TestTrue(TEXT("DefaultHFov200→(0,180) 유한 화각(발산·부호반전 없음)"), WideHFov > 0.f && WideHFov < 180.f);
+	TestEqual(TEXT("DefaultHFov0→역방향 1"), UCameraControlLibrary::HFovToZoom(30.f, 36.f, 0.f), 1.f, 1e-3f);
+	TestEqual(TEXT("DefaultHFov200→역방향 36"), UCameraControlLibrary::HFovToZoom(30.f, 36.f, 200.f), 36.f, 1e-3f);
+
+	// 라운드트립: HFovToZoom(ZoomToHFov(z)) ≈ z (z ∈ [1,36]). 전 구간 실측 최악 오차 5.65e-6.
 	const float Zooms[] = {1.f, 2.f, 5.f, 10.f, 20.f, 36.f};
 	for (float Z : Zooms)
 	{
 		const float RT = UCameraControlLibrary::HFovToZoom(UCameraControlLibrary::ZoomToHFov(Z));
 		TestEqual(TEXT("줌 라운드트립"), RT, Z, 1e-3f);
+	}
+
+	// CDO 일치(설계 §6.4 N1, 영향도 G-1): 56.5 는 PTZCameraActor.h UPROPERTY + 라이브러리 기본 인자 2곳에
+	// 중복 존재한다. 한쪽만 고치면 "액터 경유는 56.5, 라이브러리 직접 호출은 58" 로 모델이 분열되므로 봉인한다.
+	const APTZCameraActor* CamCdo = GetDefault<APTZCameraActor>();
+	if (TestNotNull(TEXT("APTZCameraActor CDO"), CamCdo))
+	{
+		TestEqual(TEXT("CDO DefaultHFov == 라이브러리 기본 인자"),
+			CamCdo->DefaultHFov, UCameraControlLibrary::ZoomToHFov(1.f), 1e-4f);
+		TestEqual(TEXT("CDO MaxZoom == 36"), CamCdo->MaxZoom, 36.f, 1e-4f);
+	}
+
+	// 16:9 수직 화각 = 2·atan(tan(H/2)·9/16) → HNR-2036LA 사양서 V 33.63° 대조(설계 §6.4 N2).
+	const float VFovDeg = FMath::RadiansToDegrees(2.f * FMath::Atan(
+		FMath::Tan(FMath::DegreesToRadians(UCameraControlLibrary::ZoomToHFov(1.f) * 0.5f)) * 9.f / 16.f));
+	TestEqual(TEXT("16:9 수직 화각 → 사양서 33.63"), VFovDeg, 33.63406f, 0.01f);
+
+	// 액터 경유 절대값(영향도 G-12): SetZoom → Capture->FOVAngle 의 절대값을 검증한다.
+	// RpcServerTest 의 setPTZ/getPTZ 왕복은 정/역 상쇄로 어떤 모델에서도 통과하므로 모델 회귀를 못 잡는다.
+	UWorld* World = (GEngine && GEngine->GetWorldContexts().Num() > 0) ? GWorld : nullptr;
+	if (!World)
+	{
+		AddWarning(TEXT("에디터 월드 없음 — SetZoom→FOVAngle 절대값 검증 건너뜀."));
+		return true;
+	}
+
+	APTZCameraActor* Camera = World->SpawnActor<APTZCameraActor>();
+	if (TestNotNull(TEXT("PTZ Camera 스폰"), Camera))
+	{
+		Camera->SetZoom(2.f);
+		TestEqual(TEXT("SetZoom(2)→FOVAngle 30.076(절대값)"), Camera->Capture->FOVAngle, 30.07595f, 1e-3f);
+		TestEqual(TEXT("SetZoom(2)→GetZoom 2.0"), Camera->GetZoom(), 2.f, 1e-3f);
+		Camera->SetZoom(1.f);
+		TestEqual(TEXT("SetZoom(1)→FOVAngle 56.500(절대값)"), Camera->Capture->FOVAngle, 56.50000f, 1e-3f);
+		Camera->SetZoom(36.f);
+		TestEqual(TEXT("SetZoom(36)→FOVAngle 1.710(절대값)"), Camera->Capture->FOVAngle, 1.71021f, 1e-3f);
+		Camera->Destroy();
 	}
 
 	return true;

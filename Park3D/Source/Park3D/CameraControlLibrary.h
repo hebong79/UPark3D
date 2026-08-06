@@ -35,18 +35,22 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Camera|Geometry")
 	static FCamVec3 WorldToUnrealMeters(const FVector& UECm, float MetersToUU = 100.f);
 
-	// === 줌 ↔ FOV (설계 §7.3) ===
+	// === 줌 ↔ FOV (설계 §7.3 + 규격 정정 설계 §2.2) ===
 	// UE 는 USceneCaptureComponent2D::FOVAngle / UCameraComponent::FieldOfView 가 이미 "수평" 화각이므로
-	// Unity 와 달리 aspect 변환이 불필요 → 결정적(deterministic). horizontalFov = DefaultHFov / zoom.
-	//  zoom<1(0 포함) → 1 선클램프(§12-C, Unity SCamDir.zoom 기본값 0 으로 인한 58/0 방지).
+	// Unity 와 달리 aspect 변환이 불필요 → 결정적(deterministic).
+	// 실장비 휴컴스 HNR-2036LA 사양(광각 H 56.5° / V 33.63°, 광학 x36) 기준 탄젠트 광학 모델:
+	//  horizontalFov = 2·atan( tan(DefaultHFov/2) / clamp(zoom, 1, MaxZoom) )
+	//  zoom<1(0 포함) → 1 선클램프(§12-C, Unity SCamDir.zoom 기본값 0 으로 인한 0나눗셈 방지).
+	// 아래 두 기본 인자 56.5 는 APTZCameraActor::DefaultHFov 와 한 쌍이다. 모델·값 교체 시 동시 수정할 것
+	//  (불일치는 Automation `Park3D.CameraControl.Fov` 의 CDO 단정이 잡는다 — 규격 정정 설계 §2.4).
 
-	/** 줌 배율(1~MaxZoom) → 수평 FOV(도). clamp(zoom,1,MaxZoom) 후 DefaultHFov/zoom. zoom=1→58, 2→29, 36→≈1.611. */
+	/** 줌 배율(1~MaxZoom) → 수평 FOV(도). 2·atan(tan(DefaultHFov/2)/clamp(zoom,1,MaxZoom)). zoom=1→56.5, 2→≈30.076, 36→≈1.710. */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Camera|Optics")
-	static float ZoomToHFov(float Zoom, float MaxZoom = 36.f, float DefaultHFov = 58.f);
+	static float ZoomToHFov(float Zoom, float MaxZoom = 36.f, float DefaultHFov = 56.5f);
 
-	/** 수평 FOV(도) → 줌 배율. clamp(DefaultHFov/HFov, 1, MaxZoom). ZoomToHFov 의 역함수. */
+	/** 수평 FOV(도) → 줌 배율. clamp(tan(DefaultHFov/2)/tan(HFov/2), 1, MaxZoom). ZoomToHFov 의 역함수. */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Camera|Optics")
-	static float HFovToZoom(float HFov, float MaxZoom = 36.f, float DefaultHFov = 58.f);
+	static float HFovToZoom(float HFov, float MaxZoom = 36.f, float DefaultHFov = 56.5f);
 
 	// === PTZ 회전 (설계 §7.2 — 부호는 §11 가정, TP-ROT 동작확인에서 확정) ===
 	// 차량 Yaw 변환(UCarPlacementLibrary::UnityRotYToUEYaw)과 분리한 카메라 전용 함수(오프셋 이슈 격리).

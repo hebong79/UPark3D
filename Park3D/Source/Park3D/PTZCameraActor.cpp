@@ -22,6 +22,10 @@ APTZCameraActor::APTZCameraActor()
 	Capture->bCaptureEveryFrame = false;   // 선택 시에만 SetCaptureEnabled(true)
 	Capture->bCaptureOnMovement = false;
 	Capture->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;  // 톤매핑된 색(UI 프리뷰용)
+	// 비선택 카메라도 FSceneViewState 를 유지한다. 이게 없으면 bCaptureEveryFrame=false 인 캡처마다
+	// 엔진(USceneCaptureComponent::GetViewState)이 뷰 스테이트를 파괴해 Lumen GI/리플렉션/TSR
+	// 히스토리가 사라진다 — /stream 만 간접광이 빠져 어둡고 갈색으로 보이던 원인.
+	Capture->bAlwaysPersistRenderingState = true;
 	Capture->FOVAngle = DefaultHFov;       // zoom=1 기준(설계 §7.3)
 
 	// 폴대: 바닥 Z=0 시각 표시. 높이(Z)·팬틸트(회전)를 상속하지 않도록 절대 위치/회전 사용.

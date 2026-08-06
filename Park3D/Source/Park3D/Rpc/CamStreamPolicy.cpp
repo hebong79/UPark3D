@@ -13,6 +13,27 @@ namespace Park3DCamStream
 		return BasePort + CamId;
 	}
 
+	bool PortRangeToBase(int32 MinPort, int32 MaxPort, int32& OutBasePort, int32& OutMaxCameras)
+	{
+		if (MinPort < 2 || MaxPort < MinPort || MaxPort > 65535)
+		{
+			return false;
+		}
+		OutBasePort = MinPort - 1;
+		OutMaxCameras = MaxPort - MinPort + 1;
+		return true;
+	}
+
+	int32 ExtendedMaxPort(int32 MinPort, int32 CamCount)
+	{
+		if (MinPort < 2 || MinPort > 65535 || CamCount <= 0)
+		{
+			return 0;
+		}
+		const int64 Wanted = static_cast<int64>(MinPort) + CamCount - 1;
+		return static_cast<int32>(FMath::Min<int64>(Wanted, 65535));
+	}
+
 	void DiffChannels(int32 OldCount, int32 NewCount, int32 MaxCameras,
 	                  TArray<int32>& OutToOpen, TArray<int32>& OutToClose)
 	{

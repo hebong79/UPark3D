@@ -56,11 +56,18 @@ public:
 	UPROPERTY(config, EditAnywhere, Category = "CamStream")
 	bool bEnabled = true;
 
-	/** 포트 시작값. camId 1 = BasePort+1 (기본 13601). 13510(RPC)/13520(MCP 브리지)와 무충돌. */
+	/**
+	 * 포트 시작값. camId 1 = BasePort+1 (기본 13601). 13510(RPC)/13520(MCP 브리지)와 무충돌.
+	 * Save/Config/config_pmaker.json 에 cam_port_min/max 가 있으면 기동 시 그 값으로 덮인다.
+	 */
 	UPROPERTY(config, EditAnywhere, Category = "CamStream")
 	int32 BasePort = 13600;
 
-	/** 채널 개설 상한(포트 13601~13610). 초과 카메라는 채널을 받지 못한다. */
+	/**
+	 * 채널 개설 상한(기본 포트 13601~13610). 초과 카메라는 채널을 받지 못한다.
+	 * 카메라위치 파일을 열거나 저장할 때 대수가 이 값을 넘으면 EnsurePortRangeForCameras 가
+	 * 대역을 늘리고 config 의 cam_port_max 를 함께 갱신한다.
+	 */
 	UPROPERTY(config, EditAnywhere, Category = "CamStream", meta = (ClampMin = "1"))
 	int32 MaxCameras = 10;
 
@@ -111,6 +118,14 @@ public:
 
 	/** camId → 이 카메라가 실제로 바인드한 스트림 포트. 채널 없으면 false. */
 	bool GetCameraStreamPort(int32 CamId, int32& OutPort) const;
+
+	/**
+	 * 카메라 CamCount 대를 담도록 포트 대역 상한을 보장한다. 늘렸으면 true.
+	 * 대역이 모자라면 상한을 CamCount 에 맞춰 올리고, config 파일이 있으면 cam_port_max 도 기록한다.
+	 * 채널 개설 자체는 기존대로 Tick 의 SyncChannels 가 한다 — 이 함수는 상한만 올린다.
+	 * 카메라위치 파일 로딩/저장 시점에 호출한다(대수가 바뀌는 지점).
+	 */
+	bool EnsurePortRangeForCameras(int32 CamCount);
 
 	/** 채널별 상태 한 줄씩(진단·로그용). */
 	TArray<FString> GetChannelStatusLines() const;

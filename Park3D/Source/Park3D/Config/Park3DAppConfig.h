@@ -34,6 +34,20 @@ struct FPark3DAppConfig
 	/** PTZ 카메라 줌 상한(배율). 0 이하 = 미지정(액터 기본값 유지). */
 	UPROPERTY(BlueprintReadWrite, Category = "Config")
 	float MaxZoom = 0.f;
+
+	/** 카메라 스트림 포트 대역 시작(camId 1 의 포트). 0 = 미지정. */
+	UPROPERTY(BlueprintReadWrite, Category = "Config")
+	int32 CamPortMin = 0;
+
+	/** 카메라 스트림 포트 대역 끝. 대역 크기 = Max-Min+1 이 곧 채널 상한이다. 0 = 미지정. */
+	UPROPERTY(BlueprintReadWrite, Category = "Config")
+	int32 CamPortMax = 0;
+
+	/** 포트 대역이 유효한가(둘 다 지정 + 2<=min<=max<=65535). min=1 은 BasePort 0 이 되어 거부된다. */
+	bool HasValidCamPortRange() const
+	{
+		return CamPortMin >= 2 && CamPortMax >= CamPortMin && CamPortMax <= 65535;
+	}
 };
 
 UCLASS()
@@ -64,6 +78,15 @@ public:
 
 	/** 기본 경로(GetConfigFilePath)에서 로드. */
 	static bool Load(FPark3DAppConfig& Out);
+
+	/**
+	 * config 파일의 cam_port_min/max 를 바꿔 다시 쓴다. 파일이 없거나 파싱/기록 실패면 false.
+	 * 구조체를 통째로 직렬화하지 않고 원본 JSON 오브젝트의 해당 필드만 교체한다 —
+	 * 이 구조체가 모르는 키(사람이 손으로 넣은 항목)가 자동 수정에 지워지지 않게 하려는 것이다.
+	 * max 만 쓰지 않는 이유: FromJson 이 두 키가 모두 있을 때만 대역을 채우므로, min 이 없는
+	 * config(패키지 기본 파일)에서는 확장이 다음 기동에 조용히 사라진다.
+	 */
+	static bool UpdateCamPortRange(const FString& Path, int32 NewMin, int32 NewMax);
 
 	/**
 	 * 데이터 파일 경로 해석. 파일명만 주어지면 Save/3D/<SubDir>/<파일명>,

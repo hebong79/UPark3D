@@ -41,14 +41,34 @@ FCamVec3 UCameraControlLibrary::WorldToUnrealMeters(const FVector& UECm, float M
 	return Out;
 }
 
-// === 줌 ↔ FOV (설계 §7.3) ===
-// UE FOVAngle 은 이미 수평 화각 → aspect 변환 불필요. horizontalFov = DefaultHFov / clamp(zoom, 1, MaxZoom).
+// === 줌 ↔ FOV (설계 §7.3 + 규격 정정 설계 §4) ===
+// UE FOVAngle 은 이미 수평 화각 → aspect 변환 불필요.
+// 실장비(휴컴스 HNR-2036LA: 광각 H 56.5° / V 33.63°, 광학 x36)의 렌즈는 화각이 배율에 반비례하지 않는다.
+//  horizontalFov = 2·atan( tan(DefaultHFov/2) / clamp(zoom, 1, MaxZoom) )   ← 탄젠트 광학 모델
 //  zoom<1(0 포함) → 1 선클램프(§12-C). MaxZoom 이 비정상(<=1)이면 1 로 보정(0나눗셈/역전 방지).
+
+namespace
+{
+	/**
+	 * 화각(도)의 반각 탄젠트. FMath::Tan 은 라디안이므로 반각을 먼저 취한 뒤 라디안화한다(규격 정정 설계 §4.1).
+	 * FovDeg 를 (0,180) 열린구간으로 선클램프해 0나눗셈·부호반전·발산·NaN 을 일괄 차단한다(규격 정정 설계 §3.3).
+	 *  하한 0.001° → tan≈8.727e-6 (항상 양수·비영), 상한 179.999° → tan≈1.146e5 (유한).
+	 * 정의역 이탈은 실제로 도달 가능하다 — HFov 는 cam.setFOV 로 들어오는 외부 RPC 입력이고,
+	 * DefaultHFov 는 APTZCameraActor 의 EditAnywhere UPROPERTY 다.
+	 */
+	float TanHalfFovDeg(float FovDeg)
+	{
+		const float Clamped = FMath::Clamp(FovDeg, 0.001f, 179.999f);
+		return FMath::Tan(FMath::DegreesToRadians(Clamped * 0.5f));
+	}
+}
+
 float UCameraControlLibrary::ZoomToHFov(float Zoom, float MaxZoom, float DefaultHFov)
 {
 	const float MaxZ = (MaxZoom < 1.f) ? 1.f : MaxZoom;
 	const float ZoomClamped = FMath::Clamp(Zoom, 1.f, MaxZ);
-	return DefaultHFov / ZoomClamped;
+	// Atan 반환은 라디안 → 2배한 뒤 도로 환산(규격 정정 설계 §4.1). zoom=1 이면 2·atan(tan(H/2))=H 항등.
+	return FMath::RadiansToDegrees(2.f * FMath::Atan(TanHalfFovDeg(DefaultHFov) / ZoomClamped));
 }
 
 float UCameraControlLibrary::HFovToZoom(float HFov, float MaxZoom, float DefaultHFov)
@@ -59,7 +79,8 @@ float UCameraControlLibrary::HFovToZoom(float HFov, float MaxZoom, float Default
 		// 화각 0 이하 → 무한대 줌 → 최대 배율로 클램프.
 		return MaxZ;
 	}
-	const float Zoom = DefaultHFov / HFov;
+	// 분자·분모 모두 헬퍼가 라디안 변환을 마친 무차원 비율 → 추가 도↔라디안 변환 금지(규격 정정 설계 §4.1).
+	const float Zoom = TanHalfFovDeg(DefaultHFov) / TanHalfFovDeg(HFov);
 	return FMath::Clamp(Zoom, 1.f, MaxZ);
 }
 

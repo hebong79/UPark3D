@@ -50,9 +50,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PTZ")
 	float MaxZoom = 36.f;
 
-	/** 기본 수평 화각(도). zoom=1 일 때의 FOV(설계 §7.3, Unity DEFAULT_FOV=58 수평). */
+	/**
+	 * 기본 수평 화각(도). zoom=1 일 때의 FOV(설계 §7.3).
+	 * 실장비 휴컴스 HNR-2036LA 사양(광각 H 56.5° / V 33.63°) 기준 — 구 Unity DEFAULT_FOV=58 에서 정정.
+	 * UCameraControlLibrary::ZoomToHFov/HFovToZoom 의 기본 인자와 한 쌍이다. 모델·값 교체 시 동시 수정할 것
+	 *  (불일치는 Automation `Park3D.CameraControl.Fov` 의 CDO 단정이 잡는다 — 규격 정정 설계 §2.4).
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PTZ")
-	float DefaultHFov = 58.f;
+	float DefaultHFov = 56.5f;
 
 	/** 폴대 판별 태그(매니저 트레이스에서 사용, 설계 §12-H). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PTZ")

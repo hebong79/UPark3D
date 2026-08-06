@@ -1,0 +1,71 @@
+{
+  "profile": "vp",
+  "n": 3,
+  "aggregate": {
+    "ground_mean": {
+      "mean": 130.506,
+      "std": 8.702
+    },
+    "ground_median": {
+      "mean": 133.147,
+      "std": 12.999
+    },
+    "ground_p95": {
+      "mean": 170.543,
+      "std": 32.812
+    },
+    "crush_pct": {
+      "mean": 2.595,
+      "std": 3.268
+    },
+    "clip_pct": {
+      "mean": 0.009,
+      "std": 0.013
+    },
+    "frame_mean": {
+      "mean": 140.232,
+      "std": 0.925
+    }
+  },
+  "frames": [
+    {
+      "file": "shots/r1_vp_1.png",
+      "size": [
+        1280,
+        720
+      ],
+      "ground_mean": 135.2610953822219,
+      "ground_median": 143.5624,
+      "ground_p95": 216.9398,
+      "crush_pct": 7.2059967470475925,
+      "clip_pct": 0.028286542677321263,
+      "frame_mean": 140.86455216145833
+    },
+    {
+      "file": "shots/r1_vp_2.png",
+      "size": [
+        1280,
+        720
+      ],
+      "ground_mean": 118.29915223110103,
+      "ground_median": 114.8212,
+      "ground_p95": 147.98919999999998,
+      "crush_pct": 0.01767908917332579,
+      "clip_pct": 0.0,
+      "frame_mean": 138.92331610069442
+    },
+    {
+      "file": "shots/r1_vp_3.png",
+      "size": [
+        1280,
+        720
+      ],
+      "ground_mean": 137.95879689555193,
+      "ground_median": 141.0578,
+      "ground_p95": 146.7008,
+      "crush_pct": 0.5621950357117602,
+      "clip_pct": 0.0,
+      "frame_mean": 140.9075437521701
+    }
+  ]
+}

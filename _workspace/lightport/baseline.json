@@ -1,0 +1,84 @@
+{
+  "설명": "이식 전 기준선 — 사용자가 실제 실행하는 패키지 조명 설정(EV100 1.13 / Sun 22.16 / Alt 40.62 / Az 43.73 / Sky 2.41)을 저장소 -game 빌드에 적용해 측정",
+  "settings": {
+    "ExposureEV100": 1.13,
+    "SunIntensity": 22.16,
+    "SunAltitudeDeg": 40.62,
+    "SunAzimuthDeg": 43.73,
+    "SkyIntensity": 2.41
+  },
+  "rig": {
+    "cam1": {
+      "pan": 28.8,
+      "tilt": 9.2,
+      "zoom": 1.62
+    },
+    "cam2": {
+      "pan": 113.8,
+      "tilt": 10.0,
+      "zoom": 1.5
+    },
+    "res": "1280x720",
+    "n_frames": 3
+  },
+  "measured": {
+    "cam1": {
+      "ground_mean": 66.278,
+      "ground_median": 69.232,
+      "ground_p95": 78.994,
+      "crush_pct": 0.0,
+      "clip_pct": 0.0,
+      "frame_mean": 92.08,
+      "sky_mean": 177.281,
+      "sky_crush_pct": 0.0,
+      "sky_clip_pct": 0.0,
+      "_std_ground_mean": 0.046
+    },
+    "cam2": {
+      "ground_mean": 71.485,
+      "ground_median": 73.944,
+      "ground_p95": 84.851,
+      "crush_pct": 0.0,
+      "clip_pct": 0.0,
+      "frame_mean": 96.811,
+      "sky_mean": 172.659,
+      "sky_crush_pct": 0.0,
+      "sky_clip_pct": 0.0,
+      "_std_ground_mean": 0.142
+    },
+    "viewport": {
+      "ground_mean": 126.353,
+      "ground_median": 126.24,
+      "ground_p95": 129.641,
+      "crush_pct": 0.0,
+      "clip_pct": 0.0,
+      "frame_mean": 141.662,
+      "_std_ground_mean": 0.031
+    }
+  },
+  "acceptance": {
+    "cam1": {
+      "L0": 66.278,
+      "L_min": 56.336,
+      "L_max": 76.22,
+      "crush_max_pct": 2.0,
+      "clip_max_pct": 0.5,
+      "sky_min": 88.641
+    },
+    "cam2": {
+      "L0": 71.485,
+      "L_min": 60.762,
+      "L_max": 82.208,
+      "crush_max_pct": 2.0,
+      "clip_max_pct": 0.5,
+      "sky_min": 86.329
+    },
+    "viewport": {
+      "L0": 126.353,
+      "L_min": 107.4,
+      "L_max": 145.306,
+      "crush_max_pct": 2.0,
+      "clip_max_pct": 0.5
+    }
+  }
+}

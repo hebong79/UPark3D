@@ -1,0 +1,94 @@
+{
+  "label": "ev0p5",
+  "cam": {
+    "surface": "cam",
+    "shots": [
+      "ev0p5_cam1.jpg",
+      "ev0p5_cam2.jpg",
+      "ev0p5_cam3.jpg"
+    ],
+    "n": 3,
+    "ground": {
+      "mean": 7.288,
+      "mean_sd": 0.002,
+      "median": 7.068,
+      "median_sd": 0.0,
+      "p95": 10.778,
+      "p95_sd": 0.0,
+      "crush_pct": 100.0,
+      "crush_pct_sd": 0.0,
+      "clip_pct": 0.0,
+      "clip_pct_sd": 0.0
+    },
+    "decal": {
+      "mean": 51.174,
+      "mean_sd": 0.011,
+      "median": 55.875,
+      "median_sd": 0.02,
+      "p95": 136.078,
+      "p95_sd": 0.126,
+      "crush_pct": 34.453,
+      "crush_pct_sd": 0.021,
+      "clip_pct": 0.0,
+      "clip_pct_sd": 0.0
+    },
+    "sky": {
+      "mean": 100.709,
+      "mean_sd": 0.017,
+      "median": 103.04,
+      "median_sd": 0.166,
+      "p95": 117.484,
+      "p95_sd": 0.0,
+      "crush_pct": 0.0,
+      "crush_pct_sd": 0.0,
+      "clip_pct": 0.0,
+      "clip_pct_sd": 0.0
+    },
+    "decal_ratio": 2.4354
+  },
+  "vp": {
+    "surface": "vp",
+    "shots": [
+      "ev0p5_vp1.png",
+      "ev0p5_vp2.png",
+      "ev0p5_vp3.png"
+    ],
+    "n": 3,
+    "ground": {
+      "mean": 86.462,
+      "mean_sd": 0.015,
+      "median": 63.476,
+      "median_sd": 0.0,
+      "p95": 226.571,
+      "p95_sd": 0.0,
+      "crush_pct": 0.724,
+      "crush_pct_sd": 0.011,
+      "clip_pct": 0.0,
+      "clip_pct_sd": 0.0
+    },
+    "ground2": {
+      "mean": 58.537,
+      "mean_sd": 0.001,
+      "median": 58.336,
+      "median_sd": 0.0,
+      "p95": 62.24,
+      "p95_sd": 0.034,
+      "crush_pct": 0.0,
+      "crush_pct_sd": 0.0,
+      "clip_pct": 0.0,
+      "clip_pct_sd": 0.0
+    },
+    "sky": {
+      "mean": 68.269,
+      "mean_sd": 0.02,
+      "median": 62.123,
+      "median_sd": 0.0,
+      "p95": 112.429,
+      "p95_sd": 0.002,
+      "crush_pct": 0.0,
+      "crush_pct_sd": 0.0,
+      "clip_pct": 0.0,
+      "clip_pct_sd": 0.0
+    }
+  }
+}

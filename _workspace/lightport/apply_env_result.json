@@ -1,0 +1,290 @@
+{
+  "applied": {
+    "DirectionalLight": {
+      "use_temperature": {
+        "before": "True",
+        "after": "True"
+      },
+      "temperature": {
+        "before": "6500.0",
+        "after": "6500.0"
+      },
+      "light_source_angle": {
+        "before": "0.7357000112533569",
+        "after": "1.2000000476837158"
+      },
+      "light_source_soft_angle": {
+        "before": "0.0",
+        "after": "1.2000000476837158"
+      },
+      "indirect_lighting_intensity": {
+        "before": "1.0",
+        "after": "2.0"
+      },
+      "specular_scale": {
+        "before": "1.0",
+        "after": "0.9990000128746033"
+      },
+      "dynamic_shadow_distance_movable_light": {
+        "before": "20000.0",
+        "after": "20000.0"
+      },
+      "dynamic_shadow_cascades": {
+        "before": "4",
+        "after": "4"
+      },
+      "cascade_distribution_exponent": {
+        "before": "3.0",
+        "after": "3.0"
+      },
+      "volumetric_scattering_intensity": {
+        "before": "1.0",
+        "after": "1.0"
+      },
+      "atmosphere_sun_light": {
+        "before": "True",
+        "after": "True"
+      },
+      "atmosphere_sun_light_index": {
+        "before": "0",
+        "after": "0"
+      },
+      "forward_shading_priority": {
+        "before": "0",
+        "after": "2"
+      }
+    },
+    "SkyLight": {
+      "real_time_capture": {
+        "before": "True",
+        "after": "True"
+      },
+      "source_type": {
+        "before": "<SkyLightSourceType.SLS_CAPTURED_SCENE: 0>",
+        "after": "<SkyLightSourceType.SLS_CAPTURED_SCENE: 0>"
+      },
+      "cast_shadows": {
+        "before": "True",
+        "after": "False"
+      },
+      "lower_hemisphere_is_black": {
+        "before": "True",
+        "after": "True"
+      },
+      "lower_hemisphere_color": {
+        "before": "<Struct 'LinearColor' (0x000001B7F0F8FD18) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>",
+        "after": "<Struct 'LinearColor' (0x000001B7F0F8FD18) {r: 0.034535, g: 0.054886, b: 0.088408, a: 1.000000}>"
+      },
+      "cubemap_resolution": {
+        "before": "128",
+        "after": "128"
+      },
+      "sky_distance_threshold": {
+        "before": "150000.0",
+        "after": "150000.0"
+      },
+      "occlusion_max_distance": {
+        "before": "1000.0",
+        "after": "1000.0"
+      },
+      "mobility": {
+        "before": "<ComponentMobility.MOVABLE: 2>",
+        "after": "<ComponentMobility.MOVABLE: 2>"
+      }
+    },
+    "SkyAtmosphere": {
+      "rayleigh_scattering_scale": {
+        "before": "0.03310000151395798",
+        "after": "0.03999999910593033"
+      },
+      "rayleigh_scattering": {
+        "before": "<Struct 'LinearColor' (0x000001B7699B82AC) {r: 0.175287, g: 0.409607, b: 1.000000, a: 30.211479}>",
+        "after": "<Struct 'LinearColor' (0x000001B7699B82AC) {r: 0.168627, g: 0.407843, b: 1.000000, a: 1.000000}>"
+      },
+      "mie_scattering_scale": {
+        "before": "0.003996000159531832",
+        "after": "0.013996000401675701"
+      },
+      "mie_scattering": {
+        "before": "<Struct 'LinearColor' (0x000001B7699B82C4) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>",
+        "after": "<Struct 'LinearColor' (0x000001B7699B82C4) {r: 0.802083, g: 0.879982, b: 1.000000, a: 1.000000}>"
+      },
+      "mie_absorption": {
+        "before": "<Struct 'LinearColor' (0x000001B7699B82D8) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>",
+        "after": "<Struct 'LinearColor' (0x000001B7699B82D8) {r: 1.000000, g: 1.000000, b: 1.000000, a: 1.000000}>"
+      },
+      "mie_anisotropy": {
+        "before": "0.800000011920929",
+        "after": "0.75"
+      },
+      "other_absorption_scale": {
+        "before": "0.0018810000037774444",
+        "after": "0.0020000000949949026"
+      },
+      "other_absorption": {
+        "before": "<Struct 'LinearColor' (0x000001B7699B82F4) {r: 0.345561, g: 1.000000, b: 0.045189, a: 531.632080}>",
+        "after": "<Struct 'LinearColor' (0x000001B7699B82F4) {r: 0.897238, g: 1.000000, b: 0.095307, a: 0.002000}>"
+      },
+      "other_tent_distribution": {
+        "before": "<Struct 'TentDistribution' (0x000001B7699B8304) {tip_altitude: 25.000000, tip_value: 1.000000, width: 15.000000}>",
+        "after": "<Struct 'TentDistribution' (0x000001B7699B8304) {tip_altitude: 25.000000, tip_value: 1.000000, width: 15.000000}>"
+      },
+      "ground_albedo": {
+        "before": "<Struct 'Color' (0x000001B7699B8298) {b: 170, g: 170, r: 170, a: 255}>",
+        "after": "<Struct 'Color' (0x000001B7699B8298) {b: 170, g: 170, r: 170, a: 255}>"
+      },
+      "height_fog_contribution": {
+        "before": "1.0",
+        "after": "2.299999952316284"
+      },
+      "aerial_pespective_view_distance_scale": {
+        "before": "1.0",
+        "after": "0.0"
+      }
+    },
+    "ExponentialHeightFog": {
+      "actor_location_z": {
+        "before": "-6850.0",
+        "after": "-150.0"
+      },
+      "fog_density": {
+        "before": "0.04360000044107437",
+        "after": "0.005510000046342611"
+      },
+      "fog_height_falloff": {
+        "before": "0.20000000298023224",
+        "after": "0.05999999865889549"
+      },
+      "fog_max_opacity": {
+        "before": "1.0",
+        "after": "1.0"
+      },
+      "start_distance": {
+        "before": "0.0",
+        "after": "10295.083984375"
+      },
+      "fog_cutoff_distance": {
+        "before": "0.0",
+        "after": "0.0"
+      },
+      "fog_inscattering_luminance": {
+        "before": "<Struct 'LinearColor' (0x000001B7699B6AB4) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>",
+        "after": "<Struct 'LinearColor' (0x000001B7699B6AB4) {r: 0.000000, g: 0.000000, b: 0.000000, a: 0.000000}>"
+      },
+      "directional_inscattering_exponent": {
+        "before": "4.0",
+        "after": "5.0"
+      },
+      "directional_inscattering_luminance": {
+        "before": "<Struct 'LinearColor' (0x000001B7699B6B1C) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>",
+        "after": "<Struct 'LinearColor' (0x000001B7699B6B1C) {r: 0.788098, g: 0.642447, b: 0.555445, a: 5.712000}>"
+      },
+      "directional_inscattering_start_distance": {
+        "before": "10000.0",
+        "after": "10000.0"
+      },
+      "second_fog_data": {
+        "before": "<Struct 'ExponentialHeightFogData' (0x000001B7699B6A98) {fog_density: 0.000000, fog_height_falloff: 0.200000, fog_height_offset: 0.000000}>",
+        "after": "<Struct 'ExponentialHeightFogData' (0x000001B7699B6A98) {fog_density: 0.000000, fog_height_falloff: 0.100000, fog_height_offset: 0.000000}>"
+      },
+      "volumetric_fog_scattering_distribution": {
+        "before": "0.20000000298023224",
+        "after": "0.20000000298023224"
+      },
+      "volumetric_fog_albedo": {
+        "before": "<Struct 'Color' (0x000001B7699B6B44) {b: 255, g: 255, r: 255, a: 255}>",
+        "after": "<Struct 'Color' (0x000001B7699B6B44) {b: 255, g: 255, r: 255, a: 255}>"
+      },
+      "volumetric_fog_emissive": {
+        "before": "<Struct 'LinearColor' (0x000001B7699B6B48) {r: 0.000000, g: 0.000000, b: 0.000000, a: 0.000000}>",
+        "after": "<Struct 'LinearColor' (0x000001B7699B6B48) {r: 0.000000, g: 0.000000, b: 0.000000, a: 0.000000}>"
+      },
+      "volumetric_fog_extinction_scale": {
+        "before": "1.0",
+        "after": "2.0"
+      },
+      "volumetric_fog_distance": {
+        "before": "6000.0",
+        "after": "8000.0"
+      }
+    },
+    "VolumetricCloud": {
+      "layer_bottom_altitude": {
+        "before": "5.0",
+        "after": "0.6000000238418579"
+      },
+      "layer_height": {
+        "before": "10.0",
+        "after": "0.699999988079071"
+      },
+      "tracing_start_max_distance": {
+        "before": "350.0",
+        "after": "100.0"
+      },
+      "tracing_max_distance": {
+        "before": "50.0",
+        "after": "20.0"
+      },
+      "ground_albedo": {
+        "before": "<Struct 'Color' (0x000001B7DA96302C) {b: 170, g: 170, r: 170, a: 255}>",
+        "after": "<Struct 'Color' (0x000001B7DA96302C) {b: 170, g: 170, r: 170, a: 255}>"
+      },
+      "view_sample_count_scale": {
+        "before": "1.0",
+        "after": "1.8700000047683716"
+      },
+      "reflection_view_sample_count_scale_value": {
+        "before": "0.1041666641831398",
+        "after": "2.0"
+      },
+      "shadow_view_sample_count_scale": {
+        "before": "1.0",
+        "after": "0.4000000059604645"
+      },
+      "shadow_reflection_view_sample_count_scale_value": {
+        "before": "0.30000001192092896",
+        "after": "0.30000001192092896"
+      },
+      "shadow_tracing_distance": {
+        "before": "15.0",
+        "after": "0.15585669875144958"
+      },
+      "sky_light_cloud_bottom_occlusion": {
+        "before": "0.5",
+        "after": "0.0"
+      }
+    },
+    "SM_SkySphere": {
+      "actor_hidden": {
+        "before": "False",
+        "after": "True"
+      },
+      "components": {
+        "StaticMeshComponent0": {
+          "visible": "False",
+          "hidden_in_game": "True"
+        }
+      }
+    }
+  },
+  "skipped": {},
+  "errors": [],
+  "dirty_before_save": [
+    "/Game/__ExternalActors__/Maps/PresetMaker1/0/XN/0REUIKFX1QOCF7LJROUR9G",
+    "/Game/__ExternalActors__/Maps/PresetMaker1/4/AC/NISAE1O44NDS0B9BGVRHMD",
+    "/Game/__ExternalActors__/Maps/PresetMaker1/5/2S/IXGTX5HKJ3EVA66UM8VMA1",
+    "/Game/__ExternalActors__/Maps/PresetMaker1/7/DI/RM1UX576R1CQP9NYPB1ZOY",
+    "/Game/__ExternalActors__/Maps/PresetMaker1/7/Y0/6Y6HPGUPA3PA9U1AMYGV77",
+    "/Game/__ExternalActors__/Maps/PresetMaker1/D/V6/ZBHQD03M08IOQAL5HTQMD3"
+  ],
+  "target_packages": [
+    "/Game/__ExternalActors__/Maps/PresetMaker1/0/XN/0REUIKFX1QOCF7LJROUR9G",
+    "/Game/__ExternalActors__/Maps/PresetMaker1/4/AC/NISAE1O44NDS0B9BGVRHMD",
+    "/Game/__ExternalActors__/Maps/PresetMaker1/5/2S/IXGTX5HKJ3EVA66UM8VMA1",
+    "/Game/__ExternalActors__/Maps/PresetMaker1/7/DI/RM1UX576R1CQP9NYPB1ZOY",
+    "/Game/__ExternalActors__/Maps/PresetMaker1/7/Y0/6Y6HPGUPA3PA9U1AMYGV77",
+    "/Game/__ExternalActors__/Maps/PresetMaker1/D/V6/ZBHQD03M08IOQAL5HTQMD3"
+  ],
+  "unexpected_dirty": [],
+  "save": "save_packages -> True"
+}

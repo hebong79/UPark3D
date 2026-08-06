@@ -34,15 +34,26 @@ if not errorlevel 1 (
 
 echo [PACKAGE] start - Development / Win64
 echo [PACKAGE] log: "%LOG%"
-echo [PACKAGE] to follow progress, in another window:
-echo           powershell -NoProfile -Command "Get-Content -Wait '%LOG%'"
 echo.
+
+rem Progress percentage is drawn by BuildProgress.ps1, which also writes the full
+rem output to the log (a .bat has no tee). The percentages come from lines UAT
+rem already prints: "[n/m] Compile ..." while building and "Cooked packages N ...
+rem Total T" while cooking. Cook's Total grows as dependencies are discovered, so
+rem the percentage can step backwards - that is expected, not a stall.
+rem
+rem The pipe makes ERRORLEVEL reflect the pipeline, not UAT. That is fine here:
+rem success is judged below by the log marker and the artifact, never by exit code.
+if not exist "%~dp0BuildProgress.ps1" (
+    echo [FAILED] BuildProgress.ps1 not found next to this file.
+    exit /b 1
+)
 
 call "%RUNUAT%" BuildCookRun ^
     -project="%PROJECT%" ^
     -noP4 -platform=Win64 -clientconfig=Development ^
     -cook -build -stage -pak ^
-    -archive -archivedirectory="%ARCHIVE%" > "%LOG%" 2>&1
+    -archive -archivedirectory="%ARCHIVE%" 2>&1 | powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0BuildProgress.ps1" -LogPath "%LOG%"
 
 rem RunUAT's wrapper can return 0 even when the build failed (e.g. cook errors),
 rem so judge by the log's success marker and by the artifact, not the exit code.

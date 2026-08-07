@@ -53,7 +53,9 @@ namespace
 		{ ECamCtrl::Zoom,     1.f,  36.f,  1.f },
 	};
 
-	static FText NumText(float V) { return FText::FromString(FString::SanitizeFloat(V)); }
+	// 에디트박스 표시는 소수 3자리로 고정한다. 필드 텍스트가 값의 원본(GetControlXxx 이 Atof 로 되읽음)이므로
+	// 여기서 자르면 카메라에 적용되는 값도 3자리로 제한된다. SanitizeFloat 는 float 오차가 그대로 보였다.
+	static FText NumText(float V) { return FText::FromString(FString::Printf(TEXT("%.3f"), V)); }
 }
 
 // ===== 초기화 =====
@@ -432,6 +434,14 @@ void UCameraControlWidget::OnRangeCommitted(ECamCtrl Kind)
 	// Min/Max 변경 → Cur 클램프 + 슬라이더 위치 재계산(원본 OnEndEdit_Min/Max 이식).
 	const float Min = GetControlMin(Kind);
 	const float Max = GetControlMax(Kind);
+
+	// 사용자가 4자리 이상 입력했으면 Min/Max 표시도 3자리로 되쓴다(프로그램적 SetText 는 재진입 없음).
+	if (FSliderCtrl* C = FindControl(Kind))
+	{
+		if (C->Min) C->Min->SetText(NumText(Min));
+		if (C->Max) C->Max->SetText(NumText(Max));
+	}
+
 	float Cur = FMath::Clamp(GetControlCur(Kind), FMath::Min(Min, Max), FMath::Max(Min, Max));
 	SetControlCurText(Kind, Cur);
 	SetControlSlider(Kind, Cur);

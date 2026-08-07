@@ -96,6 +96,20 @@ float APTZCameraActor::GetZoom() const
 	return Capture ? UCameraControlLibrary::HFovToZoom(Capture->FOVAngle, MaxZoom, DefaultHFov) : 1.f;
 }
 
+void APTZCameraActor::GetPanTilt(float& OutPan, float& OutTilt) const
+{
+	// SetPanTilt 이 Capture 의 relative 회전에만 값을 넣으므로 같은 회전을 되읽는다(Root 미회전).
+	if (Capture)
+	{
+		UCameraControlLibrary::RotatorToPanTilt(Capture->GetRelativeRotation(), OutPan, OutTilt);
+	}
+	else
+	{
+		OutPan = 0.f;
+		OutTilt = 0.f;
+	}
+}
+
 void APTZCameraActor::UpdatePolePosition()
 {
 	if (Root && PoleMesh)

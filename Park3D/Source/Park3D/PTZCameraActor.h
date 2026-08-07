@@ -89,6 +89,10 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "PTZ")
 	float GetZoom() const;
 
+	/** 현재 Capture 회전 → Pan/Tilt(도). SetPanTilt 의 역변환(UCameraControlLibrary::RotatorToPanTilt). */
+	UFUNCTION(BlueprintCallable, Category = "PTZ")
+	void GetPanTilt(float& OutPan, float& OutTilt) const;
+
 	/** 폴대 위치 갱신: XY=본체 XY, Z=0(바닥). 회전은 수직 고정. */
 	UFUNCTION(BlueprintCallable, Category = "PTZ")
 	void UpdatePolePosition();

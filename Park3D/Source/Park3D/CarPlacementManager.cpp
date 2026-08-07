@@ -4,6 +4,7 @@
 #include "CarActor.h"
 #include "CarColorComponent.h"
 #include "CarPlacementLibrary.h"
+#include "Config/CarCatalogConfig.h"
 #include "Engine/DataTable.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
@@ -45,6 +46,10 @@ TArray<FCarPresetEntry> ACarPlacementManager::CatalogFromTable(UDataTable* Table
 			Out.Add(*E);
 		}
 	}
+
+	// prefabId 순서는 Save/Config/car_catalog.json 이 결정한다(파일이 없으면 DataTable 순서 유지).
+	// UI·RPC 가 모두 이 함수를 거치므로 여기 한 곳에서 적용해야 두 경로의 id 해석이 갈리지 않는다.
+	UCarCatalogConfigLibrary::ApplyOrder(UCarCatalogConfigLibrary::GetCachedOrder(), Out);
 	return Out;
 }
 

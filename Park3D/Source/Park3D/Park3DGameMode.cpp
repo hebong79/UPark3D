@@ -9,6 +9,7 @@
 #include "MainMenuWidget.h"
 #include "PresetMakerWidget.h"
 #include "Config/Park3DAppConfig.h"
+#include "Config/CarCatalogConfig.h"
 #include "Map/MapFloorActor.h"
 #include "Light/LightControlLibrary.h"
 #include "Light/LightControlManager.h"
@@ -107,6 +108,18 @@ void APark3DGameMode::BeginPlay()
 
 void APark3DGameMode::ApplyStartupConfig()
 {
+	// 차량 프리팹 인덱스(Save/Config/car_catalog.json)를 여기서 먼저 읽어 캐시한다.
+	// 아래 차량배치 자동 로딩이 카탈로그를 쓰므로 그보다 앞이어야 하고,
+	// config_pmaker.json 이 없어(조기 반환) 자동 로딩을 건너뛰는 경우에도 인덱스는 적용되어야 한다.
+	{
+		const int32 OrderNum = UCarCatalogConfigLibrary::GetCachedOrder().Num();
+		if (OrderNum > 0)
+		{
+			UE_LOG(LogTemp, Log, TEXT("[CarCatalog] 차량 프리팹 인덱스 %d종 적용: %s"),
+				OrderNum, *UCarCatalogConfigLibrary::GetFilePath());
+		}
+	}
+
 	FPark3DAppConfig Config;
 	if (!UPark3DAppConfigLibrary::Load(Config))
 	{

@@ -3,7 +3,11 @@
     "preset_file": "001_Preset_office.json",
     "carpos_file": "CarPos_office.json",
     "camerapos_file": "CamPos_office.json",
-    "max_zoom": 36.0,
+    "camera": {
+        "model": "HNR-2036LA",
+        "hfov_wide": 56.5,
+        "max_zoom": 36.0
+    },
     "cam_port_min": 13601,
     "cam_port_max": 13650
 }

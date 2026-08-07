@@ -60,6 +60,21 @@ public:
 	void SetCameraMaxZoom(float InMaxZoom);
 
 	/**
+	 * 풀 전체가 공유하는 기준 수평 화각(도, zoom=1 일 때의 FOV).
+	 * APTZCameraActor::DefaultHFov 기본값과 동일하게 시작하며, AddCamera 로 스폰되는 카메라에 주입된다.
+	 * 설정 파일(config_pmaker.json)의 camera.hfov_wide 가 지정되면 시작 시 여기에 들어온다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
+	float CameraDefaultHFov = 56.5f;
+
+	/**
+	 * 기준 화각을 매니저와 기존 카메라 전체에 반영한다. (0,180) 밖은 무시(발산·부호반전 방지).
+	 * 기존 카메라는 필드만 바꿔서는 Capture->FOVAngle 이 갱신되지 않으므로, 현재 zoom 을 읽어 다시 적용한다(설계 §5.3).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Camera")
+	void SetCameraDefaultHFov(float InHFov);
+
+	/**
 	 * 부팅 시 자동 생성되는 카메라 1대의 초기 자세(Unreal 미터/도).
 	 * UCameraControlWidget 슬라이더 기본값(높이 5m, X/Z 0, pan/tilt 0, zoom 1)과 같은 값이라
 	 * 나중에 컨트롤 패널을 열어도 화면이 바뀌지 않는다.

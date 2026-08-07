@@ -39,9 +39,29 @@ bool UPark3DAppConfigLibrary::FromJson(const FString& Json, FPark3DAppConfig& Ou
 		// 범위 밖은 미지정으로 둔다 — 호출부(포트 결정 체인)가 조용히 이상한 포트를 잡지 않게 한다.
 		Parsed.RpcPort = (PortValue > 0 && PortValue <= 65535) ? PortValue : 0;
 	}
+	// 최상위 max_zoom 을 먼저 읽는다 — 하위 호환. camera.max_zoom 이 있으면 바로 아래에서 덮인다(설계 §3.2).
 	if (Root->TryGetNumberField(TEXT("max_zoom"), Num))
 	{
 		Parsed.MaxZoom = static_cast<float>(Num);
+	}
+
+	// 화각과 배율은 모델별로 함께 결정되는 한 쌍이라 camera 오브젝트 한 묶음으로 읽는다(설계 §1.1).
+	// 세 키는 서로를 요구하지 않는다(키 단위 독립) — 아래 포트 대역의 "둘 다 있어야 적용" 규칙은
+	// min·max 가 있어야 비로소 '대역'이 되기 때문이고, 여기 값들은 각자 의미가 완결되는 스칼라다(설계 §3.2 규칙 2).
+	const TSharedPtr<FJsonObject>* CamObj = nullptr;
+	if (Root->TryGetObjectField(TEXT("camera"), CamObj) && CamObj && CamObj->IsValid())
+	{
+		FString ModelStr;
+		if ((*CamObj)->TryGetNumberField(TEXT("hfov_wide"), Num))  { Parsed.CameraHFovWide = static_cast<float>(Num); }
+		if ((*CamObj)->TryGetNumberField(TEXT("max_zoom"), Num))   { Parsed.MaxZoom = static_cast<float>(Num); }
+		if ((*CamObj)->TryGetStringField(TEXT("model"), ModelStr)) { Parsed.CameraModel = ModelStr.TrimStartAndEnd(); }
+	}
+	else if (Root->HasField(TEXT("camera")))
+	{
+		// 값은 있는데 오브젝트가 아니다("camera": "HNR-2036LA" 로 적는 실수가 가장 흔하다).
+		// 조용히 무시하면 "설정했는데 안 먹는다"가 되므로 남기되, 파싱 실패로 올리지는 않는다 —
+		// 이 항목만 건너뛰고 프리셋·카메라위치·차량배치 자동 로딩은 살린다(설계 §3.2 규칙 3).
+		UE_LOG(LogTemp, Warning, TEXT("[Config] \"camera\" 가 오브젝트가 아닙니다 — 카메라 규격을 건너뜁니다."));
 	}
 
 	// 포트 대역은 둘 다 있어야 의미가 있다. 한쪽만 적힌 파일은 "미지정"으로 두고 ini 값을 쓰게 한다.

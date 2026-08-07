@@ -115,13 +115,26 @@ void APark3DGameMode::ApplyStartupConfig()
 		return;
 	}
 
-	// 1) 최대 줌 배율 — 아래 카메라위치 로딩이 카메라를 새로 스폰하므로 반드시 먼저 반영한다.
-	if (Config.MaxZoom > 0.f)
+	// 1) 카메라 광학 규격(최대 줌 → 기준 화각 순) — 아래 카메라위치 로딩이 카메라를 새로 스폰하므로
+	//    반드시 먼저 반영한다. 메뉴 캐스트(조기 반환)보다도 앞이라 -game/헤드리스에서도 적용된다.
+	//    호출 순서 고정: SetCameraDefaultHFov 만 기존 카메라에 SetZoom 재적용을 하므로 뒤에 두어야
+	//    max_zoom 변경분까지 함께 화면에 반영된다(설계 §5.4 C-2).
+	if (Config.MaxZoom > 0.f || Config.CameraHFovWide > 0.f)
 	{
 		if (ACameraControlManager* CamMgr = ACameraControlManager::GetOrSpawn(GetWorld()))
 		{
-			CamMgr->SetCameraMaxZoom(Config.MaxZoom);
+			if (Config.MaxZoom > 0.f)        { CamMgr->SetCameraMaxZoom(Config.MaxZoom); }
+			if (Config.CameraHFovWide > 0.f) { CamMgr->SetCameraDefaultHFov(Config.CameraHFovWide); }
+
+			// 저장된 CamPos_*.json 의 zoom 이 '어느 기준 화각으로 찍힌 배율인지' 사후 판정할 유일한 단서다(설계 §7.3 M1).
+			UE_LOG(LogTemp, Log, TEXT("[Config] 카메라 광학 규격: model=%s hfov_wide=%.2f max_zoom=%.2f"),
+				Config.CameraModel.IsEmpty() ? TEXT("(미지정)") : *Config.CameraModel,
+				CamMgr->CameraDefaultHFov, CamMgr->CameraMaxZoom);
 		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Log, TEXT("[Config] 카메라 광학 규격 미지정 — 코드 기본값 사용(hfov_wide=56.50 max_zoom=36.00)."));
 	}
 
 	UMainMenuWidget* Menu = Cast<UMainMenuWidget>(MenuWidget);

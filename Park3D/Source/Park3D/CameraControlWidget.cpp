@@ -223,6 +223,7 @@ void UCameraControlWidget::NativeConstruct()
 	EnsureViewer();
 	RefreshViewerBrush();
 	BuildDistanceLauncher();
+	BuildGetPtzButton();
 	// CameraControl이 열리면 독립 측정 대화상자도 자동 표시한다. X로 닫았던 경우에도 재표시된다.
 	if (!DistanceDialogInstance || !DistanceDialogInstance->IsInViewport())
 	{
@@ -1009,18 +1010,91 @@ void UCameraControlWidget::HandleShowPole()
 }
 
 // ===== Unity CPCamDistDlg 이식: C++ 동적 하단 측정 패널 =====
+UTextBlock* UCameraControlWidget::MakeDynamicButtonLabel(const FString& InText)
+{
+	UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+	Label->SetText(FText::FromString(InText));
+	Label->SetJustification(ETextJustify::Center);
+	Label->SetColorAndOpacity(FSlateColor(FLinearColor::Black));
+	FSlateFontInfo Font = Label->GetFont();
+	Font.Size = 13;//DynamicButtonFontSize;
+	Label->SetFont(Font);
+	return Label;
+}
+
+void UCameraControlWidget::AddDynamicButtonToRoot(UButton* Button)
+{
+	if (!VBox_Root || !Button) return;
+
+	// 버튼 안쪽(라벨 위·아래) 여백 — 버튼 자체가 두꺼워진다.
+	FButtonStyle Style = Button->GetStyle();
+	const FMargin Inner(Style.NormalPadding.Left, DynamicButtonInnerPadding, Style.NormalPadding.Right, DynamicButtonInnerPadding);
+	Style.NormalPadding = Inner;
+	Style.PressedPadding = Inner;
+	Button->SetStyle(Style);
+
+	// 버튼 바깥(위·아래) 여백 — 이웃 위젯과의 간격.
+	// UWidget::Slot 멤버와 이름이 겹치면 C4458(경고를 에러로 처리) → 지역명은 VBSlot.
+	if (UVerticalBoxSlot* VBSlot = VBox_Root->AddChildToVerticalBox(Button))
+	{
+		VBSlot->SetPadding(FMargin(0.f, DynamicButtonOuterPadding, 0.f, DynamicButtonOuterPadding));
+	}
+}
+
 void UCameraControlWidget::BuildDistanceLauncher()
 {
 	// 측정 본문은 VBox_Root에 넣지 않는다. 이 버튼은 독립 대화상자를 여는 명시적 진입점이다.
 	if (!VBox_Root || Btn_OpenDistance) return;
 	Btn_OpenDistance = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
-	UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
-	Label->SetText(FText::FromString(TEXT("거리 측정 열기")));
-	Label->SetJustification(ETextJustify::Center);
-	Label->SetColorAndOpacity(FSlateColor(FLinearColor::Black));
+	UTextBlock* Label = MakeDynamicButtonLabel(TEXT("거리 측정 열기"));
 	Btn_OpenDistance->SetContent(Label);
 	Btn_OpenDistance->OnClicked.AddUniqueDynamic(this, &UCameraControlWidget::HandleOpenDistanceDialog);
-	VBox_Root->AddChildToVerticalBox(Btn_OpenDistance);
+	AddDynamicButtonToRoot(Btn_OpenDistance);
+}
+
+void UCameraControlWidget::BuildGetPtzButton()
+{
+	if (!VBox_Root || Btn_GetPtz) return;
+	Btn_GetPtz = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
+	UTextBlock* Label = MakeDynamicButtonLabel(TEXT("현재 카메라 PTZ 가져오기"));
+	Btn_GetPtz->SetContent(Label);
+	Btn_GetPtz->OnClicked.AddUniqueDynamic(this, &UCameraControlWidget::HandleGetPtz);
+	AddDynamicButtonToRoot(Btn_GetPtz);
+}
+
+void UCameraControlWidget::HandleGetPtz()
+{
+	ACameraControlManager* Mgr = GetCameraManager();
+	APTZCameraActor* Cam = Mgr ? Mgr->GetCamera(CurCamIndex) : nullptr;
+	if (!Cam)
+	{
+		Notify(TEXT("선택된 카메라가 없어 PTZ 를 가져오지 못했습니다"));
+		return;
+	}
+
+	float Pan = 0.f, Tilt = 0.f;
+	Cam->GetPanTilt(Pan, Tilt);
+	const float Zoom = Cam->GetZoom();
+
+	// 필드 값과 슬라이더 위치는 Min/Max 범위 안에서만 정합하므로 클램프한다.
+	// 클램프가 걸리면 UI 값이 실제 카메라와 달라지므로 로그로 알린다(카메라는 건드리지 않는다).
+	bool bClamped = false;
+	auto Fill = [this, &bClamped](ECamCtrl Kind, float Value)
+	{
+		const float Lo = FMath::Min(GetControlMin(Kind), GetControlMax(Kind));
+		const float Hi = FMath::Max(GetControlMin(Kind), GetControlMax(Kind));
+		const float Clamped = FMath::Clamp(Value, Lo, Hi);
+		bClamped |= !FMath::IsNearlyEqual(Clamped, Value, 0.001f);
+		SetControlCurText(Kind, Clamped);
+		SetControlSlider(Kind, Clamped);
+	};
+	Fill(ECamCtrl::Pan,  Pan);
+	Fill(ECamCtrl::Tilt, Tilt);
+	Fill(ECamCtrl::Zoom, Zoom);
+
+	Notify(FString::Printf(TEXT("카메라 %d PTZ 가져오기: P=%.3f T=%.3f Z=%.3f%s"),
+		CurCamIndex + 1, Pan, Tilt, Zoom,
+		bClamped ? TEXT(" — Min/Max 범위로 클램프됨") : TEXT("")));
 }
 
 void UCameraControlWidget::HandleOpenDistanceDialog()

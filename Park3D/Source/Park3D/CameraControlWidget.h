@@ -113,6 +113,22 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
 	float MetersToUU = 100.f;
 
+	/**
+	 * C++ 로 생성되는 하단 버튼("거리 측정 열기" / "현재 카메라 PTZ 가져오기")의 라벨 폰트 크기.
+	 * 이 버튼들은 WBP 에 없으므로 디자이너에서 폰트를 못 바꾼다 → 여기서 조정한다
+	 * (WBP_CameraControl 디테일 패널 또는 Blueprint 런타임 설정 모두 가능).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|UI")
+	int32 DynamicButtonFontSize = 13;
+
+	/** 같은 버튼들의 위·아래 바깥 여백(px). VerticalBox 슬롯 패딩에 들어간다(버튼 사이 간격). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|UI")
+	float DynamicButtonOuterPadding = 2.f;
+
+	/** 같은 버튼들의 위·아래 안쪽 여백(px). 라벨과 버튼 테두리 사이 — 버튼 높이를 키운다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|UI")
+	float DynamicButtonInnerPadding = 2.f;
+
 	/** 독립 카메라 뷰어 위젯 클래스(WBP_CameraViewer). WBP_CameraControl 기본값으로 지정.
 	 *  지정 시 컨트롤 패널과 분리되어 화면 우하단에 렌더타겟 뷰를 표시한다(Unity CPCamViewerUI). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
@@ -204,6 +220,9 @@ protected:
 	UFUNCTION() void HandleTargetLine();
 	UFUNCTION() void HandleTargetPoint();
 
+	/** 선택 카메라 액터의 현재 Pan/Tilt/Zoom 을 읽어 UI Pan/Tilt/Zoom 필드·슬라이더에 채운다. */
+	UFUNCTION() void HandleGetPtz();
+
 	// 콤보 항목 스타일(CarPlacement 동일 패턴)
 	UFUNCTION() UWidget* HandleGenerateComboItem(FString Item);
 
@@ -246,6 +265,12 @@ private:
 	void EnsureCamStreamPortRange(int32 CamCount);
 	void Notify(const FString& Msg) const;
 	void BuildDistanceLauncher();
+	/** 'PTZ 가져오기' 버튼을 VBox_Root 끝에 만든다(WBP 자산 변경 없이, Btn_OpenDistance 와 동일 방식). */
+	void BuildGetPtzButton();
+	/** 하단 동적 버튼용 라벨 생성(가운데 정렬·검정·DynamicButtonFontSize). 폰트 크기 적용 지점은 여기 하나다. */
+	UTextBlock* MakeDynamicButtonLabel(const FString& InText);
+	/** 하단 동적 버튼을 VBox_Root 끝에 붙이고 위·아래 여백을 적용한다. 패딩 적용 지점은 여기 하나다. */
+	void AddDynamicButtonToRoot(UButton* Button);
 	UFUNCTION() void HandleOpenDistanceDialog();
 	void BuildDistancePanel();
 	void UpdateDistancePanel();
@@ -289,6 +314,7 @@ private:
 	UPROPERTY(Transient) UTextBlock* Txt_Height = nullptr;
 	UPROPERTY(Transient) UTextBlock* Txt_Angle = nullptr;
 	UPROPERTY(Transient) UButton* Btn_OpenDistance = nullptr;
+	UPROPERTY(Transient) UButton* Btn_GetPtz = nullptr;
 	UPROPERTY(Transient) UCameraDistanceWidget* DistanceDialogInstance = nullptr;
 
 	// 패널 드래그 상태

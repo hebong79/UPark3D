@@ -63,6 +63,37 @@ void ACameraControlManager::SetCameraMaxZoom(float InMaxZoom)
 	UE_LOG(LogTemp, Log, TEXT("[CameraControl] 최대 줌 배율 %.2f 적용 (카메라 %d대)"), CameraMaxZoom, Cameras.Num());
 }
 
+void ACameraControlManager::SetCameraDefaultHFov(float InHFov)
+{
+	// 라이브러리의 TanHalfFovDeg 도 (0.001,179.999) 로 선클램프하지만, 그쪽은 "왜곡해서라도 렌더하는"
+	// 최후 방어선이라 200 을 179.999 로 적용해버린다. 사람이 적은 설정을 수용/거부 판정하고
+	// 그 판정을 말로 남기는 것은 이 계층의 일이다(설계 §4.3).
+	if (InHFov <= 0.f || InHFov >= 180.f)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CameraControl] hfov_wide %.2f 는 (0,180) 밖 — 무시하고 %.2f 유지."), InHFov, CameraDefaultHFov);
+		return;
+	}
+
+	CameraDefaultHFov = InHFov;
+
+	for (const TObjectPtr<APTZCameraActor>& Cam : Cameras)
+	{
+		if (!Cam)
+		{
+			continue;
+		}
+
+		// 필드만 바꾸면 Capture->FOVAngle 은 그대로다(SetZoom 이 불릴 때만 갱신된다).
+		// 순서가 중요하다: 새 화각을 넣기 전에 '옛 화각 기준'으로 현재 배율을 읽어야 배율이 보존된다.
+		// 뒤집으면 새 화각으로 옛 FOVAngle 을 역산해 엉뚱한 배율이 굳는다(설계 §5.3).
+		const float Zoom = Cam->GetZoom();
+		Cam->DefaultHFov = CameraDefaultHFov;
+		Cam->SetZoom(Zoom);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[CameraControl] 기준 화각 %.2f° 적용 (카메라 %d대)"), CameraDefaultHFov, Cameras.Num());
+}
+
 APTZCameraActor* ACameraControlManager::AddCamera(FString Name)
 {
 	UWorld* World = GetWorld();
@@ -81,6 +112,11 @@ APTZCameraActor* ACameraControlManager::AddCamera(FString Name)
 
 	Cam->PoleTag = PoleTag;
 	Cam->MaxZoom = CameraMaxZoom;   // 줌↔FOV 매핑 상한을 풀 전체가 공유(설정 파일 max_zoom).
+	Cam->DefaultHFov = CameraDefaultHFov;   // 기준 화각도 풀 전체가 공유(설정 파일 camera.hfov_wide, 설계 §5.1).
+	// 생성자가 CDO 기본값으로 Capture->FOVAngle 을 이미 굳혀 놓으므로, 필드만 대입하면
+	// DefaultHFov 만 새 값이고 화면 화각은 옛 값인 스테일 상태가 된다. 신규 카메라는 배율 1 이므로
+	// SetZoom(1) 한 번으로 새 기준을 반영한다(SetCameraDefaultHFov 의 재적용과 같은 보장).
+	Cam->SetZoom(1.f);
 	Cam->InitRenderTarget();
 	Cam->SetCaptureEnabled(false);   // 신규는 비선택 → 캡처 off(선택 시 SelectCamera 가 활성)
 	Cameras.Add(Cam);

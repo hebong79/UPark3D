@@ -43,6 +43,9 @@ public:
 	//  zoom<1(0 포함) → 1 선클램프(§12-C, Unity SCamDir.zoom 기본값 0 으로 인한 0나눗셈 방지).
 	// 아래 두 기본 인자 56.5 는 APTZCameraActor::DefaultHFov 와 한 쌍이다. 모델·값 교체 시 동시 수정할 것
 	//  (불일치는 Automation `Park3D.CameraControl.Fov` 의 CDO 단정이 잡는다 — 규격 정정 설계 §2.4).
+	// 기본 인자는 '코드 기본값'이며 런타임 설정(config_pmaker.json 의 camera.hfov_wide)을 반영하지 않는다.
+	//  실제 카메라 상태를 계산할 때는 반드시 액터 인스턴스의 MaxZoom/DefaultHFov 를 인자로 넘길 것.
+	//  config 는 인스턴스 오버라이드일 뿐 이 상수 쌍을 대체하지 않는다(화각 설정화 설계 §6.1).
 
 	/** 줌 배율(1~MaxZoom) → 수평 FOV(도). 2·atan(tan(DefaultHFov/2)/clamp(zoom,1,MaxZoom)). zoom=1→56.5, 2→≈30.076, 36→≈1.710. */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Camera|Optics")

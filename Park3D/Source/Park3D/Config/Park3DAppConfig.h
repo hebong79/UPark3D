@@ -31,9 +31,28 @@ struct FPark3DAppConfig
 	UPROPERTY(BlueprintReadWrite, Category = "Config")
 	FString CameraPosFile;
 
-	/** PTZ 카메라 줌 상한(배율). 0 이하 = 미지정(액터 기본값 유지). */
+	/**
+	 * PTZ 카메라 줌 상한(배율). 0 이하 = 미지정(액터 기본값 유지).
+	 * 최상위 max_zoom 과 camera.max_zoom 이 모두 여기로 들어오며, 둘 다 있으면 camera 쪽이 이긴다(설계 §3.2).
+	 */
 	UPROPERTY(BlueprintReadWrite, Category = "Config")
 	float MaxZoom = 0.f;
+
+	/**
+	 * 기준 수평 화각(도, zoom=1 일 때의 FOV). 0 이하 = 미지정(액터 기본값 56.5 유지).
+	 * camera.hfov_wide 전용 — 최상위에는 대응 키를 두지 않는다(신규 항목이라 하위 호환 대상이 없다).
+	 * 범위 검증은 여기서 하지 않는다. 원본 값을 그대로 담아 적용 함수
+	 * (ACameraControlManager::SetCameraDefaultHFov)가 (0,180) 판정과 경고를 맡는다 — max_zoom 선례(설계 §4.2).
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = "Config")
+	float CameraHFovWide = 0.f;
+
+	/**
+	 * 카메라 모델 라벨(예: "HNR-2036LA"). 빈 문자열 = 미지정.
+	 * 코드가 값으로 쓰지 않는다 — 어느 장비 기준 데이터인지 추적하기 위한 라벨이며 시작 로그에만 찍힌다(설계 §1.2 R3).
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = "Config")
+	FString CameraModel;
 
 	/** 카메라 스트림 포트 대역 시작(camId 1 의 포트). 0 = 미지정. */
 	UPROPERTY(BlueprintReadWrite, Category = "Config")

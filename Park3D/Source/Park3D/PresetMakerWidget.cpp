@@ -82,7 +82,13 @@ void UPresetMakerWidget::NativeConstruct()
 
 	if (Radio_Move)   Radio_Move->OnCheckStateChanged.AddUniqueDynamic(this, &UPresetMakerWidget::HandleMoveChanged);
 	if (Radio_Rotate) Radio_Rotate->OnCheckStateChanged.AddUniqueDynamic(this, &UPresetMakerWidget::HandleRotateChanged);
-	if (Check_HideBar) Check_HideBar->OnCheckStateChanged.AddUniqueDynamic(this, &UPresetMakerWidget::HandleHideBarChanged);
+	if (Check_HideBar)
+	{
+		Check_HideBar->OnCheckStateChanged.AddUniqueDynamic(this, &UPresetMakerWidget::HandleHideBarChanged);
+		// '선택바 숨기기'는 기본 켜짐. 패널이 캐시 후 재표시될 수 있으므로 WBP 에셋 초기값에 맡기지 않고
+		// NativeConstruct 마다 명시적으로 동기화한다(Check_UseDecal 과 동일 방식).
+		Check_HideBar->SetIsChecked(true);
+	}
 	if (Check_Use3D)   Check_Use3D->OnCheckStateChanged.AddUniqueDynamic(this, &UPresetMakerWidget::HandleUse3DChanged);
 
 	// R3: 라인 두께 슬라이더(1~15, step 1, 기본 3=매니저 LineThickness 기본값). Optional 이라 WBP 미갱신 시 스킵.

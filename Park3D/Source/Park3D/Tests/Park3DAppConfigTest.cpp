@@ -54,6 +54,10 @@ bool FPark3DAppConfigPartialTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("지정 항목"), C.PresetFile, FString(TEXT("only.json")));
 	TestEqual(TEXT("미지정 rpc_port 는 0"), C.RpcPort, 0);
 	TestEqual(TEXT("미지정 max_zoom 은 0"), C.MaxZoom, 0.f);
+	// 미지정 센티넬은 0/빈 문자열이어야 한다. 화각에 56.5 같은 '의미 있는 기본값'을 주면
+	// camera 키가 없는 기존 config 가 액터/BP 의 DefaultHFov 를 조용히 덮어쓴다(화각 설정화 사전 영향도 GR-2).
+	TestEqual(TEXT("미지정 hfov_wide 는 0"), C.CameraHFovWide, 0.f);
+	TestTrue(TEXT("미지정 model 은 빈 문자열"), C.CameraModel.IsEmpty());
 	TestTrue(TEXT("미지정 carpos_file 은 빈 문자열"), C.CarPosFile.IsEmpty());
 	TestTrue(TEXT("미지정 camerapos_file 은 빈 문자열"), C.CameraPosFile.IsEmpty());
 	return true;
@@ -189,7 +193,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPark3DAppConfigUpdateCamPortTest,
 bool FPark3DAppConfigUpdateCamPortTest::RunTest(const FString& Parameters)
 {
 	const FString Path = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("AppConfigTest"), TEXT("update.json"));
-	const FString Src = TEXT(R"({"rpc_port":13510,"preset_file":"p.json","cam_port_min":13601,"cam_port_max":13610,"unknown_key":"keep-me"})");
+	const FString Src = TEXT(R"({"rpc_port":13510,"preset_file":"p.json","camera":{"model":"HNR-2036LA","hfov_wide":56.5},"cam_port_min":13601,"cam_port_max":13610,"unknown_key":"keep-me"})");
 	TestTrue(TEXT("원본 기록"), FFileHelper::SaveStringToFile(Src, *Path));
 
 	TestTrue(TEXT("갱신 성공"), UPark3DAppConfigLibrary::UpdateCamPortRange(Path, 13601, 13615));
@@ -201,10 +205,18 @@ bool FPark3DAppConfigUpdateCamPortTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("다른 키 유지 - rpc_port"), After.RpcPort, 13510);
 	TestEqual(TEXT("다른 키 유지 - preset_file"), After.PresetFile, FString(TEXT("p.json")));
 
+	// 중첩 오브젝트도 통째로 살아남아야 한다. 카메라 대수가 대역을 넘으면 이 함수가 '매 기동마다' 도는데,
+	// 여기서 camera 가 지워지면 광학 규격이 부팅 한 번에 증발한다(화각 설정화 사전 영향도 GR-1).
+	// 최상위 문자열 키 하나(unknown_key)만으로는 중첩 보존을 검증하지 못했다.
+	TestEqual(TEXT("중첩 키 유지 - camera.model"), After.CameraModel, FString(TEXT("HNR-2036LA")));
+	TestEqual(TEXT("중첩 키 유지 - camera.hfov_wide"), After.CameraHFovWide, 56.5f);
+
 	// 구조체가 모르는 키도 살아 있어야 한다(통째 직렬화였다면 사라진다).
 	FString Raw;
 	FFileHelper::LoadFileToString(Raw, *Path);
 	TestTrue(TEXT("미지의 키 보존"), Raw.Contains(TEXT("unknown_key")) && Raw.Contains(TEXT("keep-me")));
+	TestTrue(TEXT("원문에 중첩 camera 오브젝트 보존"),
+		Raw.Contains(TEXT("\"camera\"")) && Raw.Contains(TEXT("\"model\"")) && Raw.Contains(TEXT("\"hfov_wide\"")));
 
 	TestFalse(TEXT("없는 파일은 실패"), UPark3DAppConfigLibrary::UpdateCamPortRange(Path + TEXT(".nope"), 13601, 13615));
 
@@ -287,6 +299,107 @@ bool FPark3DAppConfigShippedFileTest::RunTest(const FString& Parameters)
 
 	FPark3DAppConfig C;
 	TestTrue(TEXT("배포된 설정 파일 파싱 성공"), UPark3DAppConfigLibrary::LoadFromFile(Path, C));
+	return true;
+}
+
+// ===== T13 카메라 광학 규격(camera 오브젝트) 파싱 =====
+// 화각 설정화 설계 §3.2 우선순위 표 / §8.1. 최상위 max_zoom 은 하위 호환으로 계속 읽되
+// camera.max_zoom 이 이기고, camera 안 세 키는 서로를 요구하지 않으며(키 단위 독립),
+// 타입 오류는 '이 항목만' 건너뛸 뿐 파싱 실패로 올리지 않는다.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPark3DAppConfigCameraOpticsTest,
+	"Park3D.AppConfig.CameraOptics",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FPark3DAppConfigCameraOpticsTest::RunTest(const FString& Parameters)
+{
+	// 케이스 5·5' 은 의도적으로 Warning 을 남긴다 — "설정했는데 안 먹는다"를 막는 것이 R4 의 계약이라
+	// 경고가 나오지 않는 쪽이 오히려 결함이다. 발생 횟수 0 = "최소 1회 발생하되 횟수는 안 따짐".
+	AddExpectedMessagePlain(TEXT("[Config] \"camera\""), ELogVerbosity::Warning,
+		EAutomationExpectedMessageFlags::Contains, 0);
+
+	// 1) camera 만 있음 — 세 키 모두 반영.
+	FPark3DAppConfig A;
+	TestTrue(TEXT("1) 파싱 성공"), UPark3DAppConfigLibrary::FromJson(
+		TEXT(R"({"camera":{"model":"HNR-2036LA","hfov_wide":56.5,"max_zoom":36}})"), A));
+	TestEqual(TEXT("1) max_zoom"), A.MaxZoom, 36.f);
+	TestEqual(TEXT("1) hfov_wide"), A.CameraHFovWide, 56.5f);
+	TestEqual(TEXT("1) model"), A.CameraModel, FString(TEXT("HNR-2036LA")));
+
+	// 2) 최상위 max_zoom 만 — 기존 배포 파일 형태(하위 호환). 이 케이스가 살아 있어야
+	//    배포 파일에서 키를 옮긴 것과 코드에서 지원을 끊는 것이 별개로 유지된다.
+	FPark3DAppConfig B;
+	TestTrue(TEXT("2) 파싱 성공"), UPark3DAppConfigLibrary::FromJson(TEXT(R"({"max_zoom":36})"), B));
+	TestEqual(TEXT("2) 최상위 max_zoom 유효"), B.MaxZoom, 36.f);
+	TestEqual(TEXT("2) hfov_wide 미지정"), B.CameraHFovWide, 0.f);
+	TestTrue(TEXT("2) model 미지정"), B.CameraModel.IsEmpty());
+
+	// 3) 둘 다 있음 — camera 가 이긴다(우선순위 규칙의 핵심 단정).
+	FPark3DAppConfig C;
+	TestTrue(TEXT("3) 파싱 성공"), UPark3DAppConfigLibrary::FromJson(
+		TEXT(R"({"max_zoom":36,"camera":{"max_zoom":30,"hfov_wide":58.9,"model":"HNR-2030WA"}})"), C));
+	TestEqual(TEXT("3) camera.max_zoom 이 최상위를 덮음"), C.MaxZoom, 30.f);
+	TestEqual(TEXT("3) hfov_wide"), C.CameraHFovWide, 58.9f);
+	TestEqual(TEXT("3) model"), C.CameraModel, FString(TEXT("HNR-2030WA")));
+
+	// 3r) 키 순서를 뒤집어도 결과가 같다(JSON 키 순서 비의존 봉인).
+	FPark3DAppConfig Cr;
+	TestTrue(TEXT("3r) 파싱 성공"), UPark3DAppConfigLibrary::FromJson(
+		TEXT(R"({"camera":{"max_zoom":30,"hfov_wide":58.9,"model":"HNR-2030WA"},"max_zoom":36})"), Cr));
+	TestEqual(TEXT("3r) 키 순서와 무관하게 camera 우선"), Cr.MaxZoom, 30.f);
+
+	// 4) camera 에 hfov_wide 만 — 최상위 max_zoom 이 살아남는다(키 단위 독립).
+	//    "화각만 바꾸고 싶은데 배율도 같이 적어야 한다"는 강제가 없음을 봉인한다.
+	FPark3DAppConfig D;
+	TestTrue(TEXT("4) 파싱 성공"), UPark3DAppConfigLibrary::FromJson(
+		TEXT(R"({"max_zoom":36,"camera":{"hfov_wide":45}})"), D));
+	TestEqual(TEXT("4) 최상위 max_zoom 생존"), D.MaxZoom, 36.f);
+	TestEqual(TEXT("4) hfov_wide"), D.CameraHFovWide, 45.f);
+	TestTrue(TEXT("4) model 미지정"), D.CameraModel.IsEmpty());
+
+	// 4') 최상위도 없으면 max_zoom 은 미지정(액터 기본값 유지).
+	FPark3DAppConfig D2;
+	TestTrue(TEXT("4') 파싱 성공"), UPark3DAppConfigLibrary::FromJson(TEXT(R"({"camera":{"hfov_wide":45}})"), D2));
+	TestEqual(TEXT("4') max_zoom 미지정"), D2.MaxZoom, 0.f);
+	TestEqual(TEXT("4') hfov_wide"), D2.CameraHFovWide, 45.f);
+
+	// 5) camera 가 오브젝트가 아님 — 파싱 실패가 아니라 '이 항목만' 건너뛴다.
+	//    여기서 false 가 나오면 프리셋·카메라위치·차량배치 자동 로딩까지 함께 죽는다.
+	FPark3DAppConfig E;
+	TestTrue(TEXT("5) 파싱은 성공(실패로 올리지 않음)"), UPark3DAppConfigLibrary::FromJson(
+		TEXT(R"({"max_zoom":36,"camera":"HNR-2036LA"})"), E));
+	TestEqual(TEXT("5) 최상위 규칙만 적용"), E.MaxZoom, 36.f);
+	TestEqual(TEXT("5) hfov_wide 미지정"), E.CameraHFovWide, 0.f);
+	TestTrue(TEXT("5) model 미지정"), E.CameraModel.IsEmpty());
+
+	// 5') 배열·숫자도 동일하게 처리.
+	FPark3DAppConfig E2, E3;
+	TestTrue(TEXT("5') 배열도 파싱 성공"), UPark3DAppConfigLibrary::FromJson(TEXT(R"({"max_zoom":36,"camera":[]})"), E2));
+	TestTrue(TEXT("5') 숫자도 파싱 성공"), UPark3DAppConfigLibrary::FromJson(TEXT(R"({"max_zoom":36,"camera":3})"), E3));
+	TestEqual(TEXT("5') 배열 - hfov_wide 미지정"), E2.CameraHFovWide, 0.f);
+	TestEqual(TEXT("5') 배열 - 최상위 max_zoom 은 생존"), E2.MaxZoom, 36.f);
+	TestEqual(TEXT("5') 숫자 - hfov_wide 미지정"), E3.CameraHFovWide, 0.f);
+
+	// 6) camera 안 개별 키의 타입 오류가 형제 키를 죽이지 않는다.
+	FPark3DAppConfig F;
+	TestTrue(TEXT("6) 파싱 성공"), UPark3DAppConfigLibrary::FromJson(
+		TEXT(R"({"camera":{"hfov_wide":"넓게","max_zoom":36}})"), F));
+	TestEqual(TEXT("6) 잘못된 hfov_wide 만 미지정"), F.CameraHFovWide, 0.f);
+	TestEqual(TEXT("6) 형제 max_zoom 은 살아남음"), F.MaxZoom, 36.f);
+
+	// R) 범위 밖 값은 FromJson 이 '그대로' 담는다 — 수용/거부 판정은 적용 함수의 일이다.
+	//    여기서 0 이 나오면 검증 계층이 잘못 배치된 것이고, 그 순간 로그가 "왜 무시됐는지"를
+	//    말할 수 없게 된다(설계 §4.2 — max_zoom 선례를 따른다).
+	FPark3DAppConfig G, H;
+	UPark3DAppConfigLibrary::FromJson(TEXT(R"({"camera":{"hfov_wide":200}})"), G);
+	UPark3DAppConfigLibrary::FromJson(TEXT(R"({"camera":{"hfov_wide":-1}})"), H);
+	TestEqual(TEXT("범위 밖 200 은 raw 저장"), G.CameraHFovWide, 200.f);
+	TestEqual(TEXT("범위 밖 -1 은 raw 저장"), H.CameraHFovWide, -1.f);
+
+	// M) model 은 앞뒤 공백을 다듬는다(*_file 관례와 동일).
+	FPark3DAppConfig M;
+	TestTrue(TEXT("M) 파싱 성공"), UPark3DAppConfigLibrary::FromJson(
+		TEXT(R"({"camera":{"model":"  HNR-2036LA  "}})"), M));
+	TestEqual(TEXT("model 앞뒤 공백 정규화"), M.CameraModel, FString(TEXT("HNR-2036LA")));
 	return true;
 }
 

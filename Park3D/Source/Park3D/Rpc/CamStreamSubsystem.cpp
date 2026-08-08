@@ -19,6 +19,10 @@
 #include "GameFramework/PlayerController.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "Misc/ScopeLock.h"
+#include "PixelFormat.h"
+#include "RenderingThread.h"
+#include "RHIGPUReadback.h"
 #include "TextureResource.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCamStreamSub, Log, All);
@@ -391,8 +395,10 @@ void UCamStreamSubsystem::TickMainChannel(float DeltaTime)
 	}
 
 	// 보는 사람이 없으면 캡처하지 않는다 → 유휴 비용 0. 미러링 캡처도 아직 만들지 않는다.
+	// 진행 중인 리드백이 남아 있으면 여기서 정리한다(스테이징 버퍼를 유휴 상태로 들고 있지 않게).
 	if (!MainChannel.Server->HasClients())
 	{
+		ReleaseMainReadback();
 		return;
 	}
 
@@ -400,16 +406,38 @@ void UCamStreamSubsystem::TickMainChannel(float DeltaTime)
 	MainChannel.Accum += DeltaTime;
 	MainChannel.FpsWindowAccum += DeltaTime;
 
+	// 1) 걸어둔 리드백이 끝났는지 먼저 본다. 끝났으면 페이싱과 무관하게 바로 내보낸다
+	//    — GPU 는 이미 일을 마쳤고, 여기서 더 미루면 지연만 늘어난다.
+	PollMainReadback();
+
+	TArray<uint8> Jpeg;
+	if (TryTakeMainFrame(Jpeg))
+	{
+		MainChannel.Server->UpdateFrame(Jpeg);
+		++MainChannel.FpsWindowFrames;
+	}
+
+	// 2) 페이싱이 돌아오면 다음 캡처를 건다.
 	if (MainChannel.Accum >= Interval)
 	{
-		// 카메라 채널과 같은 페이싱 규약: 잔여 시간 보존 + 한 프레임치 클램프(부채 무한누적 방지).
-		MainChannel.Accum = FMath::Min(MainChannel.Accum - Interval, Interval);
-
-		TArray<uint8> Jpeg;
-		if (ProduceMainJpeg(Jpeg))
+		bool bBusy = false;
+		if (MainReadback.IsValid())
 		{
-			MainChannel.Server->UpdateFrame(Jpeg);
-			++MainChannel.FpsWindowFrames;
+			FScopeLock Lock(&MainReadback->Mutex);
+			bBusy = (MainReadback->Stage != FCamStreamMainReadback::EStage::Idle);
+		}
+
+		if (bBusy)
+		{
+			// 앞의 리드백이 아직 안 끝났다. 새로 걸면 큐가 쌓여 지연이 계속 늘어나므로 이번 차례는 건너뛴다.
+			// Accum 은 한 프레임치로 묶어 둔다 — 다음 틱에 곧바로 다시 시도하되 부채는 쌓이지 않게.
+			MainChannel.Accum = Interval;
+		}
+		else
+		{
+			// 카메라 채널과 같은 페이싱 규약: 잔여 시간 보존 + 한 프레임치 클램프(부채 무한누적 방지).
+			MainChannel.Accum = FMath::Min(MainChannel.Accum - Interval, Interval);
+			RequestMainCapture();
 		}
 	}
 
@@ -427,19 +455,28 @@ void UCamStreamSubsystem::TickMainChannel(float DeltaTime)
 		const double NowReal = FPlatformTime::Seconds();
 		if ((NowReal - MainLastStatLogTime) >= MainStatLogSeconds)
 		{
-			float AvgMs = 0.f, MaxMs = 0.f;
+			float TotalAvg = 0.f, TotalMax = 0.f;
 			int32 Samples = 0;
-			GetMainCaptureStats(AvgMs, MaxMs, Samples);
+			MainTotalMs.GetStats(TotalAvg, TotalMax, Samples);
 
 			// 표본이 없으면 로그도 남기지 않고 시각도 갱신하지 않는다
 			// (갱신해 버리면 첫 표본이 쌓이기 전에 주기 한 칸을 헛되이 소모한다).
 			if (Samples > 0)
 			{
+				float SceneAvg = 0.f, SceneMax = 0.f, ReadAvg = 0.f, ReadMax = 0.f, EncAvg = 0.f, EncMax = 0.f;
+				int32 Unused = 0;
+				MainSceneMs.GetStats(SceneAvg, SceneMax, Unused);
+				MainReadbackMs.GetStats(ReadAvg, ReadMax, Unused);
+				MainEncodeMs.GetStats(EncAvg, EncMax, Unused);
+
 				MainLastStatLogTime = NowReal;
 				UE_LOG(LogCamStreamSub, Log,
-					TEXT("[CamStream] 메인 뷰 캡처 비용: 평균 %.2fms / 최대 %.2fms / 직전 %.2fms ")
+					TEXT("[CamStream] 메인 뷰 캡처 비용(게임 스레드): 합계 평균 %.2fms / 최대 %.2fms / 직전 %.2fms ")
+					TEXT("[씬 %.2f/%.2f · 리드백 %.2f/%.2f · 인코딩 %.2f/%.2f] ")
 					TEXT("(표본 %d, 창 %d, %dx%d, 목표 %.1ffps 실측 %.1ffps, 가드=%d)"),
-					AvgMs, MaxMs, MainLastCaptureMs, Samples, FMath::Max(1, MainStatWindow),
+					TotalAvg, TotalMax, MainTotalMs.Last,
+					SceneAvg, SceneMax, ReadAvg, ReadMax, EncAvg, EncMax,
+					Samples, FMath::Max(1, MainStatWindow),
 					MainWidth, MainHeight, MainFps, MainChannel.MeasuredFps, bMainGuardEnabled);
 			}
 		}
@@ -569,30 +606,33 @@ void UCamStreamSubsystem::ApplyMainCaptureGuards()
 		MainLumenSceneDetail, MainLumenReflectionQuality);
 }
 
-void UCamStreamSubsystem::RecordMainCaptureMs(float Ms)
+//======================================================================================
+// 캡처 소요시간 계측 — ms 링 버퍼
+//======================================================================================
+void FCamStreamMsRing::Record(int32 Window, float Ms)
 {
-	const int32 Window = FMath::Max(1, MainStatWindow);
-	if (MainCaptureMsRing.Num() != Window)
+	const int32 N = FMath::Max(1, Window);
+	if (Samples.Num() != N)
 	{
 		// 창 크기가 바뀌었거나(설정 변경) 최초 기록이다. 통계를 처음부터 다시 쌓는다.
-		MainCaptureMsRing.Reset();
-		MainCaptureMsRing.SetNumZeroed(Window);
-		MainCaptureMsNext = 0;
-		MainCaptureMsCount = 0;
+		Samples.Reset();
+		Samples.SetNumZeroed(N);
+		Next = 0;
+		Count = 0;
 	}
 
-	MainCaptureMsRing[MainCaptureMsNext] = Ms;
-	MainCaptureMsNext = (MainCaptureMsNext + 1) % Window;
-	MainCaptureMsCount = FMath::Min(MainCaptureMsCount + 1, Window);
-	MainLastCaptureMs = Ms;
+	Samples[Next] = Ms;
+	Next = (Next + 1) % N;
+	Count = FMath::Min(Count + 1, N);
+	Last = Ms;
 }
 
-void UCamStreamSubsystem::GetMainCaptureStats(float& OutAvgMs, float& OutMaxMs, int32& OutSamples) const
+void FCamStreamMsRing::GetStats(float& OutAvgMs, float& OutMaxMs, int32& OutSamples) const
 {
 	OutAvgMs = 0.f;
 	OutMaxMs = 0.f;
-	OutSamples = MainCaptureMsCount;
-	if (MainCaptureMsCount <= 0)
+	OutSamples = Count;
+	if (Count <= 0)
 	{
 		return;
 	}
@@ -600,22 +640,36 @@ void UCamStreamSubsystem::GetMainCaptureStats(float& OutAvgMs, float& OutMaxMs, 
 	// 링을 0 부터 순차로 채우므로, 가득 차기 전에는 [0, Count) 가 곧 유효 구간이다.
 	double Sum = 0.0;
 	float Max = 0.f;
-	for (int32 i = 0; i < MainCaptureMsCount; ++i)
+	for (int32 i = 0; i < Count; ++i)
 	{
-		const float V = MainCaptureMsRing[i];
+		const float V = Samples[i];
 		Sum += V;
 		Max = FMath::Max(Max, V);
 	}
-	OutAvgMs = static_cast<float>(Sum / MainCaptureMsCount);
+	OutAvgMs = static_cast<float>(Sum / Count);
 	OutMaxMs = Max;
 }
 
-bool UCamStreamSubsystem::ProduceMainJpeg(TArray<uint8>& OutJpeg)
+void FCamStreamMsRing::Reset()
 {
-	// 계측 구간 = 캡처 1회의 게임 스레드 총 비용(씬 캡처 + GPU 리드백 + JPEG 인코딩).
-	// 프레임 스파이크로 체감되는 것이 바로 이 값이라, 세 단계를 합쳐서 잰다.
-	const double CaptureStartSeconds = FPlatformTime::Seconds();
+	Samples.Reset();
+	Next = 0;
+	Count = 0;
+	Last = 0.f;
+}
 
+//======================================================================================
+// 메인 뷰 비동기 리드백
+//
+// 틱 A: CaptureScene() → 렌더 스레드에 GPU→스테이징 복사를 걸어둔다(기다리지 않는다).
+// 틱 B~: 렌더 스레드에서 IsReady() 를 확인시키고, 끝났으면 Lock → 행 단위 복사 → Unlock.
+// 틱 C: 게임 스레드가 픽셀을 넘겨받아 JPEG 으로 인코딩하고 프레임을 공개한다.
+//
+// GPU 완료 대기(블로킹)가 게임 스레드에서 사라지는 것이 이 구조의 전부다.
+// 감시 스트림이라 1~2 프레임 지연은 허용된다.
+//======================================================================================
+bool UCamStreamSubsystem::RequestMainCapture()
+{
 	UWorld* World = GetWorld();
 	if (!World || !EnsureMainCapture())
 	{
@@ -641,7 +695,16 @@ bool UCamStreamSubsystem::ProduceMainJpeg(TArray<uint8>& OutJpeg)
 		MainCapture->FOVAngle = PC->PlayerCameraManager->GetFOVAngle();
 	}
 
-	MainCapture->CaptureScene();
+	// 리드백 버퍼를 FColor 로 그대로 재해석하려면 렌더타깃이 BGRA8 이어야 한다.
+	// (RTF_RGBA8 → PF_B8G8R8A8 이고 FColor 의 메모리 배치가 B,G,R,A 라 변환이 필요 없다.)
+	// 다른 포맷이면 색이 뒤집힌 영상을 조용히 내보내는 대신 실패로 끝낸다.
+	if (MainRT->GetFormat() != PF_B8G8R8A8)
+	{
+		UE_LOG(LogCamStreamSub, Error,
+			TEXT("[CamStream] 메인 뷰 렌더타깃 포맷이 BGRA8 이 아니다(%d) — 비동기 리드백을 걸 수 없다."),
+			static_cast<int32>(MainRT->GetFormat()));
+		return false;
+	}
 
 	FTextureRenderTargetResource* Res = MainRT->GameThread_GetRenderTargetResource();
 	if (!Res)
@@ -649,22 +712,247 @@ bool UCamStreamSubsystem::ProduceMainJpeg(TArray<uint8>& OutJpeg)
 		return false;   // 실RHI 없음(-nullrhi)
 	}
 
-	TArray<FColor> Bitmap;
-	FReadSurfaceDataFlags Flags(RCM_UNorm, CubeFace_MAX);
-	Flags.SetLinearToGamma(false);
-	if (!Res->ReadPixels(Bitmap, Flags) || Bitmap.Num() == 0)
+	const double SceneStart = FPlatformTime::Seconds();
+	MainCapture->CaptureScene();
+	MainPendingSceneMs = static_cast<float>((FPlatformTime::Seconds() - SceneStart) * 1000.0);
+
+	// 여기부터가 "리드백에 쓴 게임 스레드 시간" — 커맨드 등록 비용만 들고 GPU 를 기다리지 않는다.
+	const double ReadbackStart = FPlatformTime::Seconds();
+
+	// 리드백 객체는 채널이 사는 동안 재사용한다 — 매 프레임 새로 만들면 스테이징 텍스처와 GPU 펜스를
+	// 프레임마다 다시 만들게 되어 비동기로 얻은 이득을 도로 까먹는다.
+	// (해상도가 바뀌면 EnqueueCopy 가 스테이징 텍스처를 다시 만들지 않으므로 그때만 통째로 버린다.)
+	if (!MainReadback.IsValid())
+	{
+		MainReadback = MakeShared<FCamStreamMainReadback, ESPMode::ThreadSafe>();
+	}
+
+	TSharedPtr<FCamStreamMainReadback, ESPMode::ThreadSafe> State = MainReadback;
+	{
+		FScopeLock Lock(&State->Mutex);
+		State->Width = MainRT->SizeX;
+		State->Height = MainRT->SizeY;
+		State->Pixels.Reset();
+		State->bFailed = false;
+		State->Stage = FCamStreamMainReadback::EStage::Pending;
+	}
+
+	// CaptureScene() 이 이미 렌더 커맨드를 넣었으므로, 뒤이어 넣는 이 커맨드는 항상 캡처 "뒤에" 실행된다.
+	ENQUEUE_RENDER_COMMAND(Park3DMainViewReadbackEnqueue)(
+		[State, Res](FRHICommandListImmediate& RHICmdList)
+		{
+			{
+				FScopeLock Lock(&State->Mutex);
+				if (State->bAbandoned)
+				{
+					return;
+				}
+			}
+
+			FRHITexture* Source = Res->GetRenderTargetTexture();
+			if (!Source)
+			{
+				// 실패를 Pending 으로 남기면 스트림이 조용히 멈춘다. 게임 스레드가 수거하도록 Ready 로 올린다.
+				FScopeLock Lock(&State->Mutex);
+				State->bFailed = true;
+				State->Stage = FCamStreamMainReadback::EStage::Ready;
+				return;
+			}
+
+			if (!State->Readback)
+			{
+				State->Readback = new FRHIGPUTextureReadback(TEXT("Park3DMainViewReadback"));
+			}
+
+			// 복사 전후로 소스 상태를 명시한다. 스테이징 쪽 전이는 EnqueueCopy 가 스스로 처리한다.
+			RHICmdList.Transition(FRHITransitionInfo(Source, ERHIAccess::Unknown, ERHIAccess::CopySrc));
+			State->Readback->EnqueueCopy(RHICmdList, Source, FIntVector::ZeroValue, 0, FIntVector::ZeroValue);
+			RHICmdList.Transition(FRHITransitionInfo(Source, ERHIAccess::CopySrc, ERHIAccess::SRVMask));
+		});
+
+	MainPendingReadbackMs = static_cast<float>((FPlatformTime::Seconds() - ReadbackStart) * 1000.0);
+	return true;
+}
+
+void UCamStreamSubsystem::PollMainReadback()
+{
+	if (!MainReadback.IsValid())
+	{
+		return;
+	}
+
+	{
+		FScopeLock Lock(&MainReadback->Mutex);
+		if (MainReadback->Stage != FCamStreamMainReadback::EStage::Pending)
+		{
+			return;   // 이미 완료됐거나 실패했다.
+		}
+	}
+
+	// 해상도가 바뀌었으면(설정 변경 후 렌더타깃 재생성 등) 진행 중인 요청은 버린다.
+	if (MainRT && (MainReadback->Width != MainRT->SizeX || MainReadback->Height != MainRT->SizeY))
+	{
+		ReleaseMainReadback();
+		return;
+	}
+
+	const double PollStart = FPlatformTime::Seconds();
+
+	TSharedPtr<FCamStreamMainReadback, ESPMode::ThreadSafe> State = MainReadback;
+	ENQUEUE_RENDER_COMMAND(Park3DMainViewReadbackPoll)(
+		[State](FRHICommandListImmediate& RHICmdList)
+		{
+			{
+				FScopeLock Lock(&State->Mutex);
+				if (State->bAbandoned || State->Stage != FCamStreamMainReadback::EStage::Pending)
+				{
+					return;
+				}
+			}
+
+			if (!State->Readback || !State->Readback->IsReady())
+			{
+				return;   // 아직 GPU 가 끝나지 않았다. 다음 틱에 다시 본다.
+			}
+
+			int32 RowPitchInPixels = 0;
+			int32 BufferHeight = 0;
+			const FColor* Src = static_cast<const FColor*>(State->Readback->Lock(RowPitchInPixels, &BufferHeight));
+
+			const int32 W = State->Width;
+			const int32 H = State->Height;
+
+			// row pitch(행 간격)는 폭보다 클 수 있다 — GPU 가 행 시작을 정렬 경계에 맞추기 때문이다.
+			// 이걸 무시하고 버퍼를 통째로 넘기면 행마다 시작점이 밀려 영상이 비스듬해진다.
+			if (!Src || RowPitchInPixels < W || W <= 0 || H <= 0)
+			{
+				if (Src)
+				{
+					State->Readback->Unlock();
+				}
+				FScopeLock Lock(&State->Mutex);
+				State->bFailed = true;
+				State->Stage = FCamStreamMainReadback::EStage::Ready;   // 게임 스레드가 실패를 수거하게 한다
+				return;
+			}
+
+			TArray<FColor> Pixels;
+			Pixels.SetNumUninitialized(W * H);
+
+			// 스테이징 버퍼 높이가 요청보다 작을 이유는 없지만, 작으면 남는 행을 검게 채운다
+			// (초기화되지 않은 메모리를 인코더에 넘기지 않기 위해서다).
+			const int32 CopyH = (BufferHeight > 0) ? FMath::Min(H, BufferHeight) : H;
+			for (int32 Y = 0; Y < CopyH; ++Y)
+			{
+				FMemory::Memcpy(Pixels.GetData() + Y * W, Src + Y * RowPitchInPixels, W * sizeof(FColor));
+			}
+			if (CopyH < H)
+			{
+				FMemory::Memzero(Pixels.GetData() + CopyH * W, (H - CopyH) * sizeof(FColor));
+			}
+
+			State->Readback->Unlock();
+
+			FScopeLock Lock(&State->Mutex);
+			State->Pixels = MoveTemp(Pixels);
+			State->Stage = FCamStreamMainReadback::EStage::Ready;
+		});
+
+	MainPendingReadbackMs += static_cast<float>((FPlatformTime::Seconds() - PollStart) * 1000.0);
+}
+
+bool UCamStreamSubsystem::TryTakeMainFrame(TArray<uint8>& OutJpeg)
+{
+	if (!MainReadback.IsValid())
 	{
 		return false;
 	}
 
-	if (!RpcImage::EncodeColors(Bitmap, MainRT->SizeX, MainRT->SizeY, /*bPng=*/false, JpegQuality, OutJpeg))
+	const double TakeStart = FPlatformTime::Seconds();
+
+	TArray<FColor> Pixels;
+	int32 W = 0, H = 0;
+	bool bFailed = false;
 	{
+		FScopeLock Lock(&MainReadback->Mutex);
+		if (MainReadback->Stage != FCamStreamMainReadback::EStage::Ready)
+		{
+			return false;   // 아직 진행 중이다. 실패가 아니라 "이번 틱은 프레임이 없다".
+		}
+		bFailed = MainReadback->bFailed;
+		W = MainReadback->Width;
+		H = MainReadback->Height;
+		Pixels = MoveTemp(MainReadback->Pixels);
+
+		// 성공이든 실패든 이 요청은 여기서 끝난다 — 다음 캡처를 받을 수 있게 비워 둔다
+		// (리드백 객체 자체는 재사용한다).
+		MainReadback->bFailed = false;
+		MainReadback->Stage = FCamStreamMainReadback::EStage::Idle;
+	}
+
+	MainPendingReadbackMs += static_cast<float>((FPlatformTime::Seconds() - TakeStart) * 1000.0);
+
+	if (bFailed || Pixels.Num() != W * H || W <= 0 || H <= 0)
+	{
+		UE_LOG(LogCamStreamSub, Warning,
+			TEXT("[CamStream] 메인 뷰 리드백 실패 — 이 프레임은 버린다(%dx%d, 픽셀 %d)."), W, H, Pixels.Num());
+		MainPendingSceneMs = 0.f;
+		MainPendingReadbackMs = 0.f;
+		return false;
+	}
+
+	const double EncodeStart = FPlatformTime::Seconds();
+	const bool bEncoded = RpcImage::EncodeColors(Pixels, W, H, /*bPng=*/false, JpegQuality, OutJpeg);
+	const float EncodeMs = static_cast<float>((FPlatformTime::Seconds() - EncodeStart) * 1000.0);
+	if (!bEncoded)
+	{
+		MainPendingSceneMs = 0.f;
+		MainPendingReadbackMs = 0.f;
 		return false;
 	}
 
 	// 성공한 캡처만 기록한다 — 실패 경로(플레이어 없음, RHI 없음)는 거의 공짜라 통계를 왜곡시킨다.
-	RecordMainCaptureMs(static_cast<float>((FPlatformTime::Seconds() - CaptureStartSeconds) * 1000.0));
+	const int32 Window = FMath::Max(1, MainStatWindow);
+	MainSceneMs.Record(Window, MainPendingSceneMs);
+	MainReadbackMs.Record(Window, MainPendingReadbackMs);
+	MainEncodeMs.Record(Window, EncodeMs);
+	MainTotalMs.Record(Window, MainPendingSceneMs + MainPendingReadbackMs + EncodeMs);
+
+	MainPendingSceneMs = 0.f;
+	MainPendingReadbackMs = 0.f;
 	return true;
+}
+
+void UCamStreamSubsystem::ReleaseMainReadback()
+{
+	if (!MainReadback.IsValid())
+	{
+		return;
+	}
+
+	TSharedPtr<FCamStreamMainReadback, ESPMode::ThreadSafe> State = MainReadback;
+	MainReadback.Reset();
+
+	{
+		FScopeLock Lock(&State->Mutex);
+		State->bAbandoned = true;
+		State->Pixels.Empty();
+	}
+
+	// 정리 커맨드가 마지막 참조를 쥐고 있으므로, Readback 파괴는 앞서 걸어둔 복사·폴링 커맨드보다
+	// 반드시 뒤에서 일어난다(렌더 커맨드는 FIFO). 게임 스레드는 여기서 기다리지 않는다.
+	ENQUEUE_RENDER_COMMAND(Park3DMainViewReadbackRelease)(
+		[State](FRHICommandListImmediate&)
+		{
+			if (State->Readback)
+			{
+				delete State->Readback;
+				State->Readback = nullptr;
+			}
+		});
+
+	MainPendingSceneMs = 0.f;
+	MainPendingReadbackMs = 0.f;
 }
 
 void UCamStreamSubsystem::StopMainChannel()
@@ -677,6 +965,9 @@ void UCamStreamSubsystem::StopMainChannel()
 		UE_LOG(LogCamStreamSub, Log, TEXT("[CamStream] 메인 뷰 채널 정지 (:%d)"), MainChannel.Port);
 	}
 
+	// 렌더타깃을 놓기 전에 진행 중인 리드백부터 정리한다.
+	ReleaseMainReadback();
+
 	if (MainCaptureActor)
 	{
 		MainCaptureActor->Destroy();
@@ -686,15 +977,17 @@ void UCamStreamSubsystem::StopMainChannel()
 	MainRT = nullptr;
 
 	// 통계도 함께 버린다 — 다음 세션의 수치에 이전 세션 표본이 섞이면 판단이 흐려진다.
-	MainCaptureMsRing.Reset();
-	MainCaptureMsNext = 0;
-	MainCaptureMsCount = 0;
-	MainLastCaptureMs = 0.f;
+	MainTotalMs.Reset();
+	MainSceneMs.Reset();
+	MainReadbackMs.Reset();
+	MainEncodeMs.Reset();
+	MainPendingSceneMs = 0.f;
+	MainPendingReadbackMs = 0.f;
 	MainLastStatLogTime = -1.0e9;
 }
 
 //======================================================================================
-// 프레임 생산 (P1: 동기. P2 에서 비동기 GPU 리드백으로 교체 예정)
+// 프레임 생산 — PTZ 카메라 채널(아직 동기 리드백. 메인 뷰만 비동기로 전환됐다)
 //======================================================================================
 bool UCamStreamSubsystem::ProduceJpeg(APTZCameraActor* Cam, TArray<uint8>& OutJpeg) const
 {
@@ -844,14 +1137,30 @@ TSharedPtr<FJsonObject> UCamStreamSubsystem::BuildStatusJson() const
 	Main->SetNumberField(TEXT("height"), MainHeight);
 
 	// 캡처 비용 실측 — 프레임 스파이크를 추정이 아니라 숫자로 판단하기 위한 값들.
+	// captureAvgMs/captureMaxMs 는 세 단계의 합이며, 기존 키 이름과 의미를 그대로 유지한다
+	// (이 값을 이미 읽고 있는 화면이 있다). 단계별 값은 옆에 더한다.
 	float AvgMs = 0.f, MaxMs = 0.f;
 	int32 Samples = 0;
-	GetMainCaptureStats(AvgMs, MaxMs, Samples);
+	MainTotalMs.GetStats(AvgMs, MaxMs, Samples);
 	Main->SetNumberField(TEXT("captureAvgMs"), AvgMs);
 	Main->SetNumberField(TEXT("captureMaxMs"), MaxMs);
-	Main->SetNumberField(TEXT("captureLastMs"), MainLastCaptureMs);
+	Main->SetNumberField(TEXT("captureLastMs"), MainTotalMs.Last);
 	Main->SetNumberField(TEXT("captureSamples"), Samples);
 	Main->SetNumberField(TEXT("statWindow"), MainStatWindow);
+
+	// 단계별 분해: 어디에 시간이 가는지 모르면 다음에 무엇을 고쳐야 하는지도 알 수 없다.
+	// readback* 은 비동기라 "게임 스레드가 실제로 쓴 시간"이다(GPU 대기 시간이 아니다).
+	float StageAvg = 0.f, StageMax = 0.f;
+	int32 StageSamples = 0;
+	MainSceneMs.GetStats(StageAvg, StageMax, StageSamples);
+	Main->SetNumberField(TEXT("captureSceneAvgMs"), StageAvg);
+	Main->SetNumberField(TEXT("captureSceneMaxMs"), StageMax);
+	MainReadbackMs.GetStats(StageAvg, StageMax, StageSamples);
+	Main->SetNumberField(TEXT("readbackAvgMs"), StageAvg);
+	Main->SetNumberField(TEXT("readbackMaxMs"), StageMax);
+	MainEncodeMs.GetStats(StageAvg, StageMax, StageSamples);
+	Main->SetNumberField(TEXT("encodeAvgMs"), StageAvg);
+	Main->SetNumberField(TEXT("encodeMaxMs"), StageMax);
 
 	// 가드 상태 — A/B 측정 시 어느 쪽 수치인지 응답만 보고 구분할 수 있게 함께 낸다.
 	TSharedPtr<FJsonObject> Guard = MakeShared<FJsonObject>();

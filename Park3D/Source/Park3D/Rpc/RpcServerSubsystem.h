@@ -15,6 +15,7 @@
 #include "Modules/MapRpcModule.h"
 #include "Modules/CamRpcModule.h"
 #include "Modules/MeasureRpcModule.h"
+#include "Modules/ViewRpcModule.h"
 #include "MjpegStreamManager.h"
 #include "RpcServerSubsystem.generated.h"
 
@@ -90,6 +91,7 @@ private:
 	TUniquePtr<FMapRpcModule> MapModule;
 	TUniquePtr<FCamRpcModule> CamModule;
 	TUniquePtr<FMeasureRpcModule> MeasureModule;
+	TUniquePtr<FViewRpcModule> ViewModule;
 
 	TSharedPtr<IHttpRouter> Router;
 	TArray<FHttpRouteHandle> RouteHandles;

@@ -104,6 +104,15 @@ struct FCamStreamMainReadback
 
 	/** 렌더 스레드에서만 생성·사용·파괴한다(Lock 이 즉시 커맨드리스트를 만지기 때문). */
 	FRHIGPUTextureReadback* Readback = nullptr;
+
+	// 아래 둘은 이 요청 1건의 게임 스레드 비용(ms)이다. 여러 장이 동시에 날아다니므로 슬롯마다 따로 든다.
+	// 게임 스레드에서만 쓰고 읽으므로 뮤텍스 대상이 아니다.
+
+	/** 이 요청의 CaptureScene() 구간. */
+	float SceneMs = 0.f;
+
+	/** 이 요청의 리드백 관련 게임 스레드 누적(커맨드 등록 + 픽셀 인수인계). */
+	float ReadbackGameMs = 0.f;
 };
 
 UCLASS(config = Game)
@@ -189,6 +198,16 @@ public:
 	/** 메인 뷰 렌더타깃 세로 해상도. */
 	UPROPERTY(config, EditAnywhere, Category = "CamStream|Main", meta = (ClampMin = "16"))
 	int32 MainHeight = 540;
+
+	/**
+	 * 동시에 진행하는 리드백 수(파이프라인 깊이).
+	 *
+	 * 리드백 1장이 GPU 에서 돌아오기까지의 지연은 우리가 줄일 수 없다. 대신 그 지연을 기다리지 않고
+	 * 다음 요청을 걸어 처리량을 지연과 분리한다 — 슬롯이 N 개면 지연이 L 이어도 이론상 N/L 장/초까지 나온다.
+	 * 1 로 두면 "한 장이 끝나야 다음을 건다"는 예전 동작과 같아진다(되돌릴 길).
+	 */
+	UPROPERTY(config, EditAnywhere, Category = "CamStream|Main", meta = (ClampMin = "1"))
+	int32 MainReadbackSlots = 3;
 
 	//==================================================================================
 	// Config — 메인 뷰 캡처 성능 가드
@@ -340,19 +359,34 @@ private:
 	 */
 	void ApplyMainCaptureGuards();
 
+	/** 슬롯 링을 MainReadbackSlots 크기로 맞춘다. 크기가 바뀌면 진행 중인 것을 전부 회수하고 다시 잡는다. */
+	void EnsureMainReadbackSlots();
+
+	/** 다음에 요청을 걸 슬롯이 비어 있는가(= 새 캡처를 걸 수 있는가). */
+	bool HasFreeMainReadbackSlot() const;
+
+	/** 요청했지만 아직 프레임으로 나가지 않은 슬롯 수(Pending + 수거 대기). */
+	int32 GetMainReadbackInFlight() const;
+
 	/**
 	 * 플레이어 시점을 캡처에 반영 → 1프레임 캡처 → GPU→CPU 복사를 렌더 스레드에 걸어둔다.
 	 * 여기서 GPU 완료를 기다리지 않는다. 실패 시 false(플레이어 없음, -nullrhi, 포맷 불일치).
 	 */
 	bool RequestMainCapture();
 
-	/** 진행 중인 리드백이 끝났는지 렌더 스레드에서 확인시킨다(게임 스레드는 커맨드만 넣는다). */
+	/** 진행 중인 모든 슬롯이 끝났는지 렌더 스레드에서 확인시킨다(게임 스레드는 커맨드만 넣는다). */
 	void PollMainReadback();
 
-	/** 리드백이 끝났으면 JPEG 으로 인코딩해 true. 아직이면 false(실패가 아니라 "이번 틱은 없음"). */
+	/** 슬롯 1개분 확인 커맨드를 건다. 준비됐으면 렌더 스레드가 픽셀까지 복사해 Ready 로 올린다. */
+	void PollMainReadbackSlot(const TSharedPtr<FCamStreamMainReadback, ESPMode::ThreadSafe>& State);
+
+	/**
+	 * 링의 "가장 오래된" 슬롯이 끝났으면 JPEG 으로 인코딩해 true. 한 틱에 최대 1장만 수거한다.
+	 * 아직이면 false(실패가 아니라 "이번 틱은 없음").
+	 */
 	bool TryTakeMainFrame(TArray<uint8>& OutJpeg);
 
-	/** 진행 중인 리드백을 안전하게 버린다(채널 정지·해상도 변경·클라이언트 이탈). */
+	/** 진행 중인 리드백을 슬롯 전부 안전하게 버린다(채널 정지·해상도 변경·클라이언트 이탈). */
 	void ReleaseMainReadback();
 
 	void StopMainChannel();
@@ -375,14 +409,32 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UTextureRenderTarget2D> MainRT;
 
-	/** 진행 중인 비동기 리드백. 비어 있으면 "요청 없음"이다. */
-	TSharedPtr<FCamStreamMainReadback, ESPMode::ThreadSafe> MainReadback;
+	//---- 비동기 리드백 슬롯 링 ----
+	//
+	// 한 장이 끝나기를 기다리지 않고, 페이싱이 돌아올 때마다 빈 슬롯에 새 요청을 건다.
+	// 지연(GPU 사정)은 그대로 두고 처리량만 분리하는 구조다.
+	//
+	// 순서 보장: 요청은 Write 위치에서 시작해 앞으로만 가고, 수거는 Read 위치에서만 한다.
+	// 뒤에 건 것이 먼저 Ready 가 되어도 Read 가 그 자리에 올 때까지 나가지 못한다 → 영상이 뒤로 튀지 않는다.
+
+	/** 슬롯 링(크기 = MainReadbackSlots). 원소가 null 이면 아직 한 번도 쓰지 않은 슬롯이다. */
+	TArray<TSharedPtr<FCamStreamMainReadback, ESPMode::ThreadSafe>> MainReadbackRing;
+
+	/** 다음 요청을 걸 위치. */
+	int32 MainRingWrite = 0;
+
+	/** 다음에 수거할(가장 오래된) 위치. */
+	int32 MainRingRead = 0;
+
+	/** 빈 슬롯이 없어 요청을 건너뛴 누적 횟수. 처리량이 슬롯 수에 막혔는지 보는 지표다. */
+	int64 MainSkippedNoSlot = 0;
 
 	//---- 캡처 소요시간 계측 ----
 	//
 	// 게임 스레드가 프레임 1장에 쓴 시간을 세 단계로 나눠 잰다. 합친 값 하나만으로는
 	// 무엇을 고쳐야 하는지 알 수 없기 때문이다. 한 프레임의 세 단계는 서로 다른 틱에서
-	// 일어나므로(요청 틱 / 완료 틱), 단계별 값을 아래 Pending* 에 모아 뒀다가 공개 시 함께 기록한다.
+	// 일어나므로(요청 틱 / 완료 틱), 단계별 값은 슬롯(FCamStreamMainReadback)이 들고 있다가
+	// 그 슬롯을 공개하는 순간 아래 링들에 함께 기록된다.
 
 	/** 세 단계의 합(= 기존 captureAvgMs/captureMaxMs 가 읽던 값). */
 	FCamStreamMsRing MainTotalMs;
@@ -396,14 +448,17 @@ private:
 	/** JPEG 인코딩 구간. */
 	FCamStreamMsRing MainEncodeMs;
 
-	/** 진행 중인 요청의 CaptureScene 구간(ms). 공개 시 합산에 쓴다. */
-	float MainPendingSceneMs = 0.f;
-
-	/** 진행 중인 요청의 리드백 관련 게임 스레드 누적(ms). 폴링 틱마다 조금씩 더해진다. */
-	float MainPendingReadbackMs = 0.f;
-
 	/** 마지막 통계 로그 시각(FPlatformTime 기준 실시간 — 일시정지와 무관하게 흐르게). */
 	double MainLastStatLogTime = -1.0e9;
+
+	//---- 게임 스레드 틱 레이트 ----
+	//
+	// 스트림은 게임 스레드 틱보다 빠를 수 없다. 이 값이 목표 fps 보다 낮으면 손댈 곳은 스트림이 아니라 앱이다.
+
+	/** 최근 1초 창의 실측 틱/초. */
+	float MeasuredTickFps = 0.f;
+	float TickFpsWindowAccum = 0.f;
+	int32 TickFpsWindowTicks = 0;
 
 	/** 마지막 슬롯 재평가 시각(초). */
 	double LastSlotEvalTime = -1.0e9;

@@ -289,6 +289,17 @@ void UCamStreamSubsystem::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	// 게임 스레드 틱/초. 스트림은 이 값보다 빠를 수 없으므로 fps 미달의 원인을 가르는 첫 지표다.
+	// 스트리밍이 꺼져 있어도 재려면 아래 early-return 앞에 둔다.
+	TickFpsWindowAccum += DeltaTime;
+	++TickFpsWindowTicks;
+	if (TickFpsWindowAccum >= 1.f)
+	{
+		MeasuredTickFps = TickFpsWindowTicks / TickFpsWindowAccum;
+		TickFpsWindowAccum = 0.f;
+		TickFpsWindowTicks = 0;
+	}
+
 	if (bDisabled)
 	{
 		if (!bLoggedDisabled)
@@ -406,8 +417,9 @@ void UCamStreamSubsystem::TickMainChannel(float DeltaTime)
 	MainChannel.Accum += DeltaTime;
 	MainChannel.FpsWindowAccum += DeltaTime;
 
-	// 1) 걸어둔 리드백이 끝났는지 먼저 본다. 끝났으면 페이싱과 무관하게 바로 내보낸다
+	// 1) 걸어둔 슬롯들이 끝났는지 먼저 본다. 가장 오래된 것이 끝났으면 페이싱과 무관하게 바로 내보낸다
 	//    — GPU 는 이미 일을 마쳤고, 여기서 더 미루면 지연만 늘어난다.
+	//    한 틱에 1장만 수거한다: 여러 장이 한꺼번에 Ready 가 됐을 때 전부 인코딩하면 그 틱이 튄다.
 	PollMainReadback();
 
 	TArray<uint8> Jpeg;
@@ -417,21 +429,16 @@ void UCamStreamSubsystem::TickMainChannel(float DeltaTime)
 		++MainChannel.FpsWindowFrames;
 	}
 
-	// 2) 페이싱이 돌아오면 다음 캡처를 건다.
+	// 2) 페이싱이 돌아오면 빈 슬롯에 다음 캡처를 건다. 앞 장이 끝나기를 기다리지 않는다
+	//    — 지연은 GPU 사정이라 못 줄이므로, 여러 장을 동시에 날려 처리량만 지연과 분리한다.
 	if (MainChannel.Accum >= Interval)
 	{
-		bool bBusy = false;
-		if (MainReadback.IsValid())
+		if (!HasFreeMainReadbackSlot())
 		{
-			FScopeLock Lock(&MainReadback->Mutex);
-			bBusy = (MainReadback->Stage != FCamStreamMainReadback::EStage::Idle);
-		}
-
-		if (bBusy)
-		{
-			// 앞의 리드백이 아직 안 끝났다. 새로 걸면 큐가 쌓여 지연이 계속 늘어나므로 이번 차례는 건너뛴다.
+			// 슬롯이 전부 찼다. 여기서 더 걸면 큐가 쌓여 지연이 계속 늘어나므로 이번 차례는 건너뛴다.
 			// Accum 은 한 프레임치로 묶어 둔다 — 다음 틱에 곧바로 다시 시도하되 부채는 쌓이지 않게.
 			MainChannel.Accum = Interval;
+			++MainSkippedNoSlot;
 		}
 		else
 		{
@@ -473,11 +480,13 @@ void UCamStreamSubsystem::TickMainChannel(float DeltaTime)
 				UE_LOG(LogCamStreamSub, Log,
 					TEXT("[CamStream] 메인 뷰 캡처 비용(게임 스레드): 합계 평균 %.2fms / 최대 %.2fms / 직전 %.2fms ")
 					TEXT("[씬 %.2f/%.2f · 리드백 %.2f/%.2f · 인코딩 %.2f/%.2f] ")
-					TEXT("(표본 %d, 창 %d, %dx%d, 목표 %.1ffps 실측 %.1ffps, 가드=%d)"),
+					TEXT("(표본 %d, 창 %d, %dx%d, 목표 %.1ffps 실측 %.1ffps, 틱 %.1f/s, ")
+					TEXT("슬롯 %d/%d 사용, 슬롯없어 건너뜀 %lld, 가드=%d)"),
 					TotalAvg, TotalMax, MainTotalMs.Last,
 					SceneAvg, SceneMax, ReadAvg, ReadMax, EncAvg, EncMax,
 					Samples, FMath::Max(1, MainStatWindow),
-					MainWidth, MainHeight, MainFps, MainChannel.MeasuredFps, bMainGuardEnabled);
+					MainWidth, MainHeight, MainFps, MainChannel.MeasuredFps, MeasuredTickFps,
+					GetMainReadbackInFlight(), MainReadbackRing.Num(), MainSkippedNoSlot, bMainGuardEnabled);
 			}
 		}
 	}
@@ -659,15 +668,74 @@ void FCamStreamMsRing::Reset()
 }
 
 //======================================================================================
-// 메인 뷰 비동기 리드백
+// 메인 뷰 비동기 리드백 — 슬롯 링(여러 장 동시 진행)
 //
-// 틱 A: CaptureScene() → 렌더 스레드에 GPU→스테이징 복사를 걸어둔다(기다리지 않는다).
-// 틱 B~: 렌더 스레드에서 IsReady() 를 확인시키고, 끝났으면 Lock → 행 단위 복사 → Unlock.
-// 틱 C: 게임 스레드가 픽셀을 넘겨받아 JPEG 으로 인코딩하고 프레임을 공개한다.
+// 틱 A: CaptureScene() → 빈 슬롯에 GPU→스테이징 복사를 걸어둔다(기다리지 않는다).
+// 틱 B~: 렌더 스레드에서 진행 중인 슬롯의 IsReady() 를 확인시키고, 끝났으면 Lock → 행 단위 복사 → Unlock.
+// 틱 C: 게임 스레드가 "가장 오래된" 슬롯 1장만 넘겨받아 JPEG 으로 인코딩하고 프레임을 공개한다.
 //
-// GPU 완료 대기(블로킹)가 게임 스레드에서 사라지는 것이 이 구조의 전부다.
-// 감시 스트림이라 1~2 프레임 지연은 허용된다.
+// 한 장이 GPU 에서 돌아오는 지연(L)은 우리가 줄일 수 없다. 슬롯 1개면 그 L 이 그대로 처리량 상한이
+// 된다(1/L 장/초). 슬롯이 N 개면 L 을 기다리는 동안에도 계속 요청을 걸 수 있어 처리량이 N/L 까지 오른다.
+// 이것이 이 구조의 전부다 — 지연을 줄이는 게 아니라 지연과 처리량을 분리한다.
+//
+// 순서 보장: 요청은 MainRingWrite 에서만 시작하고 수거는 MainRingRead 에서만 한다. 뒤에 건 슬롯이
+// 먼저 Ready 가 되어도 Read 가 그 자리에 올 때까지 나가지 못하므로 영상이 뒤로 튀지 않는다.
 //======================================================================================
+void UCamStreamSubsystem::EnsureMainReadbackSlots()
+{
+	const int32 N = FMath::Max(1, MainReadbackSlots);
+	if (MainReadbackRing.Num() == N)
+	{
+		return;
+	}
+
+	// 깊이가 바뀌었다(설정 변경). 진행 중인 것을 전부 회수하고 링을 다시 잡는다 —
+	// 크기를 살려 둔 채 늘리면 Read/Write 위치의 의미가 어긋나 순서가 뒤집힌다.
+	ReleaseMainReadback();
+	MainReadbackRing.SetNum(N);
+	MainRingWrite = 0;
+	MainRingRead = 0;
+}
+
+bool UCamStreamSubsystem::HasFreeMainReadbackSlot() const
+{
+	if (MainReadbackRing.Num() != FMath::Max(1, MainReadbackSlots))
+	{
+		return true;   // 아직 링을 안 잡았다 — 첫 요청이 잡는다.
+	}
+	if (!MainReadbackRing.IsValidIndex(MainRingWrite))
+	{
+		return false;
+	}
+
+	const TSharedPtr<FCamStreamMainReadback, ESPMode::ThreadSafe>& Slot = MainReadbackRing[MainRingWrite];
+	if (!Slot.IsValid())
+	{
+		return true;   // 한 번도 안 쓴 슬롯.
+	}
+
+	FScopeLock Lock(&Slot->Mutex);
+	return Slot->Stage == FCamStreamMainReadback::EStage::Idle;
+}
+
+int32 UCamStreamSubsystem::GetMainReadbackInFlight() const
+{
+	int32 Count = 0;
+	for (const TSharedPtr<FCamStreamMainReadback, ESPMode::ThreadSafe>& Slot : MainReadbackRing)
+	{
+		if (!Slot.IsValid())
+		{
+			continue;
+		}
+		FScopeLock Lock(&Slot->Mutex);
+		if (Slot->Stage != FCamStreamMainReadback::EStage::Idle)
+		{
+			++Count;
+		}
+	}
+	return Count;
+}
+
 bool UCamStreamSubsystem::RequestMainCapture()
 {
 	UWorld* World = GetWorld();
@@ -712,22 +780,30 @@ bool UCamStreamSubsystem::RequestMainCapture()
 		return false;   // 실RHI 없음(-nullrhi)
 	}
 
+	EnsureMainReadbackSlots();
+	if (!MainReadbackRing.IsValidIndex(MainRingWrite))
+	{
+		return false;
+	}
+
 	const double SceneStart = FPlatformTime::Seconds();
 	MainCapture->CaptureScene();
-	MainPendingSceneMs = static_cast<float>((FPlatformTime::Seconds() - SceneStart) * 1000.0);
+	const float SceneMs = static_cast<float>((FPlatformTime::Seconds() - SceneStart) * 1000.0);
 
 	// 여기부터가 "리드백에 쓴 게임 스레드 시간" — 커맨드 등록 비용만 들고 GPU 를 기다리지 않는다.
 	const double ReadbackStart = FPlatformTime::Seconds();
 
-	// 리드백 객체는 채널이 사는 동안 재사용한다 — 매 프레임 새로 만들면 스테이징 텍스처와 GPU 펜스를
-	// 프레임마다 다시 만들게 되어 비동기로 얻은 이득을 도로 까먹는다.
-	// (해상도가 바뀌면 EnqueueCopy 가 스테이징 텍스처를 다시 만들지 않으므로 그때만 통째로 버린다.)
-	if (!MainReadback.IsValid())
+	// 슬롯의 리드백 객체는 채널이 사는 동안 재사용한다 — 매번 새로 만들면 스테이징 텍스처와 GPU 펜스를
+	// 다시 만들게 되어 비동기로 얻은 이득을 도로 까먹는다.
+	// (해상도가 바뀌면 EnqueueCopy 가 스테이징 텍스처를 다시 만들지 않으므로 그때는 통째로 버린다.)
+	if (!MainReadbackRing[MainRingWrite].IsValid())
 	{
-		MainReadback = MakeShared<FCamStreamMainReadback, ESPMode::ThreadSafe>();
+		MainReadbackRing[MainRingWrite] = MakeShared<FCamStreamMainReadback, ESPMode::ThreadSafe>();
 	}
 
-	TSharedPtr<FCamStreamMainReadback, ESPMode::ThreadSafe> State = MainReadback;
+	TSharedPtr<FCamStreamMainReadback, ESPMode::ThreadSafe> State = MainReadbackRing[MainRingWrite];
+	State->SceneMs = SceneMs;
+	State->ReadbackGameMs = 0.f;
 	{
 		FScopeLock Lock(&State->Mutex);
 		State->Width = MainRT->SizeX;
@@ -736,6 +812,9 @@ bool UCamStreamSubsystem::RequestMainCapture()
 		State->bFailed = false;
 		State->Stage = FCamStreamMainReadback::EStage::Pending;
 	}
+
+	// 요청은 앞으로만 간다. 수거도 같은 방향으로만 돌므로 링이 FIFO 가 된다.
+	MainRingWrite = (MainRingWrite + 1) % MainReadbackRing.Num();
 
 	// CaptureScene() 이 이미 렌더 커맨드를 넣었으므로, 뒤이어 넣는 이 커맨드는 항상 캡처 "뒤에" 실행된다.
 	ENQUEUE_RENDER_COMMAND(Park3DMainViewReadbackEnqueue)(
@@ -770,35 +849,50 @@ bool UCamStreamSubsystem::RequestMainCapture()
 			RHICmdList.Transition(FRHITransitionInfo(Source, ERHIAccess::CopySrc, ERHIAccess::SRVMask));
 		});
 
-	MainPendingReadbackMs = static_cast<float>((FPlatformTime::Seconds() - ReadbackStart) * 1000.0);
+	State->ReadbackGameMs += static_cast<float>((FPlatformTime::Seconds() - ReadbackStart) * 1000.0);
 	return true;
 }
 
 void UCamStreamSubsystem::PollMainReadback()
 {
-	if (!MainReadback.IsValid())
+	// 해상도가 바뀌었으면(설정 변경 후 렌더타깃 재생성 등) 진행 중인 요청을 전부 버린다.
+	// 슬롯 하나만 버릴 수 없다 — 스테이징 텍스처 크기가 슬롯마다 제각각이 되면 순서도 크기도 못 맞춘다.
+	if (MainRT)
 	{
-		return;
-	}
-
-	{
-		FScopeLock Lock(&MainReadback->Mutex);
-		if (MainReadback->Stage != FCamStreamMainReadback::EStage::Pending)
+		for (const TSharedPtr<FCamStreamMainReadback, ESPMode::ThreadSafe>& Slot : MainReadbackRing)
 		{
-			return;   // 이미 완료됐거나 실패했다.
+			if (Slot.IsValid() && (Slot->Width != 0 || Slot->Height != 0)
+				&& (Slot->Width != MainRT->SizeX || Slot->Height != MainRT->SizeY))
+			{
+				ReleaseMainReadback();
+				return;
+			}
 		}
 	}
 
-	// 해상도가 바뀌었으면(설정 변경 후 렌더타깃 재생성 등) 진행 중인 요청은 버린다.
-	if (MainRT && (MainReadback->Width != MainRT->SizeX || MainReadback->Height != MainRT->SizeY))
+	// 진행 중인 슬롯을 전부 확인시킨다. 수거는 가장 오래된 것만 하지만, 폴링까지 순서를 지키면
+	// 뒤 슬롯이 늦게 확인되어 파이프라인이 헛돈다.
+	for (const TSharedPtr<FCamStreamMainReadback, ESPMode::ThreadSafe>& Slot : MainReadbackRing)
 	{
-		ReleaseMainReadback();
-		return;
+		if (!Slot.IsValid())
+		{
+			continue;
+		}
+		{
+			FScopeLock Lock(&Slot->Mutex);
+			if (Slot->Stage != FCamStreamMainReadback::EStage::Pending)
+			{
+				continue;   // 비었거나 이미 완료됐다.
+			}
+		}
+		PollMainReadbackSlot(Slot);
 	}
+}
 
+void UCamStreamSubsystem::PollMainReadbackSlot(const TSharedPtr<FCamStreamMainReadback, ESPMode::ThreadSafe>& State)
+{
 	const double PollStart = FPlatformTime::Seconds();
 
-	TSharedPtr<FCamStreamMainReadback, ESPMode::ThreadSafe> State = MainReadback;
 	ENQUEUE_RENDER_COMMAND(Park3DMainViewReadbackPoll)(
 		[State](FRHICommandListImmediate& RHICmdList)
 		{
@@ -858,46 +952,49 @@ void UCamStreamSubsystem::PollMainReadback()
 			State->Stage = FCamStreamMainReadback::EStage::Ready;
 		});
 
-	MainPendingReadbackMs += static_cast<float>((FPlatformTime::Seconds() - PollStart) * 1000.0);
+	State->ReadbackGameMs += static_cast<float>((FPlatformTime::Seconds() - PollStart) * 1000.0);
 }
 
 bool UCamStreamSubsystem::TryTakeMainFrame(TArray<uint8>& OutJpeg)
 {
-	if (!MainReadback.IsValid())
+	// 수거는 오직 "가장 오래된" 슬롯에서만 한다. 뒤 슬롯이 먼저 Ready 가 되어도 여기서 막히므로
+	// 내보내는 순서 = 요청한 순서가 보장된다(영상이 뒤로 튀지 않는다).
+	// 한 번에 한 슬롯만 보므로 "틱당 최대 1장 수거"도 구조적으로 지켜진다 — 인코딩이 12ms 다.
+	if (!MainReadbackRing.IsValidIndex(MainRingRead) || !MainReadbackRing[MainRingRead].IsValid())
 	{
 		return false;
 	}
 
+	TSharedPtr<FCamStreamMainReadback, ESPMode::ThreadSafe> State = MainReadbackRing[MainRingRead];
 	const double TakeStart = FPlatformTime::Seconds();
 
 	TArray<FColor> Pixels;
 	int32 W = 0, H = 0;
 	bool bFailed = false;
 	{
-		FScopeLock Lock(&MainReadback->Mutex);
-		if (MainReadback->Stage != FCamStreamMainReadback::EStage::Ready)
+		FScopeLock Lock(&State->Mutex);
+		if (State->Stage != FCamStreamMainReadback::EStage::Ready)
 		{
 			return false;   // 아직 진행 중이다. 실패가 아니라 "이번 틱은 프레임이 없다".
 		}
-		bFailed = MainReadback->bFailed;
-		W = MainReadback->Width;
-		H = MainReadback->Height;
-		Pixels = MoveTemp(MainReadback->Pixels);
+		bFailed = State->bFailed;
+		W = State->Width;
+		H = State->Height;
+		Pixels = MoveTemp(State->Pixels);
 
 		// 성공이든 실패든 이 요청은 여기서 끝난다 — 다음 캡처를 받을 수 있게 비워 둔다
 		// (리드백 객체 자체는 재사용한다).
-		MainReadback->bFailed = false;
-		MainReadback->Stage = FCamStreamMainReadback::EStage::Idle;
+		State->bFailed = false;
+		State->Stage = FCamStreamMainReadback::EStage::Idle;
 	}
 
-	MainPendingReadbackMs += static_cast<float>((FPlatformTime::Seconds() - TakeStart) * 1000.0);
+	State->ReadbackGameMs += static_cast<float>((FPlatformTime::Seconds() - TakeStart) * 1000.0);
+	MainRingRead = (MainRingRead + 1) % MainReadbackRing.Num();
 
 	if (bFailed || Pixels.Num() != W * H || W <= 0 || H <= 0)
 	{
 		UE_LOG(LogCamStreamSub, Warning,
 			TEXT("[CamStream] 메인 뷰 리드백 실패 — 이 프레임은 버린다(%dx%d, 픽셀 %d)."), W, H, Pixels.Num());
-		MainPendingSceneMs = 0.f;
-		MainPendingReadbackMs = 0.f;
 		return false;
 	}
 
@@ -906,53 +1003,54 @@ bool UCamStreamSubsystem::TryTakeMainFrame(TArray<uint8>& OutJpeg)
 	const float EncodeMs = static_cast<float>((FPlatformTime::Seconds() - EncodeStart) * 1000.0);
 	if (!bEncoded)
 	{
-		MainPendingSceneMs = 0.f;
-		MainPendingReadbackMs = 0.f;
 		return false;
 	}
 
 	// 성공한 캡처만 기록한다 — 실패 경로(플레이어 없음, RHI 없음)는 거의 공짜라 통계를 왜곡시킨다.
 	const int32 Window = FMath::Max(1, MainStatWindow);
-	MainSceneMs.Record(Window, MainPendingSceneMs);
-	MainReadbackMs.Record(Window, MainPendingReadbackMs);
+	MainSceneMs.Record(Window, State->SceneMs);
+	MainReadbackMs.Record(Window, State->ReadbackGameMs);
 	MainEncodeMs.Record(Window, EncodeMs);
-	MainTotalMs.Record(Window, MainPendingSceneMs + MainPendingReadbackMs + EncodeMs);
-
-	MainPendingSceneMs = 0.f;
-	MainPendingReadbackMs = 0.f;
+	MainTotalMs.Record(Window, State->SceneMs + State->ReadbackGameMs + EncodeMs);
 	return true;
 }
 
 void UCamStreamSubsystem::ReleaseMainReadback()
 {
-	if (!MainReadback.IsValid())
+	// 슬롯 전부를 회수한다. 수명 규약은 슬롯 1개일 때와 같다 — 게임 스레드는 bAbandoned 만 세우고
+	// 자기 참조를 놓고, 마지막 참조는 정리용 렌더 커맨드가 쥔다. 그래서 Readback 파괴는 항상
+	// 렌더 스레드에서, 그 슬롯에 앞서 걸어둔 복사·폴링 커맨드보다 뒤에서 일어난다(렌더 커맨드는 FIFO).
+	for (TSharedPtr<FCamStreamMainReadback, ESPMode::ThreadSafe>& SlotRef : MainReadbackRing)
 	{
-		return;
-	}
-
-	TSharedPtr<FCamStreamMainReadback, ESPMode::ThreadSafe> State = MainReadback;
-	MainReadback.Reset();
-
-	{
-		FScopeLock Lock(&State->Mutex);
-		State->bAbandoned = true;
-		State->Pixels.Empty();
-	}
-
-	// 정리 커맨드가 마지막 참조를 쥐고 있으므로, Readback 파괴는 앞서 걸어둔 복사·폴링 커맨드보다
-	// 반드시 뒤에서 일어난다(렌더 커맨드는 FIFO). 게임 스레드는 여기서 기다리지 않는다.
-	ENQUEUE_RENDER_COMMAND(Park3DMainViewReadbackRelease)(
-		[State](FRHICommandListImmediate&)
+		if (!SlotRef.IsValid())
 		{
-			if (State->Readback)
-			{
-				delete State->Readback;
-				State->Readback = nullptr;
-			}
-		});
+			continue;
+		}
 
-	MainPendingSceneMs = 0.f;
-	MainPendingReadbackMs = 0.f;
+		TSharedPtr<FCamStreamMainReadback, ESPMode::ThreadSafe> State = SlotRef;
+		SlotRef.Reset();
+
+		{
+			FScopeLock Lock(&State->Mutex);
+			State->bAbandoned = true;
+			State->Stage = FCamStreamMainReadback::EStage::Idle;
+			State->Pixels.Empty();
+		}
+
+		ENQUEUE_RENDER_COMMAND(Park3DMainViewReadbackRelease)(
+			[State](FRHICommandListImmediate&)
+			{
+				if (State->Readback)
+				{
+					delete State->Readback;
+					State->Readback = nullptr;
+				}
+			});
+	}
+
+	MainReadbackRing.Reset();
+	MainRingWrite = 0;
+	MainRingRead = 0;
 }
 
 void UCamStreamSubsystem::StopMainChannel()
@@ -981,8 +1079,7 @@ void UCamStreamSubsystem::StopMainChannel()
 	MainSceneMs.Reset();
 	MainReadbackMs.Reset();
 	MainEncodeMs.Reset();
-	MainPendingSceneMs = 0.f;
-	MainPendingReadbackMs = 0.f;
+	MainSkippedNoSlot = 0;
 	MainLastStatLogTime = -1.0e9;
 }
 
@@ -1161,6 +1258,12 @@ TSharedPtr<FJsonObject> UCamStreamSubsystem::BuildStatusJson() const
 	MainEncodeMs.GetStats(StageAvg, StageMax, StageSamples);
 	Main->SetNumberField(TEXT("encodeAvgMs"), StageAvg);
 	Main->SetNumberField(TEXT("encodeMaxMs"), StageMax);
+
+	// 처리량이 무엇에 막혀 있는지 — 슬롯 부족인지, 애초에 앱 틱이 모자란 것인지.
+	Main->SetNumberField(TEXT("readbackSlots"), FMath::Max(1, MainReadbackSlots));
+	Main->SetNumberField(TEXT("inFlight"), GetMainReadbackInFlight());
+	Main->SetNumberField(TEXT("skippedNoSlot"), static_cast<double>(MainSkippedNoSlot));
+	Main->SetNumberField(TEXT("tickFps"), MeasuredTickFps);
 
 	// 가드 상태 — A/B 측정 시 어느 쪽 수치인지 응답만 보고 구분할 수 있게 함께 낸다.
 	TSharedPtr<FJsonObject> Guard = MakeShared<FJsonObject>();

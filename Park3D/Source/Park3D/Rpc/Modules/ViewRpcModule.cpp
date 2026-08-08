@@ -34,8 +34,15 @@ namespace
 		return PC;
 	}
 
-	/** 메인 뷰 MJPEG 채널을 소유한 서브시스템(월드에 없으면 nullptr). CamRpcModule 과 동형. */
-	UCamStreamSubsystem* GetStreamSubsystem(UWorld* World)
+	/**
+	 * 메인 뷰 MJPEG 채널을 소유한 서브시스템(월드에 없으면 nullptr). CamRpcModule 과 동형.
+	 *
+	 * ⚠ 이름을 `GetStreamSubsystem` 으로 두면 **unity 빌드에서 CamRpcModule.cpp 와 충돌한다**
+	 *   (C2084 — 익명 네임스페이스가 한 번역단위로 합쳐지면서 재정의가 된다).
+	 *   처음에 그 이름으로 뒀다가 실제로 빌드가 깨졌다. adaptive unity 가 **변경된 파일을
+	 *   unity 에서 빼기 때문에**, 이 파일을 고친 직후의 빌드에서는 통과해 버려 더 늦게 터진다.
+	 */
+	UCamStreamSubsystem* GetMainStreamSubsystem(UWorld* World)
 	{
 		return World ? World->GetSubsystem<UCamStreamSubsystem>() : nullptr;
 	}
@@ -66,7 +73,7 @@ namespace
 
 		// 메인 뷰 스트림 포트(http://<host>:<port>/). 채널이 안 떠 있으면 0 = 영상 없음(cam.list 의 규약과 동일).
 		int32 StreamPort = 0;
-		if (UCamStreamSubsystem* S = GetStreamSubsystem(World))
+		if (UCamStreamSubsystem* S = GetMainStreamSubsystem(World))
 		{
 			S->GetMainStreamPort(StreamPort);
 		}
@@ -204,7 +211,7 @@ void FViewRpcModule::Register(URpcDispatcher& Dispatcher)
 
 		// 픽셀 기준면은 "웹이 실제로 보고 있는 이미지" = 메인 뷰 렌더타깃이다. 게임 창 크기가 아니다
 		// (렌더타깃은 창과 무관하게 MainWidth×MainHeight 로 고정된다 — CamStreamSubsystem::EnsureMainCapture).
-		UCamStreamSubsystem* Stream = GetStreamSubsystem(World);
+		UCamStreamSubsystem* Stream = GetMainStreamSubsystem(World);
 		if (!Stream)
 		{
 			E.FailDomain(TEXT("스트림 서브시스템 없음 — 메인 뷰 영상 좌표계를 정할 수 없습니다."));

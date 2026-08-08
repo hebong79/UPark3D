@@ -18,6 +18,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "HAL/CriticalSection.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "CamStreamPolicy.h"
 #include "CamStreamSubsystem.generated.h"
@@ -26,6 +27,7 @@ class APTZCameraActor;
 class ACameraControlManager;
 class FMjpegStreamServer;
 class FJsonObject;
+class FRHIGPUTextureReadback;
 class USceneCaptureComponent2D;
 class UTextureRenderTarget2D;
 
@@ -47,6 +49,61 @@ struct FCamStreamChannel
 	double LastServedTime = 0.0;
 	double LastPtzTime = -1.0e9;        // 센티널 음수 — 월드 t≈0 에서 "방금 조작"으로 오탐하지 않게
 	bool   bPinned = false;
+};
+
+/**
+ * ms 표본 링 버퍼. 최근 창(MainStatWindow)의 평균/최대를 낸다.
+ * 창 크기가 바뀌면(설정 변경) 통계를 처음부터 다시 쌓는다.
+ */
+struct FCamStreamMsRing
+{
+	TArray<float> Samples;
+	int32 Next = 0;
+	int32 Count = 0;
+	float Last = 0.f;
+
+	void Record(int32 Window, float Ms);
+	void GetStats(float& OutAvgMs, float& OutMaxMs, int32& OutSamples) const;
+	void Reset();
+};
+
+/**
+ * 메인 뷰 비동기 GPU 리드백의 "틱 사이" 상태. 게임 스레드와 렌더 스레드가 함께 만지므로
+ * TSharedPtr(ThreadSafe) 로 들고 다닌다.
+ *
+ * 정리 규약: 채널이 멈추거나 해상도가 바뀌면 게임 스레드는 bAbandoned 를 세우고 자기 참조만 놓는다.
+ * 남은 참조는 정리용 렌더 커맨드가 쥐고 있으므로, Readback 의 파괴는 항상 렌더 스레드에서
+ * (그리고 앞서 걸어둔 복사 커맨드보다 뒤에) 일어난다.
+ */
+struct FCamStreamMainReadback
+{
+	enum class EStage : uint8
+	{
+		Idle,      // 요청 없음 — 새 캡처를 걸 수 있다
+		Pending,   // GPU 복사를 걸어둔 상태 — 겹쳐 걸지 않는다(큐가 쌓이면 지연이 계속 늘어난다)
+		Ready,     // 픽셀이 CPU 로 넘어왔다 — 게임 스레드가 인코딩할 차례
+	};
+
+	/** Stage/Pixels/Width/Height/bAbandoned/bFailed 를 보호한다. Readback 은 렌더 스레드 전용이라 제외. */
+	mutable FCriticalSection Mutex;
+
+	EStage Stage = EStage::Idle;
+
+	/** 게임 스레드가 버렸다 — 렌더 스레드는 결과를 쓰지 않고 정리만 한다. */
+	bool bAbandoned = false;
+
+	/** 리드백이 실패했다(맵 실패, row pitch 이상 등). 조용한 성공을 만들지 않기 위한 표식. */
+	bool bFailed = false;
+
+	/** 요청 시점의 렌더타깃 크기. 도중에 바뀌면 이 요청은 버린다. */
+	int32 Width = 0;
+	int32 Height = 0;
+
+	/** row pitch 를 걷어낸 뒤의 조밀한 W*H 픽셀(BGRA = FColor 메모리 배치와 동일). */
+	TArray<FColor> Pixels;
+
+	/** 렌더 스레드에서만 생성·사용·파괴한다(Lock 이 즉시 커맨드리스트를 만지기 때문). */
+	FRHIGPUTextureReadback* Readback = nullptr;
 };
 
 UCLASS(config = Game)
@@ -283,14 +340,20 @@ private:
 	 */
 	void ApplyMainCaptureGuards();
 
-	/** 캡처 소요시간 1건(ms) 기록. 링 버퍼가 가득 차면 가장 오래된 표본을 덮는다. */
-	void RecordMainCaptureMs(float Ms);
+	/**
+	 * 플레이어 시점을 캡처에 반영 → 1프레임 캡처 → GPU→CPU 복사를 렌더 스레드에 걸어둔다.
+	 * 여기서 GPU 완료를 기다리지 않는다. 실패 시 false(플레이어 없음, -nullrhi, 포맷 불일치).
+	 */
+	bool RequestMainCapture();
 
-	/** 최근 창의 평균/최대(ms)와 표본 수. 표본이 없으면 전부 0. */
-	void GetMainCaptureStats(float& OutAvgMs, float& OutMaxMs, int32& OutSamples) const;
+	/** 진행 중인 리드백이 끝났는지 렌더 스레드에서 확인시킨다(게임 스레드는 커맨드만 넣는다). */
+	void PollMainReadback();
 
-	/** 플레이어 시점을 캡처에 반영 → 1프레임 캡처 → JPEG. 실패 시 false(플레이어 없음, -nullrhi 등). */
-	bool ProduceMainJpeg(TArray<uint8>& OutJpeg);
+	/** 리드백이 끝났으면 JPEG 으로 인코딩해 true. 아직이면 false(실패가 아니라 "이번 틱은 없음"). */
+	bool TryTakeMainFrame(TArray<uint8>& OutJpeg);
+
+	/** 진행 중인 리드백을 안전하게 버린다(채널 정지·해상도 변경·클라이언트 이탈). */
+	void ReleaseMainReadback();
 
 	void StopMainChannel();
 
@@ -312,19 +375,32 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UTextureRenderTarget2D> MainRT;
 
+	/** 진행 중인 비동기 리드백. 비어 있으면 "요청 없음"이다. */
+	TSharedPtr<FCamStreamMainReadback, ESPMode::ThreadSafe> MainReadback;
+
 	//---- 캡처 소요시간 계측 ----
+	//
+	// 게임 스레드가 프레임 1장에 쓴 시간을 세 단계로 나눠 잰다. 합친 값 하나만으로는
+	// 무엇을 고쳐야 하는지 알 수 없기 때문이다. 한 프레임의 세 단계는 서로 다른 틱에서
+	// 일어나므로(요청 틱 / 완료 틱), 단계별 값을 아래 Pending* 에 모아 뒀다가 공개 시 함께 기록한다.
 
-	/** 최근 캡처 소요시간(ms) 링 버퍼. 크기 = MainStatWindow(첫 기록 시 할당). */
-	TArray<float> MainCaptureMsRing;
+	/** 세 단계의 합(= 기존 captureAvgMs/captureMaxMs 가 읽던 값). */
+	FCamStreamMsRing MainTotalMs;
 
-	/** 다음에 쓸 링 인덱스. */
-	int32 MainCaptureMsNext = 0;
+	/** CaptureScene() 구간. */
+	FCamStreamMsRing MainSceneMs;
 
-	/** 채워진 표본 수. 창이 다 차기 전에도 평균을 정확히 내기 위해 별도로 센다. */
-	int32 MainCaptureMsCount = 0;
+	/** 리드백 구간 — 비동기이므로 "게임 스레드가 실제로 쓴 시간"(커맨드 등록 + 픽셀 인수인계). */
+	FCamStreamMsRing MainReadbackMs;
 
-	/** 직전 1회 소요시간(ms). */
-	float MainLastCaptureMs = 0.f;
+	/** JPEG 인코딩 구간. */
+	FCamStreamMsRing MainEncodeMs;
+
+	/** 진행 중인 요청의 CaptureScene 구간(ms). 공개 시 합산에 쓴다. */
+	float MainPendingSceneMs = 0.f;
+
+	/** 진행 중인 요청의 리드백 관련 게임 스레드 누적(ms). 폴링 틱마다 조금씩 더해진다. */
+	float MainPendingReadbackMs = 0.f;
 
 	/** 마지막 통계 로그 시각(FPlatformTime 기준 실시간 — 일시정지와 무관하게 흐르게). */
 	double MainLastStatLogTime = -1.0e9;

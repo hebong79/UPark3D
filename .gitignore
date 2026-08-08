@@ -9,9 +9,12 @@ Park3D/Binaries/
 # 패키징(UAT BuildCookRun) 산출물 — 수 GB, SVN/재생성 대상
 /Package/
 
-# Python(park3d-rpc-mcp 브리지) 캐시
+# Python(_workspace 스크립트 등) 캐시
 __pycache__/
 *.pyc
+
+# Node 의존성(park3d-rpc-mcp 브리지 등) — package.json 으로 재설치
+node_modules/
 Park3D/Intermediate/
 Park3D/DerivedDataCache/
 Park3D/Saved/

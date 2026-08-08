@@ -1,0 +1,27 @@
+{
+  "name": "park3d-rpc-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Park3D JSON-RPC(13510) -> MCP bridge",
+  "type": "module",
+  "bin": {
+    "park3d-rpc-mcp": "dist/server.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "nodemon --watch src --ext ts --exec node src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "express": "^5.2.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "nodemon": "^3.1.14",
+    "typescript": "^5.7.0"
+  }
+}

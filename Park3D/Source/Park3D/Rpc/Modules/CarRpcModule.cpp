@@ -321,12 +321,13 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 			E.FailDomain(FString::Printf(TEXT("허용되지 않은 mode: %s"), *Mode));
 			return nullptr;
 		}
-		Mgr->ResetRandomPlacement(ResetMode, Catalog, Count, 0);
+		// count 는 요청을 되비추지 않는다 — 실제로 배치(가시)된 대수를 돌려줘야 화면이 사실을 말한다.
+		const int32 PlacedCount = Mgr->ResetRandomPlacement(ResetMode, Catalog, Count, 0);
 
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetBoolField(TEXT("ok"), true);
 		O->SetStringField(TEXT("mode"), Mode);
-		O->SetNumberField(TEXT("count"), Count);
+		O->SetNumberField(TEXT("count"), PlacedCount);
 		return RpcDto::MakeObject(O);
 	});
 

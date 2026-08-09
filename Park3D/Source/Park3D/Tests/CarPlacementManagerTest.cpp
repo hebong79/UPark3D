@@ -440,9 +440,35 @@ bool FCarManagerResetRandomTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("요청 99 > 전체 → 전원 표시"),
 			Mgr->ResetRandomPlacement(ERandomResetMode::CountObjectAndColor, Catalog, 99, Seed), 6);
 
+		Mgr->ClearAll(); Mgr->Destroy();
+	}
+
+	// --- CountObjectAndColor 개수 미지정: [1, 전체] 랜덤 (Unity Random.Range(1, N+1) 규약) ---
+	{
+		ACarPlacementManager* Mgr = World->SpawnActor<ACarPlacementManager>();
+		if (!TestNotNull(TEXT("Mgr count<=0"), Mgr)) { return false; }
 		SpawnSix(Mgr);
-		TestEqual(TEXT("요청 0 → 숨김 없음(개수 미지정)"),
-			Mgr->ResetRandomPlacement(ERandomResetMode::CountObjectAndColor, Catalog, 0, Seed), 6);
+
+		const int32 Visible = Mgr->ResetRandomPlacement(ERandomResetMode::CountObjectAndColor, Catalog, 0, Seed);
+		TestTrue(TEXT("요청 0 → 1~6 사이 랜덤"), Visible >= 1 && Visible <= 6);
+		TestEqual(TEXT("반환값 = 실제 가시 수"), CountVisible(Mgr), Visible);
+		TestEqual(TEXT("차량 자체는 6대 유지"), Mgr->GetCarCount(), 6);
+
+		Mgr->ClearAll(); Mgr->Destroy();
+	}
+
+	// --- 가역성: 줄인 뒤 다시 늘릴 수 있다(숨김이라 액터가 남는다) ---
+	{
+		ACarPlacementManager* Mgr = World->SpawnActor<ACarPlacementManager>();
+		if (!TestNotNull(TEXT("Mgr regrow"), Mgr)) { return false; }
+		SpawnSix(Mgr);
+
+		TestEqual(TEXT("6 → 2"),
+			Mgr->ResetRandomPlacement(ERandomResetMode::CountObjectAndColor, Catalog, 2, Seed), 2);
+		TestEqual(TEXT("2 → 5 (다시 늘어난다)"),
+			Mgr->ResetRandomPlacement(ERandomResetMode::CountObjectAndColor, Catalog, 5, Seed), 5);
+		TestEqual(TEXT("5 → 6 (전원 복원)"),
+			Mgr->ResetRandomPlacement(ERandomResetMode::CountObjectAndColor, Catalog, 6, Seed), 6);
 
 		Mgr->ClearAll(); Mgr->Destroy();
 	}

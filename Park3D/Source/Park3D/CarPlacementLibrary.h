@@ -108,6 +108,19 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Car|Data")
 	static FString GetCarTypeName(ECarType Type);
 
+	/** ERandomResetMode → 한글 표시명(랜덤 모드 콤보 옵션): 색상만 랜덤 / 객체 + 색상 / 개수 + 객체 + 색상. */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Car|Data")
+	static FString GetRandomResetModeName(ERandomResetMode Mode);
+
+	/**
+	 * RPC `car.resetRandom` 의 mode 문자열 → ERandomResetMode. 앞뒤 공백·대소문자 무시.
+	 * 허용값: colorOnly|color|0 / (빈문자열)|objectAndColor|objectColor|1 / countObjectAndColor|countObjectColor|2.
+	 * 빈 문자열이 ObjectAndColor 인 것은 기존 RPC 계약이다(기본 모드).
+	 * @return 해석 성공 여부. false 면 OutMode 는 건드리지 않는다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Car|Data")
+	static bool ParseRandomResetMode(const FString& In, ERandomResetMode& OutMode);
+
 	// === JSON 입출력 (ParkingPresetManager / PresetMakerWidget 와 동일 패턴) ===
 	/** FCarPosDatas → JSON 파일 저장. 키는 소문자(datas/id/pos/x/y/z/rotY/isFront...)로 직렬화. */
 	UFUNCTION(BlueprintCallable, Category = "Car|Data")

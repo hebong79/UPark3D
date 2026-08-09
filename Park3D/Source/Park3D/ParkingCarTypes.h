@@ -49,6 +49,19 @@ enum class ECarMoveMode : uint8
 };
 
 /**
+ * 랜덤 리셋 모드 (Unity CCarPlacementDlg.ERandomResetMode:23).
+ * 정수값은 UI 콤보박스 인덱스와 1:1 이다(Unity `(ERandomResetMode)m_cboResetRandomType.value` 규약).
+ * 순서를 바꾸면 콤보 선택이 다른 모드로 어긋나므로 값을 고정한다.
+ */
+UENUM(BlueprintType)
+enum class ERandomResetMode : uint8
+{
+	ColorOnly           = 0 UMETA(DisplayName = "ColorOnly"),
+	ObjectAndColor      = 1 UMETA(DisplayName = "ObjectAndColor"),
+	CountObjectAndColor = 2 UMETA(DisplayName = "CountObjectAndColor"),
+};
+
+/**
  * === Unity SVector3 (JSON pos) — 소문자 키 강제 ===
  * FVector 직접 사용 시 UE 직렬화가 대문자 X/Y/Z가 되어 Unity 비호환(좌표 손실).
  * 멤버명을 소문자 시작 x/y/z 로 두어 FJsonObjectConverter 직렬화 키를 Unity와 일치시킨다.

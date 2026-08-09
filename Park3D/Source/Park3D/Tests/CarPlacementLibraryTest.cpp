@@ -175,6 +175,53 @@ bool FCarPlacementMakeIdTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// ===== 랜덤 리셋 모드: 콤보 인덱스 규약 + RPC 문자열 파싱 =====
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCarPlacementRandomResetModeTest,
+	"Park3D.CarPlacement.RandomResetMode",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCarPlacementRandomResetModeTest::RunTest(const FString& Parameters)
+{
+	// 규약 봉인: 콤보 옵션은 enum 순서대로 채워지고, 선택 인덱스를 그대로 enum 으로 캐스팅한다.
+	// 값이 밀리면 "색상만" 을 골랐는데 차종까지 갈아치우는 조용한 오동작이 된다.
+	TestEqual(TEXT("ColorOnly == 0"), (int32)ERandomResetMode::ColorOnly, 0);
+	TestEqual(TEXT("ObjectAndColor == 1"), (int32)ERandomResetMode::ObjectAndColor, 1);
+	TestEqual(TEXT("CountObjectAndColor == 2"), (int32)ERandomResetMode::CountObjectAndColor, 2);
+
+	TestEqual(TEXT("표시명 0"), UCarPlacementLibrary::GetRandomResetModeName(ERandomResetMode::ColorOnly),
+		FString(TEXT("색상만 랜덤")));
+	TestEqual(TEXT("표시명 1"), UCarPlacementLibrary::GetRandomResetModeName(ERandomResetMode::ObjectAndColor),
+		FString(TEXT("객체 + 색상")));
+	TestEqual(TEXT("표시명 2"), UCarPlacementLibrary::GetRandomResetModeName(ERandomResetMode::CountObjectAndColor),
+		FString(TEXT("개수 + 객체 + 색상")));
+
+	// 기존 car.resetRandom 계약(대소문자·공백 무시, 정수 문자열 허용, 빈 문자열=기본 모드)을 그대로 보존한다.
+	auto Parsed = [this](const TCHAR* In, ERandomResetMode Expect, const TCHAR* What)
+	{
+		ERandomResetMode Out = ERandomResetMode::CountObjectAndColor;
+		const bool bOk = UCarPlacementLibrary::ParseRandomResetMode(In, Out);
+		TestTrue(What, bOk && Out == Expect);
+	};
+	Parsed(TEXT("colorOnly"), ERandomResetMode::ColorOnly, TEXT("colorOnly"));
+	Parsed(TEXT("  COLOR  "), ERandomResetMode::ColorOnly, TEXT("공백+대문자 color"));
+	Parsed(TEXT("0"), ERandomResetMode::ColorOnly, TEXT("정수 0"));
+	Parsed(TEXT(""), ERandomResetMode::ObjectAndColor, TEXT("빈 문자열 = 기본 모드"));
+	Parsed(TEXT("objectAndColor"), ERandomResetMode::ObjectAndColor, TEXT("objectAndColor"));
+	Parsed(TEXT("objectColor"), ERandomResetMode::ObjectAndColor, TEXT("objectColor 별칭"));
+	Parsed(TEXT("1"), ERandomResetMode::ObjectAndColor, TEXT("정수 1"));
+	Parsed(TEXT("countObjectAndColor"), ERandomResetMode::CountObjectAndColor, TEXT("countObjectAndColor"));
+	Parsed(TEXT("countObjectColor"), ERandomResetMode::CountObjectAndColor, TEXT("countObjectColor 별칭"));
+	Parsed(TEXT("2"), ERandomResetMode::CountObjectAndColor, TEXT("정수 2"));
+
+	// 미허용 값은 실패하고 OutMode 를 건드리지 않는다(호출부가 도메인 에러를 낸다).
+	ERandomResetMode Untouched = ERandomResetMode::ColorOnly;
+	TestFalse(TEXT("미허용 값 거부"), UCarPlacementLibrary::ParseRandomResetMode(TEXT("rainbow"), Untouched));
+	TestEqual(TEXT("거부 시 출력 불변"), (int32)Untouched, (int32)ERandomResetMode::ColorOnly);
+	TestFalse(TEXT("범위 밖 정수 거부"), UCarPlacementLibrary::ParseRandomResetMode(TEXT("3"), Untouched));
+
+	return true;
+}
+
 // ===== 프리팹 콤보 인덱스 → prefabId =====
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCarPlacementPrefabIdFromComboTest,
 	"Park3D.CarPlacement.PrefabIdFromCombo",

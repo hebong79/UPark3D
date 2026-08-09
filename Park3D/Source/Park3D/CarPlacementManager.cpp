@@ -497,6 +497,48 @@ void ACarPlacementManager::SetRandomColorOfCarList(int32 Seed)
 		{
 			const ECarColor Color = static_cast<ECarColor>(Stream.RandRange(0, ColorMax));
 			Car->ColorComp->SetColorByEnum(Color);
+			// 머티리얼에만 칠하면 ToCarPosDatas → RebuildAll 왕복에서 색이 -1(원본색)로 되돌아간다.
+			// 데이터에도 남겨 저장/재생성 후에도 같은 색이 나오게 한다.
+			Car->CarData.color = static_cast<int32>(Color);
 		}
 	}
+}
+
+int32 ACarPlacementManager::ResetRandomPlacement(
+	ERandomResetMode Mode, const TArray<FCarPresetEntry>& Catalog, int32 RequestedCount, int32 Seed)
+{
+	if (Mode == ERandomResetMode::ColorOnly)
+	{
+		SetRandomColorOfCarList(Seed);
+	}
+	else
+	{
+		// 현재 월드 상태(위치/회전/메타)를 원본 삼아 차종만 랜덤으로 갈아끼운다.
+		const FCarPosDatas Data = ToCarPosDatas();
+		RebuildAllRandomMesh(Data, Catalog, {}, Seed);
+
+		if (Mode == ERandomResetMode::CountObjectAndColor && RequestedCount > 0)
+		{
+			// 요청 대수만 남기고 숨긴다. 숨길 대수가 0 이하면 호출하지 않는다 —
+			// HideRandomCars 는 HideCount<=0 을 "자동 랜덤 숨김"으로 해석하므로,
+			// 요청 대수가 전체 이상일 때 그대로 넘기면 원치 않는 차량이 사라진다.
+			const int32 HideNum = GetCarCount() - RequestedCount;
+			if (HideNum > 0)
+			{
+				HideRandomCars(HideNum, Seed);
+			}
+		}
+
+		SetRandomColorOfCarList(Seed);
+	}
+
+	int32 Visible = 0;
+	for (const TObjectPtr<ACarActor>& Car : Cars)
+	{
+		if (Car && !Car->IsHidden())
+		{
+			++Visible;
+		}
+	}
+	return Visible;
 }

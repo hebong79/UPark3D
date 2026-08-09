@@ -41,6 +41,10 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional)) UCheckBox* Check_PresetGroup = nullptr; // 프리셋 그룹
 	UPROPERTY(meta = (BindWidgetOptional)) UCheckBox* Check_RandomPlacement = nullptr; // 랜덤배치(색상+차량종류)
 
+	// 랜덤 리셋(WBP 에 없으면 InjectRandomModeRow 가 C++ 로 만들어 넣는다).
+	UPROPERTY(meta = (BindWidgetOptional)) UComboBoxString* Combo_RandomMode = nullptr; // 랜덤 모드
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_ResetRandom = nullptr;          // 리셋랜덤
+
 	UPROPERTY(meta = (BindWidget)) UButton* Btn_DeleteSel = nullptr;          // 선택 삭제
 	UPROPERTY(meta = (BindWidget)) UButton* Btn_PlaceStart = nullptr;         // 배치 시작
 
@@ -105,11 +109,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Car") void InitAll();
 	UFUNCTION(BlueprintCallable, Category = "Car") void RefreshView();
 
+	/**
+	 * 랜덤 모드 콤보 선택대로 현재 차량을 랜덤 리셋한다(Unity OnClicked_ResetRandom 포팅).
+	 * 개수는 Unity 원본과 동일하게 자동생성 개수 필드(Field_Count)를 공유한다.
+	 * @return 처리 후 가시 차량 수.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Car") int32 ResetRandomPlacement();
+
 	UFUNCTION(BlueprintCallable, Category = "Car") FString GetDefaultCarFilePath() const;
 	UFUNCTION(BlueprintCallable, Category = "Car") bool SaveToJsonFile(const FString& FilePath);
 	UFUNCTION(BlueprintCallable, Category = "Car") bool LoadFromJsonFile(const FString& FilePath);
 
 protected:
+	virtual void NativeOnInitialized() override;
 	virtual void NativeConstruct() override;
 
 	// 배치 모드 중 Ctrl+좌클릭으로 바닥에 차량 배치(월드 클릭 감지).
@@ -128,6 +140,7 @@ protected:
 	UFUNCTION() void HandleOpen();
 	UFUNCTION() void HandleInit();
 	UFUNCTION() void HandlePlaceStart();
+	UFUNCTION() void HandleResetRandom();
 	UFUNCTION() void HandleListItemClicked(int32 Index, bool bShiftDown);
 	UFUNCTION() void HandleMoveChanged(bool bIsChecked);
 	UFUNCTION() void HandleRotateChanged(bool bIsChecked);
@@ -140,6 +153,13 @@ protected:
 private:
 	TArray<FCarPresetEntry> GetCatalog() const;
 	ACarPlacementManager* GetCarManager();
+
+	/**
+	 * "랜덤 모드" 라벨 + 콤보 + "리셋랜덤" 버튼 한 줄을 C++ 로 만들어 VBox_Root 에 끼워 넣는다.
+	 * WBP 디자이너에 같은 이름(Combo_RandomMode / Btn_ResetRandom)의 위젯이 이미 있으면 아무것도 하지 않는다
+	 * (BindWidgetOptional 로 이미 바인딩된 상태 → 나중에 디자이너로 옮겨도 코드 변경이 필요 없다).
+	 */
+	void InjectRandomModeRow();
 
 	/** 이동/회전 대상 인덱스 목록. 프리셋 그룹(Check_PresetGroup) 체크 시 선택 차량과 동일 presetId 전원, 아니면 선택 1대. */
 	TArray<int32> GetActiveIndices() const;

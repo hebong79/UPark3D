@@ -101,9 +101,27 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Car|Random")
 	TArray<ACarActor*> ToggleRandomCars(int32 Count, int32 Seed = 0);
 
-	/** 활성 차량 전체를 랜덤 ECarColor 로 도색. Unity SetRandomColorOfCarList 포팅. */
+	/**
+	 * 활성 차량 전체를 랜덤 ECarColor 로 도색. Unity SetRandomColorOfCarList 포팅.
+	 * 고른 색은 각 차량의 CarData.color 에도 기록한다 — 저장/재생성(RebuildAll) 후에도 색이 유지되어야
+	 * "리셋랜덤" 결과가 다음 RefreshView 에 지워지지 않는다.
+	 */
 	UFUNCTION(BlueprintCallable, Category = "Car|Random")
 	void SetRandomColorOfCarList(int32 Seed = 0);
+
+	/**
+	 * UI(리셋랜덤 버튼)와 RPC(car.resetRandom)가 공유하는 랜덤 리셋 진입점.
+	 * Unity CCarPlacementDlg.ResetRandomPlacement(:1081) 포팅 — 단, 배치 기준은 Unity 의 "프리셋 주차면"이
+	 * 아니라 이 포트의 기존 계약대로 "현재 차량 위치"다(ToCarPosDatas 로 현 상태를 원본 삼아 재생성).
+	 *  - ColorOnly           : 가시 차량 색상만 랜덤. 차종·위치·표시상태 불변.
+	 *  - ObjectAndColor      : 위치/회전 유지 + 차종 랜덤 재생성 + 색상 랜덤.
+	 *  - CountObjectAndColor : 위 동작 + RequestedCount 대만 남기고 나머지를 랜덤 숨김.
+	 *                          RequestedCount <= 0 이거나 전체 대수 이상이면 숨기지 않는다.
+	 * @return 처리 후 가시(비숨김) 차량 수.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Car|Random")
+	int32 ResetRandomPlacement(ERandomResetMode Mode, const TArray<FCarPresetEntry>& Catalog,
+		int32 RequestedCount = 0, int32 Seed = 0);
 
 	/**
 	 * 카탈로그의 모든 메시를 미리 로드해 캐시(메모리 풀)에 상주시킨다(하드 참조 → GC 언로드 방지).

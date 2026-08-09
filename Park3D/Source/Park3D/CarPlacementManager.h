@@ -116,8 +116,10 @@ public:
 	 *  - ColorOnly           : 가시 차량 색상만 랜덤. 차종·위치·표시상태 불변.
 	 *  - ObjectAndColor      : 위치/회전 유지 + 차종 랜덤 재생성 + 색상 랜덤.
 	 *  - CountObjectAndColor : 위 동작 + RequestedCount 대만 남기고 나머지를 랜덤 숨김.
-	 *                          RequestedCount <= 0 이거나 전체 대수 이상이면 숨기지 않는다.
-	 * @return 처리 후 가시(비숨김) 차량 수.
+	 *                          RequestedCount <= 0 이면 [1, 전체]에서 랜덤 추첨(Unity 원본 규약),
+	 *                          전체 대수 이상이면 전원 표시. 차량 액터는 지우지 않고 숨기므로
+	 *                          다음 호출에서 다시 늘릴 수 있다(RebuildAllRandomMesh 가 전원 복원).
+	 * @return 처리 후 가시(비숨김) 차량 수 = 실제 배치 대수.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Car|Random")
 	int32 ResetRandomPlacement(ERandomResetMode Mode, const TArray<FCarPresetEntry>& Catalog,

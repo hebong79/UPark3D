@@ -517,12 +517,20 @@ int32 ACarPlacementManager::ResetRandomPlacement(
 		const FCarPosDatas Data = ToCarPosDatas();
 		RebuildAllRandomMesh(Data, Catalog, {}, Seed);
 
-		if (Mode == ERandomResetMode::CountObjectAndColor && RequestedCount > 0)
+		if (Mode == ERandomResetMode::CountObjectAndColor && GetCarCount() > 0)
 		{
+			// Unity ResetRandomPlacement 규약: 요청 대수는 [1, 전체]로 클램프,
+			// 0 이하(미지정)면 [1, 전체]에서 랜덤 추첨한다.
+			const int32 Total = GetCarCount();
+			FRandomStream Stream = MakeStream(Seed);
+			const int32 TargetCount = RequestedCount > 0
+				? FMath::Min(RequestedCount, Total)
+				: Stream.RandRange(1, Total);
+
 			// 요청 대수만 남기고 숨긴다. 숨길 대수가 0 이하면 호출하지 않는다 —
 			// HideRandomCars 는 HideCount<=0 을 "자동 랜덤 숨김"으로 해석하므로,
 			// 요청 대수가 전체 이상일 때 그대로 넘기면 원치 않는 차량이 사라진다.
-			const int32 HideNum = GetCarCount() - RequestedCount;
+			const int32 HideNum = Total - TargetCount;
 			if (HideNum > 0)
 			{
 				HideRandomCars(HideNum, Seed);

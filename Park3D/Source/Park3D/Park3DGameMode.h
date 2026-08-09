@@ -58,6 +58,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Park3D|Camera")
 	FRotator CameraStartRotation = FRotator(-45.f, 0.f, 0.f);
 
+	/**
+	 * 메인(자유비행) 뷰의 수직 화각(도). 16:9 기준이며 수평 화각으로 환산해 적용한다(45°→72.73°).
+	 * 실장비 PTZ 카메라의 56.5° 와는 무관하다 — 저쪽은 장비 사양 재현, 이쪽은 배치·검수용 작업 시점이다.
+	 * 45° 는 원근 늘어짐(가장자리 1.24배, 모서리 1.31배)이 눈에 띄지 않으면서 조망을 가장 덜 버리는 지점.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Park3D|Camera")
+	float MainViewVerticalFovDeg = 45.f;
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -67,6 +75,9 @@ private:
 
 	/** bOverrideCameraStart=true 일 때 카메라 폰 위치/회전과 뷰(컨트롤러) 회전을 초기값으로 설정한다. */
 	void ApplyCameraStart();
+
+	/** 메인 뷰 화각을 MainViewVerticalFovDeg 로 고정한다(수직→수평 환산 후 DefaultFOV 에 반영). */
+	void ApplyMainViewFov();
 
 	/** 카메라 뷰어 위젯을 생성(최초 1회)하고 뷰포트에 표시한다. 컨트롤 패널 개폐와 무관하게 유지된다. */
 	void ShowCameraViewer();

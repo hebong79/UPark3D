@@ -14,6 +14,7 @@
 #include "Light/LightControlLibrary.h"
 #include "Light/LightControlManager.h"
 #include "Blueprint/UserWidget.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Components/InputComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
@@ -57,6 +58,9 @@ void APark3DGameMode::BeginPlay()
 
 	// 카메라(초기) 시점 설정 — bOverrideCameraStart=true 면 PlayerStart 대신 지정 위치/회전 사용.
 	ApplyCameraStart();
+
+	// 메인 뷰 화각 고정.
+	ApplyMainViewFov();
 
 	// 주차장 아스팔트 바닥(기본 160×160m). 패널을 한 번도 열지 않아도 바닥은 존재한다.
 	AMapFloorActor::GetOrSpawn(GetWorld());
@@ -211,6 +215,28 @@ void APark3DGameMode::ApplyCameraStart()
 
 	UE_LOG(LogTemp, Log, TEXT("[Park3DGameMode] 카메라 초기 시점 적용: Loc=%s Rot=%s"),
 		*CameraStartLocation.ToString(), *CameraStartRotation.ToString());
+}
+
+void APark3DGameMode::ApplyMainViewFov()
+{
+	APlayerController* PC = CachedPC.Get();
+	if (!PC || !PC->PlayerCameraManager)
+	{
+		return;
+	}
+
+	// PlayerCameraManager 의 FOV 는 "수평" 화각이다(CamStreamSubsystem 이 메인 렌더타깃 FOVAngle 로
+	// 그대로 넘기는 값과 같다). 설정값은 화면비에 흔들리지 않는 수직각이므로 16:9 로 환산해 넣는다.
+	const float VerticalFov = FMath::Clamp(MainViewVerticalFovDeg, 1.f, 170.f);
+	const float HorizontalFov = FMath::RadiansToDegrees(
+		2.f * FMath::Atan(FMath::Tan(FMath::DegreesToRadians(VerticalFov * 0.5f)) * (16.f / 9.f)));
+
+	// DefaultFOV 를 바꾼다 — view.set 의 화각 조작(LockedFOV)과 fov=0(잠금 해제) 계약을 유지하면서
+	// "아무도 건드리지 않았을 때의 값"을 이 화각으로 만든다.
+	PC->PlayerCameraManager->DefaultFOV = HorizontalFov;
+
+	UE_LOG(LogTemp, Log, TEXT("[Park3DGameMode] 메인 뷰 화각 고정: 수직 %.2f° → 수평 %.2f°(16:9)"),
+		VerticalFov, HorizontalFov);
 }
 
 void APark3DGameMode::ShowMenu()

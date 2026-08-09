@@ -16,7 +16,11 @@ public class Park3D : ModuleRules
 		// Sockets: FInternetAddr 완전 정의(PeerAddress->GetRawIp() 역참조). HttpServerRequest.h 는 전방 선언만 갖고,
 		//          HTTPServer 가 Sockets 를 Private 의존으로 가져 소비자에게 전파되지 않으므로 여기서 직접 의존해야 한다.
 		// Networking: FTcpListener(카메라별 전용 포트 MJPEG 서버). Sockets 만으로는 리스너가 없다.
-		PrivateDependencyModuleNames.AddRange(new string[] { "HTTPServer", "ImageWrapper", "Sockets", "Networking" });
+		// RHI/RenderCore: CamStreamSubsystem 의 메인 뷰 비동기 리드백이 FRHIGPUTextureReadback,
+		//                 FRHICommandListImmediate, ENQUEUE_RENDER_COMMAND 를 직접 쓴다. 모놀리식
+		//                 게임 빌드는 한 실행 파일로 링크돼 없어도 넘어가지만, 모듈러 에디터 빌드
+		//                 (UAT 쿠킹이 요구한다)는 여기서 선언하지 않으면 LNK2019 로 죽는다.
+		PrivateDependencyModuleNames.AddRange(new string[] { "HTTPServer", "ImageWrapper", "Sockets", "Networking", "RHI", "RenderCore" });
 
 		PrivateDependencyModuleNames.AddRange(new string[] {  });
 

@@ -16,6 +16,10 @@
 #include "Components/Border.h"
 #include "Components/SizeBox.h"
 #include "Components/SizeBoxSlot.h"
+#include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
+#include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
 #include "Blueprint/WidgetTree.h"
 #include "Engine/DataTable.h"
 #include "Kismet/GameplayStatics.h"
@@ -36,6 +40,16 @@ namespace
 }
 
 // ===== 초기화 =====
+void UCarPlacementWidget::NativeOnInitialized()
+{
+	Super::NativeOnInitialized();
+
+	// NativeConstruct 가 아니라 여기서 넣어야 Slate 트리가 만들어지기 전이라 삽입 위치가 화면에 반영된다
+	// (MainMenuWidget::InjectLightButton 과 동일 이유). NativeConstruct 는 재-AddToViewport 마다 다시 도는데,
+	// 이 함수는 위젯 인스턴스당 1회라 중복 삽입도 생기지 않는다.
+	InjectRandomModeRow();
+}
+
 void UCarPlacementWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
@@ -73,6 +87,19 @@ void UCarPlacementWidget::NativeConstruct()
 		}
 	}
 
+	// 랜덤 모드 콤보(색상만/객체+색상/개수+객체+색상). 콤보 index == ERandomResetMode 정수.
+	if (Combo_RandomMode)
+	{
+		Combo_RandomMode->OnGenerateWidgetEvent.BindUFunction(this, FName("HandleGenerateComboItem"));
+		Combo_RandomMode->ClearOptions();
+		for (uint8 m = (uint8)ERandomResetMode::ColorOnly; m <= (uint8)ERandomResetMode::CountObjectAndColor; ++m)
+		{
+			Combo_RandomMode->AddOption(UCarPlacementLibrary::GetRandomResetModeName((ERandomResetMode)m));
+		}
+		// 기본 선택은 Unity 원본과 같은 ObjectAndColor(1).
+		Combo_RandomMode->SetSelectedIndex((int32)ERandomResetMode::ObjectAndColor);
+	}
+
 	// 기본 입력값.
 	if (Field_Count && Field_Count->GetText().IsEmpty())   Field_Count->SetText(FText::FromString(TEXT("5")));
 	if (Field_Spacing && Field_Spacing->GetText().IsEmpty()) Field_Spacing->SetText(FText::FromString(TEXT("2.5")));
@@ -88,6 +115,7 @@ void UCarPlacementWidget::NativeConstruct()
 	if (Btn_Open)       Btn_Open->OnClicked.AddUniqueDynamic(this, &UCarPlacementWidget::HandleOpen);
 	if (Btn_Init)       Btn_Init->OnClicked.AddUniqueDynamic(this, &UCarPlacementWidget::HandleInit);
 	if (Btn_PlaceStart) Btn_PlaceStart->OnClicked.AddUniqueDynamic(this, &UCarPlacementWidget::HandlePlaceStart);
+	if (Btn_ResetRandom) Btn_ResetRandom->OnClicked.AddUniqueDynamic(this, &UCarPlacementWidget::HandleResetRandom);
 	if (Radio_Move)   Radio_Move->OnCheckStateChanged.AddUniqueDynamic(this, &UCarPlacementWidget::HandleMoveChanged);
 	if (Radio_Rotate) Radio_Rotate->OnCheckStateChanged.AddUniqueDynamic(this, &UCarPlacementWidget::HandleRotateChanged);
 	if (Radio_Front)  Radio_Front->OnCheckStateChanged.AddUniqueDynamic(this, &UCarPlacementWidget::HandleFrontChanged);
@@ -102,6 +130,128 @@ void UCarPlacementWidget::NativeConstruct()
 	}
 
 	RebuildCarList();
+}
+
+void UCarPlacementWidget::InjectRandomModeRow()
+{
+	if (!WidgetTree || (Combo_RandomMode && Btn_ResetRandom))
+	{
+		return; // 디자이너(WBP)가 이미 두 위젯을 제공 → 바인딩된 것을 그대로 쓴다.
+	}
+
+	UVerticalBox* Root = WidgetTree->FindWidget<UVerticalBox>(TEXT("VBox_Root"));
+	if (!Root)
+	{
+		// 줄을 못 넣어도 기능 자체는 ResetRandomPlacement(BlueprintCallable)/RPC 로 호출 가능하다.
+		UE_LOG(LogTemp, Warning, TEXT("[CarPlacement] VBox_Root 를 찾지 못해 랜덤 모드 줄을 넣지 못했습니다."));
+		return;
+	}
+
+	// --- 라벨 ---
+	UTextBlock* SrcLabel = WidgetTree->FindWidget<UTextBlock>(TEXT("Lbl_Count"));
+	UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Lbl_RandomMode"));
+	Label->SetText(FText::FromString(TEXT("랜덤 모드")));
+	if (SrcLabel)
+	{
+		// 폰트/색을 기존 라벨에서 복사해 패널 톤(한글 폰트 포함)을 맞춘다.
+		Label->SetFont(SrcLabel->GetFont());
+		Label->SetColorAndOpacity(SrcLabel->GetColorAndOpacity());
+	}
+
+	// --- 콤보 ---
+	if (!Combo_RandomMode)
+	{
+		Combo_RandomMode = WidgetTree->ConstructWidget<UComboBoxString>(
+			UComboBoxString::StaticClass(), TEXT("Combo_RandomMode"));
+		if (Combo_Type)
+		{
+			// 드롭다운/항목 스타일을 기존 콤보에서 그대로 가져온다(흰 배경·직각 모서리 등).
+			Combo_RandomMode->SetWidgetStyle(Combo_Type->GetWidgetStyle());
+			Combo_RandomMode->SetItemStyle(Combo_Type->GetItemStyle());
+		}
+	}
+
+	// --- 버튼 ---
+	if (!Btn_ResetRandom)
+	{
+		Btn_ResetRandom = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("Btn_ResetRandom"));
+		if (Btn_AutoCreate)
+		{
+			Btn_ResetRandom->SetStyle(Btn_AutoCreate->GetStyle());
+		}
+
+		UTextBlock* BtnLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		BtnLabel->SetText(FText::FromString(TEXT("리셋랜덤")));
+		BtnLabel->SetJustification(ETextJustify::Center);
+		if (Btn_AutoCreate)
+		{
+			if (UTextBlock* SrcBtnLabel = Cast<UTextBlock>(Btn_AutoCreate->GetChildAt(0)))
+			{
+				BtnLabel->SetFont(SrcBtnLabel->GetFont());
+				BtnLabel->SetColorAndOpacity(SrcBtnLabel->GetColorAndOpacity());
+			}
+		}
+		Btn_ResetRandom->AddChild(BtnLabel);
+	}
+
+	// --- 줄 구성: [랜덤 모드] / [콤보(채움) | 리셋랜덤] ---
+	UHorizontalBox* Line = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+	if (UHorizontalBoxSlot* ComboSlot = Cast<UHorizontalBoxSlot>(Line->AddChild(Combo_RandomMode)))
+	{
+		ComboSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill)); // 남는 폭은 콤보가 차지.
+		ComboSlot->SetVerticalAlignment(VAlign_Center);
+	}
+	if (UHorizontalBoxSlot* BtnSlot = Cast<UHorizontalBoxSlot>(Line->AddChild(Btn_ResetRandom)))
+	{
+		BtnSlot->SetPadding(FMargin(6.f, 0.f, 0.f, 0.f)); // 콤보와의 간격.
+		BtnSlot->SetVerticalAlignment(VAlign_Center);
+	}
+
+	UVerticalBox* Row = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+	Row->AddChild(Label);
+	Row->AddChild(Line);
+
+	// --- 삽입 위치: 랜덤배치 체크(없으면 자동생성 버튼)가 들어 있는 줄 바로 다음 ---
+	// 앵커 위젯이 VBox_Root 의 직계 자식이 아니라 래퍼 안에 있을 수 있으므로 부모를 거슬러 올라간다.
+	UWidget* Anchor = Check_RandomPlacement ? (UWidget*)Check_RandomPlacement : (UWidget*)Btn_AutoCreate;
+	int32 AnchorIndex = INDEX_NONE;
+	UWidget* AnchorRow = nullptr;
+	if (Anchor)
+	{
+		UWidget* Node = Anchor;
+		while (Node && Node->GetParent() != Root)
+		{
+			Node = Node->GetParent();
+		}
+		if (Node)
+		{
+			AnchorRow = Node;
+			AnchorIndex = Root->GetChildIndex(Node);
+		}
+	}
+
+	UPanelSlot* NewSlot = Root->AddChild(Row);
+	if (AnchorIndex != INDEX_NONE)
+	{
+		Root->ShiftChild(AnchorIndex + 1, Row);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CarPlacement] 기준 줄을 찾지 못해 랜덤 모드 줄을 목록 끝에 둡니다."));
+	}
+
+	// 세로 간격을 기준 줄과 맞춘다.
+	if (UVerticalBoxSlot* VS = Cast<UVerticalBoxSlot>(NewSlot))
+	{
+		VS->SetHorizontalAlignment(HAlign_Fill);
+		if (AnchorRow)
+		{
+			if (UVerticalBoxSlot* SrcSlot = Cast<UVerticalBoxSlot>(AnchorRow->Slot))
+			{
+				VS->SetPadding(SrcSlot->GetPadding());
+			}
+		}
+	}
 }
 
 void UCarPlacementWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
@@ -519,6 +669,45 @@ void UCarPlacementWidget::AutoCreate()
 	Notify(FString::Printf(TEXT("자동생성 %d대 (총 %d대)"), Count, CarData.datas.Num()));
 }
 
+// ===== 랜덤 리셋 =====
+int32 UCarPlacementWidget::ResetRandomPlacement()
+{
+	ACarPlacementManager* Mgr = GetCarManager();
+	if (!Mgr)
+	{
+		Notify(TEXT("랜덤 리셋 실패 — 차량 매니저 없음"));
+		return 0;
+	}
+	if (Mgr->GetCarCount() == 0)
+	{
+		Notify(TEXT("랜덤 리셋 대상 차량 없음"));
+		return 0;
+	}
+
+	// 콤보 index == ERandomResetMode 정수(Unity 드롭다운 규약). 선택이 없으면 기본 모드.
+	const int32 Sel = Combo_RandomMode ? Combo_RandomMode->GetSelectedIndex() : INDEX_NONE;
+	const ERandomResetMode Mode = (Sel >= 0 && Sel <= (int32)ERandomResetMode::CountObjectAndColor)
+		? (ERandomResetMode)Sel
+		: ERandomResetMode::ObjectAndColor;
+
+	// 개수는 Unity 원본과 동일하게 자동생성 개수 필드를 공유한다(모드 2에서만 의미가 있다).
+	const int32 Count = Field_Count ? FCString::Atoi(*Field_Count->GetText().ToString()) : 0;
+
+	const int32 Visible = Mgr->ResetRandomPlacement(Mode, GetCatalog(), Count, 0);
+
+	// 매니저가 차량을 재생성/도색했으므로 위젯 데이터를 현재 월드 상태로 되돌린다.
+	// 이 동기화가 없으면 다음 RefreshView(RebuildAll)가 옛 CarData 로 랜덤 결과를 덮어쓴다.
+	CarData = Mgr->ToCarPosDatas();
+	SelectedIndices.Reset();
+	PrimaryIndex = INDEX_NONE;
+	Mgr->SetSelectedIndices(SelectedIndices);
+	RebuildCarList();
+
+	Notify(FString::Printf(TEXT("랜덤 리셋(%s) — 총 %d대 중 %d대 표시"),
+		*UCarPlacementLibrary::GetRandomResetModeName(Mode), CarData.datas.Num(), Visible));
+	return Visible;
+}
+
 void UCarPlacementWidget::AddCarAtWorld(const FVector& WorldLoc)
 {
 	const TArray<FCarPresetEntry> Catalog = GetCatalog();
@@ -671,6 +860,7 @@ void UCarPlacementWidget::HandleAutoCreate() { AutoCreate(); }
 void UCarPlacementWidget::HandleDeleteSel()  { DeleteSelected(); }
 void UCarPlacementWidget::HandleModify()     { ModifySelected(); }
 void UCarPlacementWidget::HandleInit()       { InitAll(); }
+void UCarPlacementWidget::HandleResetRandom(){ ResetRandomPlacement(); }
 
 void UCarPlacementWidget::HandlePlaceStart()
 {

@@ -231,6 +231,40 @@ FString UCarPlacementLibrary::GetCarTypeName(ECarType Type)
 	}
 }
 
+FString UCarPlacementLibrary::GetRandomResetModeName(ERandomResetMode Mode)
+{
+	switch (Mode)
+	{
+	case ERandomResetMode::ColorOnly:           return TEXT("색상만 랜덤");
+	case ERandomResetMode::CountObjectAndColor: return TEXT("개수 + 객체 + 색상");
+	case ERandomResetMode::ObjectAndColor:
+	default:                                    return TEXT("객체 + 색상");
+	}
+}
+
+bool UCarPlacementLibrary::ParseRandomResetMode(const FString& In, ERandomResetMode& OutMode)
+{
+	const FString M = In.TrimStartAndEnd().ToLower();
+
+	if (M == TEXT("coloronly") || M == TEXT("color") || M == TEXT("0"))
+	{
+		OutMode = ERandomResetMode::ColorOnly;
+		return true;
+	}
+	// 빈 문자열 = 기본 모드(ObjectAndColor). 기존 car.resetRandom 계약을 그대로 유지한다.
+	if (M.IsEmpty() || M == TEXT("objectandcolor") || M == TEXT("objectcolor") || M == TEXT("1"))
+	{
+		OutMode = ERandomResetMode::ObjectAndColor;
+		return true;
+	}
+	if (M == TEXT("countobjectandcolor") || M == TEXT("countobjectcolor") || M == TEXT("2"))
+	{
+		OutMode = ERandomResetMode::CountObjectAndColor;
+		return true;
+	}
+	return false;
+}
+
 // === JSON 입출력 (PresetMakerWidget::Save/LoadToJsonFile 와 동일 패턴) ===
 bool UCarPlacementLibrary::SaveCarDatasToJson(const FString& FilePath, const FCarPosDatas& Data)
 {

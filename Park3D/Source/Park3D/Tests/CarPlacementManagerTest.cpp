@@ -312,4 +312,142 @@ bool FCarManagerRandomTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// ===== ResetRandomPlacement: UI/RPC 공용 진입점의 모드별 계약 =====
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCarManagerResetRandomTest,
+	"Park3D.CarPlacement.ResetRandomPlacement",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCarManagerResetRandomTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = (GEngine && GEngine->GetWorldContexts().Num() > 0) ? GWorld : nullptr;
+	if (!World)
+	{
+		AddWarning(TEXT("에디터 월드 없음 — 랜덤 리셋 테스트 건너뜀."));
+		return true;
+	}
+
+	TArray<FCarPresetEntry> Catalog;
+	{
+		FCarPresetEntry A; A.Idx = 1; A.PrefabName = TEXT("A"); Catalog.Add(A);
+		FCarPresetEntry B; B.Idx = 2; B.PrefabName = TEXT("B"); Catalog.Add(B);
+		FCarPresetEntry C; C.Idx = 5; C.PrefabName = TEXT("C"); Catalog.Add(C);
+	}
+	const int32 Seed = 7788;
+
+	// 고정 위치 6대(메시 없음 — 대수/표시상태/데이터 기록만 검증).
+	auto SpawnSix = [&](ACarPlacementManager* Mgr)
+	{
+		FCarPosDatas Data;
+		for (int32 i = 0; i < 6; ++i)
+		{
+			FCarPos P;
+			P.id = FString::Printf(TEXT("r-%d"), i);
+			P.prefabId = 1;
+			P.pos = { (float)i, 0.f, 0.f };
+			Data.datas.Add(P);
+		}
+		Mgr->RebuildAll(Data, Catalog, {});
+	};
+
+	auto CountVisible = [](ACarPlacementManager* Mgr)
+	{
+		int32 V = 0;
+		for (int32 i = 0; i < Mgr->GetCarCount(); ++i)
+		{
+			if (Mgr->GetCar(i) && !Mgr->GetCar(i)->IsHidden()) ++V;
+		}
+		return V;
+	};
+
+	// --- ColorOnly: 대수·차종·표시상태 불변, 색만 데이터에 기록 ---
+	{
+		ACarPlacementManager* Mgr = World->SpawnActor<ACarPlacementManager>();
+		if (!TestNotNull(TEXT("Mgr colorOnly"), Mgr)) { return false; }
+		SpawnSix(Mgr);
+
+		const int32 Visible = Mgr->ResetRandomPlacement(ERandomResetMode::ColorOnly, Catalog, 2, Seed);
+		TestEqual(TEXT("ColorOnly 반환 = 가시 6"), Visible, 6);
+		TestEqual(TEXT("ColorOnly 대수 불변"), Mgr->GetCarCount(), 6);
+		TestEqual(TEXT("ColorOnly 가시 불변(count 인자 무시)"), CountVisible(Mgr), 6);
+
+		bool bPrefabKept = true, bColorRecorded = true;
+		for (int32 i = 0; i < Mgr->GetCarCount(); ++i)
+		{
+			ACarActor* Car = Mgr->GetCar(i);
+			if (!Car) { continue; }
+			if (Car->CarData.prefabId != 1) { bPrefabKept = false; }
+			// 색은 머티리얼뿐 아니라 데이터에도 남아야 저장/재생성 후에도 유지된다.
+			if (Car->CarData.color < 0 || Car->CarData.color > (int32)ECarColor::Purple) { bColorRecorded = false; }
+		}
+		TestTrue(TEXT("ColorOnly 는 차종을 바꾸지 않는다"), bPrefabKept);
+		TestTrue(TEXT("색상이 CarData.color 에 기록된다"), bColorRecorded);
+
+		Mgr->ClearAll(); Mgr->Destroy();
+	}
+
+	// --- ObjectAndColor: 대수 유지 + 차종 카탈로그 범위 + 위치 보존 ---
+	{
+		ACarPlacementManager* Mgr = World->SpawnActor<ACarPlacementManager>();
+		if (!TestNotNull(TEXT("Mgr objColor"), Mgr)) { return false; }
+		SpawnSix(Mgr);
+		const FVector Before = Mgr->GetCar(3) ? Mgr->GetCar(3)->GetActorLocation() : FVector::ZeroVector;
+
+		const int32 Visible = Mgr->ResetRandomPlacement(ERandomResetMode::ObjectAndColor, Catalog, 2, Seed);
+		TestEqual(TEXT("ObjectAndColor 대수 유지"), Mgr->GetCarCount(), 6);
+		TestEqual(TEXT("ObjectAndColor 는 숨기지 않는다(count 무시)"), Visible, 6);
+
+		bool bPrefabInCatalog = true;
+		for (int32 i = 0; i < Mgr->GetCarCount(); ++i)
+		{
+			const int32 Pid = Mgr->GetCar(i) ? Mgr->GetCar(i)->CarData.prefabId : -1;
+			if (!(Pid == 1 || Pid == 2 || Pid == 5)) { bPrefabInCatalog = false; }
+		}
+		TestTrue(TEXT("차종은 카탈로그 Idx(1/2/5)"), bPrefabInCatalog);
+		if (Mgr->GetCar(3))
+		{
+			TestTrue(TEXT("위치 보존"), Mgr->GetCar(3)->GetActorLocation().Equals(Before, 1.0));
+		}
+
+		Mgr->ClearAll(); Mgr->Destroy();
+	}
+
+	// --- CountObjectAndColor: 요청 대수만 표시 ---
+	{
+		ACarPlacementManager* Mgr = World->SpawnActor<ACarPlacementManager>();
+		if (!TestNotNull(TEXT("Mgr countObjColor"), Mgr)) { return false; }
+		SpawnSix(Mgr);
+
+		const int32 Visible = Mgr->ResetRandomPlacement(ERandomResetMode::CountObjectAndColor, Catalog, 2, Seed);
+		TestEqual(TEXT("6대 중 2대만 표시"), Visible, 2);
+		TestEqual(TEXT("실제 가시 수도 2"), CountVisible(Mgr), 2);
+		TestEqual(TEXT("차량 자체는 6대 유지(숨김일 뿐)"), Mgr->GetCarCount(), 6);
+
+		Mgr->ClearAll(); Mgr->Destroy();
+	}
+
+	// --- CountObjectAndColor 경계: 요청 대수 >= 전체면 아무것도 숨기지 않는다 ---
+	// (회귀 방지) 숨길 대수 0 을 HideRandomCars 에 그대로 넘기면 "자동 랜덤 숨김"으로 해석되어
+	//  요청과 무관하게 차량이 사라졌다.
+	{
+		ACarPlacementManager* Mgr = World->SpawnActor<ACarPlacementManager>();
+		if (!TestNotNull(TEXT("Mgr count>=all"), Mgr)) { return false; }
+		SpawnSix(Mgr);
+
+		TestEqual(TEXT("요청 6 = 전체 → 전원 표시"),
+			Mgr->ResetRandomPlacement(ERandomResetMode::CountObjectAndColor, Catalog, 6, Seed), 6);
+
+		SpawnSix(Mgr);
+		TestEqual(TEXT("요청 99 > 전체 → 전원 표시"),
+			Mgr->ResetRandomPlacement(ERandomResetMode::CountObjectAndColor, Catalog, 99, Seed), 6);
+
+		SpawnSix(Mgr);
+		TestEqual(TEXT("요청 0 → 숨김 없음(개수 미지정)"),
+			Mgr->ResetRandomPlacement(ERandomResetMode::CountObjectAndColor, Catalog, 0, Seed), 6);
+
+		Mgr->ClearAll(); Mgr->Destroy();
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

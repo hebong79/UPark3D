@@ -311,33 +311,17 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 	Dispatcher.Register(TEXT("car.resetRandom"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
-		FString Mode = RpcParam::GetString(P, TEXT("mode"), TEXT("objectAndColor")).TrimStartAndEnd().ToLower();
+		const FString Mode = RpcParam::GetString(P, TEXT("mode"), TEXT("objectAndColor")).TrimStartAndEnd().ToLower();
 		const int32 Count = RpcParam::GetInt(P, TEXT("count"), 0);
 
-		const bool bColorOnly = (Mode == TEXT("coloronly") || Mode == TEXT("color") || Mode == TEXT("0"));
-		const bool bObjColor = (Mode.IsEmpty() || Mode == TEXT("objectandcolor") || Mode == TEXT("objectcolor") || Mode == TEXT("1"));
-		const bool bCountObjColor = (Mode == TEXT("countobjectandcolor") || Mode == TEXT("countobjectcolor") || Mode == TEXT("2"));
-		if (!bColorOnly && !bObjColor && !bCountObjColor)
+		// 모드 해석과 실제 동작은 UI(리셋랜덤 버튼)와 공유한다 — 여기서 재구현하면 두 경로가 갈라진다.
+		ERandomResetMode ResetMode = ERandomResetMode::ObjectAndColor;
+		if (!UCarPlacementLibrary::ParseRandomResetMode(Mode, ResetMode))
 		{
 			E.FailDomain(FString::Printf(TEXT("허용되지 않은 mode: %s"), *Mode));
 			return nullptr;
 		}
-
-		if (bColorOnly)
-		{
-			Mgr->SetRandomColorOfCarList(0);
-		}
-		else
-		{
-			// object(+count) 모드: 현재 위치를 유지하고 차종을 랜덤 재배치 후 색상 랜덤.
-			const FCarPosDatas Data = Mgr->ToCarPosDatas();
-			Mgr->RebuildAllRandomMesh(Data, Catalog, {}, 0);
-			if (bCountObjColor && Count > 0)
-			{
-				Mgr->HideRandomCars(FMath::Max(0, Mgr->GetCarCount() - Count), 0); // 대략 Count대만 표시
-			}
-			Mgr->SetRandomColorOfCarList(0);
-		}
+		Mgr->ResetRandomPlacement(ResetMode, Catalog, Count, 0);
 
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetBoolField(TEXT("ok"), true);

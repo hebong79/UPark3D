@@ -4,6 +4,12 @@
 #include "Components/InputComponent.h"
 #include "InputCoreTypes.h"
 
+AParkFlyPawn::AParkFlyPawn(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer.DoNotCreateDefaultSubobject(ADefaultPawn::MeshComponentName))
+{
+	// 구체 메시만 뺀다. 이동/충돌을 담당하는 CollisionComponent 와 MovementComponent 는 그대로 둔다.
+}
+
 void AParkFlyPawn::SetupPlayerInputComponent(UInputComponent* InInputComponent)
 {
 	// DefaultPawn 기본 바인딩(WASD/방향키 이동, 마우스 회전 등)을 그대로 유지한다.

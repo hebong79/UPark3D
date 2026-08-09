@@ -20,6 +20,13 @@ class PARK3D_API AParkFlyPawn : public ADefaultPawn
 	GENERATED_BODY()
 
 public:
+	/**
+	 * ADefaultPawn 이 기본 생성하는 구체 메시(MeshComponent)를 만들지 않는다.
+	 * 이 폰은 눈에 보일 일이 없는 자유비행 시점인데, 메시가 남아 있으면 PTZ 카메라 렌더타겟에
+	 * 검은 구체로 찍히고 바닥에 그림자까지 떨궜다.
+	 */
+	AParkFlyPawn(const FObjectInitializer& ObjectInitializer);
+
 	//~ APawn: 이동 입력을 RMB 보유 시에만 적용
 	virtual void AddMovementInput(FVector WorldDirection, float ScaleValue = 1.0f, bool bForce = false) override;
 

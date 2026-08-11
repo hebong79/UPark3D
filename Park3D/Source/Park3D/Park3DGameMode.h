@@ -6,6 +6,7 @@
 
 #include "CoreMinimal.h"
 #include "InputCoreTypes.h"
+#include "Components/SlateWrapperTypes.h"   // ESlateVisibility (뷰어 가시성 저장용)
 #include "GameFramework/GameModeBase.h"
 #include "Park3DGameMode.generated.h"
 
@@ -38,6 +39,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Park3D|UI")
 	TSubclassOf<UCameraViewerWidget> ViewerWidgetClass;
 
+	/**
+	 * 카메라 뷰어 표시/숨김 토글 단축키. 기본 Ctrl + Space.
+	 * 메뉴 토글(MenuToggleKey)과 달리 조합키라 FKey 가 아니라 FInputChord 로 둔다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Park3D|UI")
+	FInputChord ViewerToggleChord;
+
 	/** 상시 뷰어 인스턴스. 카메라 컨트롤 패널이 새로 만들지 않고 이것을 공유한다. */
 	UFUNCTION(BlueprintCallable, Category = "Park3D|UI")
 	UCameraViewerWidget* GetCameraViewer() const;
@@ -45,6 +53,10 @@ public:
 	/** 메뉴 토글: 뷰포트에 있으면 제거, 없으면 표시. */
 	UFUNCTION(BlueprintCallable, Category = "Park3D|UI")
 	void ToggleMenu();
+
+	/** 카메라 뷰어 표시/숨김 토글. 뷰포트에서 빼지 않고 가시성만 바꾼다(사유는 구현부 주석). */
+	UFUNCTION(BlueprintCallable, Category = "Park3D|UI")
+	void ToggleCameraViewer();
 
 	// ---- 주차 시뮬레이션 ----
 	/** 시뮬레이션 시작 단축키. 기본 F9. */
@@ -121,6 +133,9 @@ private:
 	/** 주차 시뮬레이션 HUD 인스턴스. */
 	UPROPERTY(Transient)
 	TObjectPtr<UParkingSimWidget> SimWidget = nullptr;
+
+	/** 뷰어를 숨기기 직전의 가시성(복원용). 뷰어는 드래그/클릭을 받으므로 임의 값으로 되돌리면 안 된다. */
+	ESlateVisibility ViewerSavedVisibility = ESlateVisibility::Visible;
 
 	TWeakObjectPtr<APlayerController> CachedPC;
 };

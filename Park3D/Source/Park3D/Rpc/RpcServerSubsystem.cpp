@@ -189,6 +189,7 @@ void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	CamModule = MakeUnique<FCamRpcModule>(WorldGetter);
 	MeasureModule = MakeUnique<FMeasureRpcModule>(WorldGetter);
 	ViewModule = MakeUnique<FViewRpcModule>(WorldGetter);
+	SimModule = MakeUnique<FSimRpcModule>(WorldGetter);
 
 	// 차량 카탈로그(DT_CarCatalog) 주입.
 	if (UDataTable* Table = LoadObject<UDataTable>(nullptr, TEXT("/Game/Data/DT_CarCatalog.DT_CarCatalog")))
@@ -210,6 +211,7 @@ void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	CamModule->Register(*Dispatcher);        // 비영속(cam.*)
 	MeasureModule->Register(*Dispatcher);    // 비영속(measure.*)
 	ViewModule->Register(*Dispatcher);       // 비영속(view.*)
+	SimModule->Register(*Dispatcher);        // 비영속(sim.*)
 
 	StartServer();
 }

@@ -11,6 +11,8 @@
 #include "Config/Park3DAppConfig.h"
 #include "Config/CarCatalogConfig.h"
 #include "Map/MapFloorActor.h"
+#include "Sim/ParkingSimManager.h"
+#include "Sim/ParkingSimWidget.h"
 #include "Light/LightControlLibrary.h"
 #include "Light/LightControlManager.h"
 #include "Blueprint/UserWidget.h"
@@ -39,6 +41,10 @@ APark3DGameMode::APark3DGameMode()
 
 	// 메뉴 토글 단축키 기본값.
 	MenuToggleKey = EKeys::M;
+
+	// 주차 시뮬레이션 단축키 기본값(F11 은 전체화면 토글이라 피한다).
+	SimStartKey = EKeys::F9;
+	SimReplayKey = EKeys::F10;
 
 	// 이동(WASD/방향키)을 마우스 오른쪽 버튼 보유 시에만 허용하는 Pawn 사용.
 	DefaultPawnClass = AParkFlyPawn::StaticClass();
@@ -102,11 +108,72 @@ void APark3DGameMode::BeginPlay()
 	// 시작 설정 파일(Save/Config/config_pmaker.json) 적용 — 메뉴/패널·카메라 매니저가 준비된 뒤여야 한다.
 	ApplyStartupConfig();
 
-	// 메뉴 토글 단축키 바인딩(GameMode 액터에 입력 활성화).
+	// 주차 시뮬레이션 HUD(상시 노출).
+	ShowSimPanel();
+
+	// 단축키 바인딩(GameMode 액터에 입력 활성화).
 	EnableInput(PC);
 	if (InputComponent && MenuToggleKey.IsValid())
 	{
 		InputComponent->BindKey(MenuToggleKey, IE_Pressed, this, &APark3DGameMode::ToggleMenu);
+	}
+	if (InputComponent && SimStartKey.IsValid())
+	{
+		InputComponent->BindKey(SimStartKey, IE_Pressed, this, &APark3DGameMode::StartParkingSim);
+	}
+	if (InputComponent && SimReplayKey.IsValid())
+	{
+		InputComponent->BindKey(SimReplayKey, IE_Pressed, this, &APark3DGameMode::ReplayParkingSim);
+	}
+}
+
+void APark3DGameMode::ShowSimPanel()
+{
+	if (!SimWidget)
+	{
+		APlayerController* PC = CachedPC.Get();
+		SimWidget = CreateWidget<UParkingSimWidget>(
+			PC ? PC : UGameplayStatics::GetPlayerController(this, 0), UParkingSimWidget::StaticClass());
+	}
+	if (SimWidget && !SimWidget->IsInViewport())
+	{
+		// ZOrder 20 = 카메라 뷰어(5)·컨트롤 패널(10)보다 앞, 메인 메뉴(100)보다 뒤.
+		SimWidget->AddToViewport(20);
+		UE_LOG(LogTemp, Log, TEXT("[Sim] 주차 시뮬레이션 HUD 표시(F9 시작 / F10 리플레이)."));
+	}
+}
+
+void APark3DGameMode::StartParkingSim()
+{
+	if (SimWidget)
+	{
+		SimWidget->HandleStart();   // HUD 메시지까지 같이 갱신되도록 버튼 경로를 그대로 쓴다.
+		return;
+	}
+	if (AParkingSimManager* Sim = AParkingSimManager::GetOrSpawn(GetWorld()))
+	{
+		FString Err;
+		if (!Sim->StartSim(0, 0, 0, EParkSimParkMode::Random, Err))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Sim] 시작 실패: %s"), *Err);
+		}
+	}
+}
+
+void APark3DGameMode::ReplayParkingSim()
+{
+	if (SimWidget)
+	{
+		SimWidget->HandleReplay();
+		return;
+	}
+	if (AParkingSimManager* Sim = AParkingSimManager::GetOrSpawn(GetWorld()))
+	{
+		FString Err;
+		if (!Sim->StartReplay(1.f, Err))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Sim] 리플레이 실패: %s"), *Err);
+		}
 	}
 }
 

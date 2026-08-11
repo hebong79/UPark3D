@@ -11,6 +11,7 @@
 
 class UUserWidget;
 class UCameraViewerWidget;
+class UParkingSimWidget;
 
 /**
  * 게임 시작 시 Main Menu 위젯을 뷰포트에 올리고 마우스/입력 모드를 UI에 맞게 설정한다.
@@ -44,6 +45,22 @@ public:
 	/** 메뉴 토글: 뷰포트에 있으면 제거, 없으면 표시. */
 	UFUNCTION(BlueprintCallable, Category = "Park3D|UI")
 	void ToggleMenu();
+
+	// ---- 주차 시뮬레이션 ----
+	/** 시뮬레이션 시작 단축키. 기본 F9. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Park3D|Sim")
+	FKey SimStartKey;
+
+	/** 리플레이 단축키. 기본 F10. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Park3D|Sim")
+	FKey SimReplayKey;
+
+	/** 단축키 핸들러(HUD 버튼과 같은 진입점을 쓴다). */
+	UFUNCTION(BlueprintCallable, Category = "Park3D|Sim")
+	void StartParkingSim();
+
+	UFUNCTION(BlueprintCallable, Category = "Park3D|Sim")
+	void ReplayParkingSim();
 
 	// ---- 카메라(초기) 시점 ----
 	/** true면 BeginPlay에서 카메라 폰을 아래 위치/회전으로 강제 배치한다. false면 레벨의 PlayerStart를 따른다. */
@@ -82,6 +99,9 @@ private:
 	/** 카메라 뷰어 위젯을 생성(최초 1회)하고 뷰포트에 표시한다. 컨트롤 패널 개폐와 무관하게 유지된다. */
 	void ShowCameraViewer();
 
+	/** 주차 시뮬레이션 HUD(C++ 위젯)를 생성하고 상시 표시한다. */
+	void ShowSimPanel();
+
 	/**
 	 * Save/Config/config_pmaker.json 을 읽어 프리셋·카메라위치·차량배치 파일을 시작 시 적용한다
 	 * (Unity CPresetMakerScene.LoadInitialData 대응). 각 패널의 "열기" 경로를 그대로 호출하므로
@@ -97,6 +117,10 @@ private:
 	/** 생성된 카메라 뷰어 인스턴스(중복 생성 방지/참조 보관용). */
 	UPROPERTY(Transient)
 	TObjectPtr<UCameraViewerWidget> ViewerWidget = nullptr;
+
+	/** 주차 시뮬레이션 HUD 인스턴스. */
+	UPROPERTY(Transient)
+	TObjectPtr<UParkingSimWidget> SimWidget = nullptr;
 
 	TWeakObjectPtr<APlayerController> CachedPC;
 };

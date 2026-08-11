@@ -1,0 +1,197 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#include "ParkingSimWidget.h"
+
+#include "ParkingSimManager.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/Border.h"
+#include "Components/Button.h"
+#include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
+#include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
+#include "Components/TextBlock.h"
+#include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
+
+namespace
+{
+	constexpr float SimTitleFontSize = 16.f;
+	constexpr float SimBodyFontSize = 13.f;
+
+	/** 버튼 + 가운데 검은 라벨(다른 패널과 같은 규약 — 기본 흰 라벨은 밝은 버튼 위에서 안 보인다). */
+	UButton* MakeSimButton(UWidgetTree* Tree, const TCHAR* Name, const FText& Label)
+	{
+		UButton* B = Tree->ConstructWidget<UButton>(UButton::StaticClass(), Name);
+		UTextBlock* T = Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		T->SetText(Label);
+		T->SetJustification(ETextJustify::Center);
+		T->SetFontSize(SimBodyFontSize);
+		T->SetColorAndOpacity(FSlateColor(FLinearColor::Black));
+		B->AddChild(T);
+		return B;
+	}
+}
+
+TSharedRef<SWidget> UParkingSimWidget::RebuildWidget()
+{
+	if (!WidgetTree)
+	{
+		WidgetTree = NewObject<UWidgetTree>(this, TEXT("SimWidgetTree"), RF_Transient);
+	}
+	if (!WidgetTree->RootWidget)
+	{
+		BuildUI();
+	}
+	return Super::RebuildWidget();
+}
+
+void UParkingSimWidget::BuildUI()
+{
+	UCanvasPanel* Canvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("SimRootCanvas"));
+	WidgetTree->RootWidget = Canvas;
+
+	UBorder* Panel = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("SimPanel"));
+	Panel->SetBrushColor(FLinearColor(0.06f, 0.06f, 0.07f, 0.92f));
+	Panel->SetPadding(FMargin(10));
+
+	// 좌하단 고정. 카메라 뷰어(우측)·메인 메뉴(상단)와 겹치지 않는 자리.
+	if (UCanvasPanelSlot* CS = Cast<UCanvasPanelSlot>(Canvas->AddChild(Panel)))
+	{
+		CS->SetAnchors(FAnchors(0.f, 1.f));
+		CS->SetAlignment(FVector2D(0.f, 1.f));
+		CS->SetPosition(FVector2D(20.f, -20.f));
+		CS->SetSize(FVector2D(430.f, 132.f));
+		CS->SetAutoSize(false);
+	}
+
+	UVerticalBox* Box = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+	Panel->AddChild(Box);
+
+	UTextBlock* Title = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+	Title->SetText(FText::FromString(TEXT("주차 시뮬레이션")));
+	Title->SetFontSize(SimTitleFontSize);
+	Box->AddChild(Title);
+
+	StatusText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("SimStatusText"));
+	StatusText->SetFontSize(SimBodyFontSize);
+	StatusText->SetText(FText::FromString(TEXT("상태: 대기")));
+	if (UVerticalBoxSlot* S = Cast<UVerticalBoxSlot>(Box->AddChild(StatusText)))
+	{
+		S->SetPadding(FMargin(0, 4, 0, 0));
+	}
+
+	{
+		UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+		Btn_Start = MakeSimButton(WidgetTree, TEXT("Btn_SimStart"), FText::FromString(TEXT("시작 (F9)")));
+		Btn_Replay = MakeSimButton(WidgetTree, TEXT("Btn_SimReplay"), FText::FromString(TEXT("리플레이 (F10)")));
+		Btn_Stop = MakeSimButton(WidgetTree, TEXT("Btn_SimStop"), FText::FromString(TEXT("정지")));
+
+		for (UButton* B : { Btn_Start.Get(), Btn_Replay.Get(), Btn_Stop.Get() })
+		{
+			if (UHorizontalBoxSlot* S = Cast<UHorizontalBoxSlot>(Row->AddChild(B)))
+			{
+				S->SetPadding(FMargin(0, 0, 6, 0));
+				S->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+			}
+		}
+		if (UVerticalBoxSlot* S = Cast<UVerticalBoxSlot>(Box->AddChild(Row)))
+		{
+			S->SetPadding(FMargin(0, 8, 0, 4));
+		}
+	}
+
+	MessageText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("SimMessageText"));
+	MessageText->SetFontSize(SimBodyFontSize - 1.f);
+	MessageText->SetAutoWrapText(true);
+	MessageText->SetText(FText::FromString(TEXT("입구에서 랜덤 주차면까지 1대가 진입합니다.")));
+	Box->AddChild(MessageText);
+}
+
+void UParkingSimWidget::NativeConstruct()
+{
+	Super::NativeConstruct();
+
+	if (Btn_Start)  { Btn_Start->OnClicked.AddUniqueDynamic(this, &UParkingSimWidget::HandleStart); }
+	if (Btn_Stop)   { Btn_Stop->OnClicked.AddUniqueDynamic(this, &UParkingSimWidget::HandleStop); }
+	if (Btn_Replay) { Btn_Replay->OnClicked.AddUniqueDynamic(this, &UParkingSimWidget::HandleReplay); }
+}
+
+AParkingSimManager* UParkingSimWidget::GetManager() const
+{
+	return AParkingSimManager::GetOrSpawn(GetWorld());
+}
+
+void UParkingSimWidget::SetStatus(const FString& Text)
+{
+	if (MessageText)
+	{
+		MessageText->SetText(FText::FromString(Text));
+	}
+}
+
+void UParkingSimWidget::HandleStart()
+{
+	AParkingSimManager* Sim = GetManager();
+	if (!Sim)
+	{
+		SetStatus(TEXT("시뮬레이션 매니저를 만들지 못했습니다."));
+		return;
+	}
+
+	FString Err;
+	if (!Sim->StartSim(0, 0, 0, Err))
+	{
+		SetStatus(Err);
+		return;
+	}
+	const FParkSimRecord& R = Sim->GetRecord();
+	SetStatus(FString::Printf(TEXT("시작 — 목표 프리셋 %d / %d번 면, 입구(%.1f, %.1f)"),
+		R.presetId, R.slotIndex, R.entranceX, R.entranceY));
+}
+
+void UParkingSimWidget::HandleStop()
+{
+	if (AParkingSimManager* Sim = GetManager())
+	{
+		Sim->StopSim(/*bRemoveCar=*/false);
+		SetStatus(FString::Printf(TEXT("정지 — 로그: %s"), *Sim->GetLastLogPath()));
+	}
+}
+
+void UParkingSimWidget::HandleReplay()
+{
+	AParkingSimManager* Sim = GetManager();
+	if (!Sim)
+	{
+		return;
+	}
+
+	FString Err;
+	if (!Sim->StartReplay(1.f, Err))
+	{
+		SetStatus(Err);
+		return;
+	}
+	SetStatus(FString::Printf(TEXT("리플레이 재생 — 프레임 %d개"), Sim->GetRecord().frames.Num()));
+}
+
+void UParkingSimWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+
+	if (!StatusText)
+	{
+		return;
+	}
+	AParkingSimManager* Sim = AParkingSimManager::GetOrSpawn(GetWorld());
+	if (!Sim)
+	{
+		return;
+	}
+
+	const FParkSimRecord& R = Sim->GetRecord();
+	StatusText->SetText(FText::FromString(FString::Printf(
+		TEXT("상태: %s   경과 %.1fs   이동 %.1fm   목표 %d-%d면"),
+		*AParkingSimManager::StateLabel(Sim->GetState()), Sim->GetElapsed(), Sim->GetDistance(), R.presetId, R.slotIndex)));
+}

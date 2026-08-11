@@ -59,11 +59,12 @@ void UParkingSimWidget::BuildUI()
 	UCanvasPanel* Canvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("SimRootCanvas"));
 	WidgetTree->RootWidget = Canvas;
 
-	UBorder* Panel = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("SimPanel"));
+	RootBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("SimPanel"));
+	UBorder* Panel = RootBorder;
 	Panel->SetBrushColor(SimPanelColor);
 	Panel->SetPadding(FMargin(10));
 
-	// 좌하단 고정. 카메라 뷰어(우측)·메인 메뉴(상단)와 겹치지 않는 자리.
+	// 좌하단이 기본 자리(카메라 뷰어·메인 메뉴와 겹치지 않는다). 드래그로 옮길 수 있다.
 	if (UCanvasPanelSlot* CS = Cast<UCanvasPanelSlot>(Canvas->AddChild(Panel)))
 	{
 		CS->SetAnchors(FAnchors(0.f, 1.f));
@@ -186,6 +187,42 @@ void UParkingSimWidget::HandleReplay()
 		return;
 	}
 	SetStatus(FString::Printf(TEXT("리플레이 재생 — 프레임 %d개"), Sim->GetRecord().frames.Num()));
+}
+
+// ===== 패널 드래그 (기존 패널 선례와 동일) =====
+
+FReply UParkingSimWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	if (RootBorder && InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	{
+		bDraggingPanel = true;
+		DragStartLocal = InGeometry.AbsoluteToLocal(InMouseEvent.GetScreenSpacePosition());
+		DragStartTranslation = PanelTranslation;
+		return FReply::Handled().CaptureMouse(TakeWidget());
+	}
+	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+FReply UParkingSimWidget::NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	if (bDraggingPanel && RootBorder)
+	{
+		const FVector2D Now = InGeometry.AbsoluteToLocal(InMouseEvent.GetScreenSpacePosition());
+		PanelTranslation = DragStartTranslation + (Now - DragStartLocal);
+		RootBorder->SetRenderTranslation(PanelTranslation);
+		return FReply::Handled();
+	}
+	return Super::NativeOnMouseMove(InGeometry, InMouseEvent);
+}
+
+FReply UParkingSimWidget::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	if (bDraggingPanel && InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	{
+		bDraggingPanel = false;
+		return FReply::Handled().ReleaseMouseCapture();
+	}
+	return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
 }
 
 void UParkingSimWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)

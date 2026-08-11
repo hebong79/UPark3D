@@ -11,6 +11,7 @@
 #include "ParkingSimWidget.generated.h"
 
 class AParkingSimManager;
+class UBorder;
 class UButton;
 class UTextBlock;
 
@@ -30,14 +31,28 @@ protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
+	// 패널 드래그로 이동(기존 패널 선례와 동일). 버튼 위에서는 버튼이 클릭을 소비하므로 드래그되지 않는다.
+	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+
 private:
 	void BuildUI();
 	AParkingSimManager* GetManager() const;
 	void SetStatus(const FString& Text);
+
+	/** 배경 프레임 겸 드래그 핸들. RenderTranslation 으로 옮긴다. */
+	UPROPERTY(Transient) TObjectPtr<UBorder> RootBorder = nullptr;
 
 	UPROPERTY(Transient) TObjectPtr<UTextBlock> StatusText = nullptr;
 	UPROPERTY(Transient) TObjectPtr<UTextBlock> MessageText = nullptr;
 	UPROPERTY(Transient) TObjectPtr<UButton> Btn_Start = nullptr;
 	UPROPERTY(Transient) TObjectPtr<UButton> Btn_Stop = nullptr;
 	UPROPERTY(Transient) TObjectPtr<UButton> Btn_Replay = nullptr;
+
+	// 드래그 상태
+	bool bDraggingPanel = false;
+	FVector2D DragStartLocal = FVector2D::ZeroVector;
+	FVector2D DragStartTranslation = FVector2D::ZeroVector;
+	FVector2D PanelTranslation = FVector2D::ZeroVector;
 };

@@ -18,6 +18,20 @@ enum class EParkSimState : uint8
 	Replay   UMETA(DisplayName = "리플레이"),
 };
 
+/**
+ * 주차 진입 방향.
+ *  - Front : 전진으로 그대로 밀고 들어간다. 차 앞(코)이 주차면 안쪽을 향한다.
+ *  - Rear  : 진입점에서 통로 쪽으로 돌아선 뒤 후진해 들어간다. 차 앞이 통로 쪽을 향한다.
+ *  - Random: 둘 중 하나를 무작위(seed 반영, 50:50)로 고른다.
+ */
+UENUM(BlueprintType)
+enum class EParkSimParkMode : uint8
+{
+	Random UMETA(DisplayName = "랜덤"),
+	Front  UMETA(DisplayName = "전면주차"),
+	Rear   UMETA(DisplayName = "후면주차"),
+};
+
 /** 기록 프레임 1개(리플레이의 원본 데이터). 키 이름이 곧 JSON 키가 되도록 소문자로 둔다. */
 USTRUCT()
 struct FParkSimFrame
@@ -53,6 +67,7 @@ struct FParkSimRecord
 	UPROPERTY() int32 presetId = 0;                // 목표 주차면의 프리셋 idx
 	UPROPERTY() int32 slotIndex = 0;               // 프리셋 내 면 번호(1-based)
 	UPROPERTY() int32 seed = 0;                    // 0=비결정
+	UPROPERTY() FString parkMode;                  // 전면주차 / 후면주차 (요청이 랜덤이어도 실제 뽑힌 값)
 	UPROPERTY() FString carId;
 	UPROPERTY() float entranceX = 0.f;
 	UPROPERTY() float entranceY = 0.f;

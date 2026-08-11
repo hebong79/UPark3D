@@ -72,6 +72,39 @@ FString AParkingSimManager::StateLabel(EParkSimState S)
 	}
 }
 
+EParkSimParkMode AParkingSimManager::ParseParkMode(const FString& Text)
+{
+	const FString T = Text.TrimStartAndEnd().ToLower();
+	if (T == TEXT("front") || T == TEXT("전면") || T == TEXT("전면주차")) { return EParkSimParkMode::Front; }
+	if (T == TEXT("rear") || T == TEXT("back") ||
+		T == TEXT("후면") || T == TEXT("후면주차") || T == TEXT("후진"))  { return EParkSimParkMode::Rear; }
+	return EParkSimParkMode::Random;
+}
+
+FString AParkingSimManager::ParkModeLabel(EParkSimParkMode Mode)
+{
+	switch (Mode)
+	{
+	case EParkSimParkMode::Front: return TEXT("전면주차");
+	case EParkSimParkMode::Rear:  return TEXT("후면주차");
+	default:                      return TEXT("랜덤");
+	}
+}
+
+FString AParkingSimManager::GetPhaseLabel() const
+{
+	if (State == EParkSimState::Replay)                    { return TEXT("리플레이"); }
+	if (State == EParkSimState::Moving ||
+		State == EParkSimState::Stopped)                   { return TEXT("주행"); }
+	if (State == EParkSimState::Parked)
+	{
+		if (bAutoReplayArmed) { return TEXT("리플레이대기"); }
+		if (bScenarioDone)    { return TEXT("완료"); }
+		return TEXT("주차");
+	}
+	return TEXT("대기");
+}
+
 AParkingPresetManager* AParkingSimManager::FindPresetManager() const
 {
 	for (TActorIterator<AParkingPresetManager> It(GetWorld()); It; ++It)
@@ -275,8 +308,14 @@ FVector2D AParkingSimManager::ChooseOpenDir(const FParkSimSlot& Target, const TA
 
 // ===== 시작/중단 =====
 
-bool AParkingSimManager::StartSim(int32 InPresetId, int32 InSlotIndex, int32 Seed, FString& OutError)
+bool AParkingSimManager::StartSim(int32 InPresetId, int32 InSlotIndex, int32 Seed, EParkSimParkMode Mode, FString& OutError)
 {
+	// 이전 시나리오 예약을 먼저 지운다 — 실패로 끝나도 남은 예약이 다음 주행에 끼어들면 안 된다.
+	bScenarioActive = false;
+	bScenarioDone = false;
+	bAutoReplayArmed = false;
+	AutoReplayDelayLeft = 0.f;
+
 	TArray<FParkSimSlot> Slots;
 	BuildAllSlots(Slots);
 	if (Slots.Num() == 0)
@@ -312,6 +351,13 @@ bool AParkingSimManager::StartSim(int32 InPresetId, int32 InSlotIndex, int32 See
 	FRandomStream Stream = Seed > 0 ? FRandomStream(Seed) : FRandomStream(FMath::Rand());
 	const FParkSimSlot& Target = Slots[Candidates[Stream.RandRange(0, Candidates.Num() - 1)]];
 
+	// 전면/후면 결정. 랜덤은 같은 스트림에서 뽑아 seed 재현성을 유지한다.
+	const EParkSimParkMode Resolved = (Mode == EParkSimParkMode::Random)
+		? (Stream.FRand() < 0.5f ? EParkSimParkMode::Front : EParkSimParkMode::Rear)
+		: Mode;
+	bBackIn = (Resolved == EParkSimParkMode::Rear);
+	bReverseLogged = false;
+
 	// 경로: 입구 → 통로 → 진입점 → 주차면 중심.
 	const FVector2D OpenDir = ChooseOpenDir(Target, Slots, Bounds);
 	const FVector2D Front = Target.Center + OpenDir * (Target.DepthM * 0.5f + ApproachMarginM);
@@ -338,7 +384,8 @@ bool AParkingSimManager::StartSim(int32 InPresetId, int32 InSlotIndex, int32 See
 	ElapsedSec = 0.f;
 	SampleAccum = 0.f;
 	TraveledM = 0.f;
-	FinalYawDeg = Yaw2D(-OpenDir);
+	// 전면주차는 코가 주차면 안쪽(-OpenDir), 후면주차는 코가 통로 쪽(+OpenDir)을 본다.
+	FinalYawDeg = bBackIn ? Yaw2D(OpenDir) : Yaw2D(-OpenDir);
 
 	// 기록 초기화.
 	Record = FParkSimRecord();
@@ -346,6 +393,7 @@ bool AParkingSimManager::StartSim(int32 InPresetId, int32 InSlotIndex, int32 See
 	Record.presetId = Target.PresetId;
 	Record.slotIndex = Target.SlotIndex;
 	Record.seed = Seed;
+	Record.parkMode = ParkModeLabel(Resolved);
 	Record.entranceX = Entrance.X;
 	Record.entranceY = Entrance.Y;
 	{
@@ -397,8 +445,10 @@ bool AParkingSimManager::StartSim(int32 InPresetId, int32 InSlotIndex, int32 See
 	State = EParkSimState::Idle;
 	SetSimState(EParkSimState::Moving);
 	LogEvent(FString::Printf(
-		TEXT("입구 진입 — 위치(%.2f, %.2f), 목표 프리셋 %d / %d번 면 중심(%.2f, %.2f), 차량 %s"),
-		Entrance.X, Entrance.Y, Target.PresetId, Target.SlotIndex, Target.Center.X, Target.Center.Y, *Record.carId));
+		TEXT("입구 진입 — 위치(%.2f, %.2f), 목표 프리셋 %d / %d번 면 중심(%.2f, %.2f), 차량 %s, %s(%s)"),
+		Entrance.X, Entrance.Y, Target.PresetId, Target.SlotIndex, Target.Center.X, Target.Center.Y, *Record.carId,
+		*Record.parkMode,
+		bBackIn ? TEXT("후진 진입 · 차 앞이 통로 쪽") : TEXT("전진 진입 · 차 앞이 주차면 안쪽")));
 	for (int32 i = 0; i < Waypoints.Num(); ++i)
 	{
 		LogEvent(FString::Printf(TEXT("경로 %d/%d %s (%.2f, %.2f)"),
@@ -408,8 +458,36 @@ bool AParkingSimManager::StartSim(int32 InPresetId, int32 InSlotIndex, int32 See
 	return true;
 }
 
+bool AParkingSimManager::StartScenario(int32 InPresetId, int32 InSlotIndex, int32 Seed, EParkSimParkMode Mode,
+	bool bReplay, float ReplayDelaySec, float ReplaySpeedScale, FString& OutError)
+{
+	if (!StartSim(InPresetId, InSlotIndex, Seed, Mode, OutError))
+	{
+		return false;
+	}
+
+	bScenarioActive = true;
+	if (bReplay)
+	{
+		bAutoReplayArmed = true;
+		AutoReplayDelayLeft = FMath::Max(ReplayDelaySec, 0.f);
+		AutoReplaySpeed = FMath::Clamp(ReplaySpeedScale, 0.1f, 10.f);
+		LogEvent(FString::Printf(TEXT("시나리오 예약 — 주차 완료 %.1f초 뒤 리플레이 자동 재생(%.2f배속)"),
+			AutoReplayDelayLeft, AutoReplaySpeed));
+	}
+	else
+	{
+		LogEvent(TEXT("시나리오 예약 — 리플레이 없이 주차까지만"));
+	}
+	return true;
+}
+
 void AParkingSimManager::StopSim(bool bRemoveCar)
 {
+	// 수동 정지는 예약된 자동 리플레이도 함께 취소한다.
+	bAutoReplayArmed = false;
+	AutoReplayDelayLeft = 0.f;
+
 	const bool bWasRunning = (State == EParkSimState::Moving || State == EParkSimState::Stopped);
 
 	if (bRemoveCar && IsValid(Car))
@@ -451,6 +529,26 @@ void AParkingSimManager::Tick(float DeltaSeconds)
 	{
 		TickDrive(DeltaSeconds);
 	}
+
+	// 시나리오: 주차가 끝나면 지연 시간을 세고 리플레이로 넘어간다.
+	if (bAutoReplayArmed && State == EParkSimState::Parked)
+	{
+		AutoReplayDelayLeft -= DeltaSeconds;
+		if (AutoReplayDelayLeft <= 0.f)
+		{
+			bAutoReplayArmed = false;   // 재생 실패해도 매 틱 재시도하지 않는다.
+			FString Err;
+			if (StartReplay(AutoReplaySpeed, Err))
+			{
+				UE_LOG(LogTemp, Log, TEXT("[Sim] 시나리오 — 리플레이 자동 시작(%.2f배속)"), AutoReplaySpeed);
+			}
+			else
+			{
+				bScenarioDone = true;
+				UE_LOG(LogTemp, Warning, TEXT("[Sim] 시나리오 — 리플레이 자동 시작 실패: %s"), *Err);
+			}
+		}
+	}
 }
 
 void AParkingSimManager::TickDrive(float Dt)
@@ -474,9 +572,18 @@ void AParkingSimManager::TickDrive(float Dt)
 	const FVector2D To = Target - PosM;
 	const float Dist = To.Size();
 
+	// 후면주차의 마지막 구간은 후진이다: 차 뒤를 면 쪽으로 두므로 조향 기준이 반대가 된다.
+	const bool bReverseLeg = bFinalLeg && bBackIn;
+	if (bReverseLeg && !bReverseLogged)
+	{
+		bReverseLogged = true;
+		LogEvent(FString::Printf(TEXT("후면주차 — 진입점에서 돌아서서 후진 시작 (위치 %.2f, %.2f)"), PosM.X, PosM.Y));
+	}
+
 	// 조향(각속도 제한). 남은 거리가 아주 짧으면 방향이 튀므로 현재 방향을 유지한다.
+	const FVector2D Aim = bReverseLeg ? -To : To;
 	const float YawErr = (Dist > KINDA_SMALL_NUMBER)
-		? FMath::FindDeltaAngleDegrees(YawDeg, Yaw2D(To))
+		? FMath::FindDeltaAngleDegrees(YawDeg, Yaw2D(Aim))
 		: 0.f;
 	const float MaxStep = MaxYawRateDeg * Dt;
 	YawDeg = UCarPlacementLibrary::AddYawDeg(YawDeg, FMath::Clamp(YawErr, -MaxStep, MaxStep));
@@ -485,7 +592,7 @@ void AParkingSimManager::TickDrive(float Dt)
 	float TargetSpeed = 0.f;
 	if (FMath::Abs(YawErr) <= PivotYawErrDeg)
 	{
-		const float Cruise = bFinalLeg ? FinalSpeedMps : CruiseSpeedMps;
+		const float Cruise = bReverseLeg ? ReverseSpeedMps : (bFinalLeg ? FinalSpeedMps : CruiseSpeedMps);
 		const float BrakeDist = bFinalLeg ? Dist : FMath::Max(Dist - ArriveRadiusM, 0.f);
 		const float Floor = bFinalLeg ? 0.05f : 0.4f; // 경유지에서는 완전히 서지 않는다.
 		TargetSpeed = FMath::Min(Cruise, FMath::Sqrt(2.f * DecelMps2 * BrakeDist) + Floor);
@@ -495,8 +602,9 @@ void AParkingSimManager::TickDrive(float Dt)
 		? FMath::Min(TargetSpeed, SpeedMps + AccelMps2 * Dt)
 		: FMath::Max(TargetSpeed, SpeedMps - DecelMps2 * Dt);
 
+	// 후진 구간은 차의 앞이 아니라 뒤로 나아간다(자세는 그대로, 진행만 반대).
 	const float Step = SpeedMps * Dt;
-	PosM += Dir2D(YawDeg) * Step;
+	PosM += Dir2D(YawDeg) * (bReverseLeg ? -Step : Step);
 	TraveledM += Step;
 
 	SetSimState(SpeedMps < 0.05f ? EParkSimState::Stopped : EParkSimState::Moving);
@@ -513,8 +621,8 @@ void AParkingSimManager::TickDrive(float Dt)
 			SpeedMps = 0.f;
 			ApplyCarPose(PosM, YawDeg);
 			SetSimState(EParkSimState::Parked);
-			LogEvent(FString::Printf(TEXT("주차 완료 — 프리셋 %d / %d번 면 중심(%.2f, %.2f), 중심오차 %.2fm, 총 이동 %.1fm, 소요 %.1f초"),
-				Record.presetId, Record.slotIndex, Target.X, Target.Y, RemainDist, TraveledM, ElapsedSec));
+			LogEvent(FString::Printf(TEXT("주차 완료(%s) — 프리셋 %d / %d번 면 중심(%.2f, %.2f), 중심오차 %.2fm, 차량 방위 %.1f°, 총 이동 %.1fm, 소요 %.1f초"),
+				*Record.parkMode, Record.presetId, Record.slotIndex, Target.X, Target.Y, RemainDist, FinalYawDeg, TraveledM, ElapsedSec));
 			FinishRun(TEXT("주차완료"));
 			return;
 		}
@@ -628,7 +736,7 @@ void AParkingSimManager::WriteLogFiles()
 	Lines.Add(FString::Printf(TEXT("시작: %s"), *Record.startedAt));
 	Lines.Add(FString::Printf(TEXT("차량: %s"), *Record.carId));
 	Lines.Add(FString::Printf(TEXT("입구: (%.2f, %.2f)  [UE 월드 미터, X=깊이축 Y=우측축]"), Record.entranceX, Record.entranceY));
-	Lines.Add(FString::Printf(TEXT("목표: 프리셋 %d / %d번 면"), Record.presetId, Record.slotIndex));
+	Lines.Add(FString::Printf(TEXT("목표: 프리셋 %d / %d번 면 (%s)"), Record.presetId, Record.slotIndex, *Record.parkMode));
 	Lines.Add(FString::Printf(TEXT("결과: %s (소요 %.2f초, 이동 %.2fm, 프레임 %d개)"),
 		*Record.result, Record.durationSec, Record.distanceM, Record.frames.Num()));
 	Lines.Add(TEXT(""));
@@ -765,6 +873,14 @@ void AParkingSimManager::TickReplay(float Dt)
 		ApplyCarPose(FVector2D(Last.x, Last.y), Last.yaw);
 		State = StateBeforeReplay;
 		UE_LOG(LogTemp, Log, TEXT("[Sim] 리플레이 종료 — %.2f초 재생"), EndT);
+		if (bScenarioActive)
+		{
+			// 차량은 주차 자세 그대로 남긴다(마지막 프레임 = 주차 완료 자세).
+			bScenarioActive = false;
+			bScenarioDone = true;
+			UE_LOG(LogTemp, Log, TEXT("[Sim] 시나리오 완료 — 차량은 프리셋 %d / %d번 면에 유지"),
+				Record.presetId, Record.slotIndex);
+		}
 		return;
 	}
 

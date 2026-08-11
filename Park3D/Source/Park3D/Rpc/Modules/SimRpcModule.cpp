@@ -14,9 +14,11 @@ namespace
 
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetStringField(TEXT("state"), AParkingSimManager::StateLabel(Sim->GetState()));
+		O->SetStringField(TEXT("phase"), Sim->GetPhaseLabel());
 		O->SetNumberField(TEXT("elapsedSec"), Sim->GetElapsed());
 		O->SetNumberField(TEXT("presetId"), R.presetId);
 		O->SetNumberField(TEXT("slotIndex"), R.slotIndex);
+		O->SetStringField(TEXT("parkMode"), R.parkMode);   // 요청이 random 이어도 실제 뽑힌 값
 		O->SetStringField(TEXT("carId"), R.carId);
 		O->SetObjectField(TEXT("entrance"), RpcDto::Vec3(R.entranceX, R.entranceY, 0.0));
 		O->SetNumberField(TEXT("distanceM"), Sim->GetDistance());
@@ -59,9 +61,11 @@ void FSimRpcModule::Register(URpcDispatcher& Dispatcher)
 		const int32 PresetId = RpcParam::GetInt(P, TEXT("presetId"), 0);
 		const int32 SlotIndex = RpcParam::GetInt(P, TEXT("slotIndex"), 0);
 		const int32 Seed = RpcParam::GetInt(P, TEXT("seed"), 0);
+		const EParkSimParkMode Mode = AParkingSimManager::ParseParkMode(
+			RpcParam::GetString(P, TEXT("parkMode"), TEXT("random")));
 
 		FString Err;
-		if (!Sim->StartSim(PresetId, SlotIndex, Seed, Err))
+		if (!Sim->StartSim(PresetId, SlotIndex, Seed, Mode, Err))
 		{
 			E.FailDomain(Err);
 			return nullptr;
@@ -69,6 +73,36 @@ void FSimRpcModule::Register(URpcDispatcher& Dispatcher)
 
 		TSharedPtr<FJsonObject> O = RecordToDto(Sim);
 		O->SetBoolField(TEXT("ok"), true);
+		return RpcDto::MakeObject(O);
+	});
+
+	// 주행 → 주차 → 리플레이를 한 번의 호출로 예약한다. 응답은 즉시 오고(핸들러가 게임 스레드),
+	// 진행은 sim.status 의 phase(주행 → 주차 → 리플레이대기 → 리플레이 → 완료)로 본다.
+	Dispatcher.Register(TEXT("sim.scenario"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		AParkingSimManager* Sim = GetSimManager(E); if (!Sim) return nullptr;
+
+		const int32 PresetId = RpcParam::GetInt(P, TEXT("presetId"), 0);
+		const int32 SlotIndex = RpcParam::GetInt(P, TEXT("slotIndex"), 0);
+		const int32 Seed = RpcParam::GetInt(P, TEXT("seed"), 0);
+		const bool bReplay = RpcParam::GetBool(P, TEXT("replay"), true);
+		const float Delay = static_cast<float>(RpcParam::GetFloat(P, TEXT("replayDelaySec"), 1.5));
+		const float Speed = static_cast<float>(RpcParam::GetFloat(P, TEXT("replaySpeed"), 1.0));
+		const EParkSimParkMode Mode = AParkingSimManager::ParseParkMode(
+			RpcParam::GetString(P, TEXT("parkMode"), TEXT("random")));
+
+		FString Err;
+		if (!Sim->StartScenario(PresetId, SlotIndex, Seed, Mode, bReplay, Delay, Speed, Err))
+		{
+			E.FailDomain(Err);
+			return nullptr;
+		}
+
+		TSharedPtr<FJsonObject> O = RecordToDto(Sim);
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetBoolField(TEXT("replayScheduled"), bReplay);
+		O->SetNumberField(TEXT("replayDelaySec"), Delay);
+		O->SetNumberField(TEXT("replaySpeed"), Speed);
 		return RpcDto::MakeObject(O);
 	});
 

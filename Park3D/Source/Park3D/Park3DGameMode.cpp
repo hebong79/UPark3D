@@ -153,7 +153,7 @@ void APark3DGameMode::StartParkingSim()
 	if (AParkingSimManager* Sim = AParkingSimManager::GetOrSpawn(GetWorld()))
 	{
 		FString Err;
-		if (!Sim->StartSim(0, 0, 0, Err))
+		if (!Sim->StartSim(0, 0, 0, EParkSimParkMode::Random, Err))
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[Sim] 시작 실패: %s"), *Err);
 		}

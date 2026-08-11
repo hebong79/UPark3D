@@ -1,5 +1,5 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
-// SimRpcModule : sim.* (5) 핸들러. 주차 진입 시뮬레이션의 시작/중단/조회/리플레이/입구조회.
+// SimRpcModule : sim.* (6) 핸들러. 주차 진입 시뮬레이션의 시작/시나리오/중단/조회/리플레이/입구조회.
 // 실동작은 전부 AParkingSimManager 가 한다(HUD 버튼·단축키와 같은 진입점을 공유).
 
 #pragma once

@@ -140,14 +140,15 @@ void UParkingSimWidget::HandleStart()
 	}
 
 	FString Err;
-	if (!Sim->StartSim(0, 0, 0, Err))
+	// HUD/단축키는 전면·후면을 랜덤으로 섞는다(특정 모드가 필요하면 sim.start 의 parkMode 를 쓴다).
+	if (!Sim->StartSim(0, 0, 0, EParkSimParkMode::Random, Err))
 	{
 		SetStatus(Err);
 		return;
 	}
 	const FParkSimRecord& R = Sim->GetRecord();
-	SetStatus(FString::Printf(TEXT("시작 — 목표 프리셋 %d / %d번 면, 입구(%.1f, %.1f)"),
-		R.presetId, R.slotIndex, R.entranceX, R.entranceY));
+	SetStatus(FString::Printf(TEXT("시작 — 목표 프리셋 %d / %d번 면 (%s), 입구(%.1f, %.1f)"),
+		R.presetId, R.slotIndex, *R.parkMode, R.entranceX, R.entranceY));
 }
 
 void UParkingSimWidget::HandleStop()
@@ -193,5 +194,5 @@ void UParkingSimWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTim
 	const FParkSimRecord& R = Sim->GetRecord();
 	StatusText->SetText(FText::FromString(FString::Printf(
 		TEXT("상태: %s   경과 %.1fs   이동 %.1fm   목표 %d-%d면"),
-		*AParkingSimManager::StateLabel(Sim->GetState()), Sim->GetElapsed(), Sim->GetDistance(), R.presetId, R.slotIndex)));
+		*Sim->GetPhaseLabel(), Sim->GetElapsed(), Sim->GetDistance(), R.presetId, R.slotIndex)));
 }

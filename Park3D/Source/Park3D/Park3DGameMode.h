@@ -58,6 +58,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Park3D|UI")
 	void ToggleCameraViewer();
 
+	/**
+	 * 주차 시뮬레이션 HUD 표시/숨김 토글(메인 메뉴 버튼이 호출). 시작 시에는 숨김 상태다.
+	 * @return 토글 후 표시 중이면 true.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Park3D|Sim")
+	bool ToggleSimPanel();
+
+	/** HUD 인스턴스를 만들어 두기만 한다(뷰포트에 넣지 않음). 단축키 경로가 위젯을 필요로 한다. */
+	UFUNCTION(BlueprintCallable, Category = "Park3D|Sim")
+	UParkingSimWidget* EnsureSimPanel();
+
 	// ---- 주차 시뮬레이션 ----
 	/** 시뮬레이션 시작 단축키. 기본 F9. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Park3D|Sim")
@@ -111,8 +122,6 @@ private:
 	/** 카메라 뷰어 위젯을 생성(최초 1회)하고 뷰포트에 표시한다. 컨트롤 패널 개폐와 무관하게 유지된다. */
 	void ShowCameraViewer();
 
-	/** 주차 시뮬레이션 HUD(C++ 위젯)를 생성하고 상시 표시한다. */
-	void ShowSimPanel();
 
 	/**
 	 * Save/Config/config_pmaker.json 을 읽어 프리셋·카메라위치·차량배치 파일을 시작 시 적용한다

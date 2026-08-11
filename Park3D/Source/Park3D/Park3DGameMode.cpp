@@ -111,8 +111,8 @@ void APark3DGameMode::BeginPlay()
 	// 시작 설정 파일(Save/Config/config_pmaker.json) 적용 — 메뉴/패널·카메라 매니저가 준비된 뒤여야 한다.
 	ApplyStartupConfig();
 
-	// 주차 시뮬레이션 HUD(상시 노출).
-	ShowSimPanel();
+	// 주차 시뮬레이션 HUD 는 만들어만 두고 숨긴 채 시작한다(메인 메뉴 "주차 시뮬레이션" 버튼으로 연다).
+	EnsureSimPanel();
 
 	// 단축키 바인딩(GameMode 액터에 입력 활성화).
 	EnableInput(PC);
@@ -160,7 +160,7 @@ void APark3DGameMode::ToggleCameraViewer()
 	}
 }
 
-void APark3DGameMode::ShowSimPanel()
+UParkingSimWidget* APark3DGameMode::EnsureSimPanel()
 {
 	if (!SimWidget)
 	{
@@ -168,12 +168,29 @@ void APark3DGameMode::ShowSimPanel()
 		SimWidget = CreateWidget<UParkingSimWidget>(
 			PC ? PC : UGameplayStatics::GetPlayerController(this, 0), UParkingSimWidget::StaticClass());
 	}
-	if (SimWidget && !SimWidget->IsInViewport())
+	return SimWidget;
+}
+
+bool APark3DGameMode::ToggleSimPanel()
+{
+	UParkingSimWidget* Panel = EnsureSimPanel();
+	if (!Panel)
 	{
-		// ZOrder 20 = 카메라 뷰어(5)·컨트롤 패널(10)보다 앞, 메인 메뉴(100)보다 뒤.
-		SimWidget->AddToViewport(20);
-		UE_LOG(LogTemp, Log, TEXT("[Sim] 주차 시뮬레이션 HUD 표시(F9 시작 / F10 리플레이)."));
+		UE_LOG(LogTemp, Warning, TEXT("[Sim] HUD 위젯을 만들지 못했습니다."));
+		return false;
 	}
+
+	if (Panel->IsInViewport())
+	{
+		Panel->RemoveFromParent();
+		UE_LOG(LogTemp, Log, TEXT("[Sim] 주차 시뮬레이션 HUD 를 닫았습니다."));
+		return false;
+	}
+
+	// ZOrder 20 = 카메라 뷰어(5)·컨트롤 패널(10)보다 앞, 메인 메뉴(100)보다 뒤.
+	Panel->AddToViewport(20);
+	UE_LOG(LogTemp, Log, TEXT("[Sim] 주차 시뮬레이션 HUD 를 열었습니다(F9 시작 / F10 리플레이)."));
+	return true;
 }
 
 void APark3DGameMode::StartParkingSim()

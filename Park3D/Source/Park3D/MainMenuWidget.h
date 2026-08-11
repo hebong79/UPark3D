@@ -87,20 +87,32 @@ protected:
 	UFUNCTION() void HandleVlaSim();
 	UFUNCTION() void HandleExit();
 	UFUNCTION() void HandleLight();
+	UFUNCTION() void HandleSimPanel();
 
 private:
 	UUserWidget* GetOrCreatePanel(TSubclassOf<UUserWidget> WidgetClass);
 
 	/**
-	 * "조명 설정" 버튼을 메뉴에 런타임 삽입한다.
-	 * 기존 WBP_MainMenu 자산에는 이 버튼이 없고 에디터가 없어 자산을 수정할 수 없으므로,
-	 * VBox_Menu 를 이름으로 찾아 Exit 버튼 앞에 끼워 넣고 스타일은 기존 버튼에서 복사한다.
+	 * 메뉴 목록(VBox_Menu)의 Exit 바로 앞에 버튼 하나를 런타임 삽입한다.
+	 * 기존 WBP_MainMenu 자산에는 이 버튼들이 없고 에디터가 없어 자산을 수정할 수 없으므로,
+	 * 스타일·폰트·슬롯 패딩을 기존 버튼(Btn_MapSize)에서 복사해 모양을 맞춘다.
+	 * @return 삽입된 버튼(목록을 못 찾으면 nullptr). OnClicked 바인딩은 호출자가 한다.
 	 */
+	UButton* InsertMenuButtonBeforeExit(const TCHAR* WidgetName, const FText& Label);
+
+	/** "조명 설정" 버튼 삽입. */
 	void InjectLightButton();
+
+	/** "주차 시뮬레이션" 버튼 삽입(HUD 열고 닫기). */
+	void InjectSimButton();
 
 	/** 런타임에 만든 조명 버튼(WBP 바인딩이 아니다). */
 	UPROPERTY(Transient)
 	TObjectPtr<UButton> Btn_Light = nullptr;
+
+	/** 런타임에 만든 주차 시뮬레이션 버튼(WBP 바인딩이 아니다). */
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> Btn_Sim = nullptr;
 
 	// 메뉴 드래그 상태.
 	bool bDraggingMenu = false;

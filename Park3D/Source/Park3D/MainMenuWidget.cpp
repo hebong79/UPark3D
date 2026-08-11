@@ -9,6 +9,8 @@
 #include "Components/VerticalBoxSlot.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Light/LightControlWidget.h"
+#include "Park3DGameMode.h"
+#include "Kismet/GameplayStatics.h"
 #include "InputCoreTypes.h"
 
 void UMainMenuWidget::NativeOnInitialized()
@@ -18,6 +20,7 @@ void UMainMenuWidget::NativeOnInitialized()
 	// NativeConstruct 는 Slate 트리가 이미 만들어진 뒤라, 여기서 넣어야 ShiftChild 로 잡은
 	// 순서(Exit 앞)가 실제 화면에 반영된다. NativeConstruct 에서 하면 버튼이 Exit 아래로 붙는다.
 	InjectLightButton();
+	InjectSimButton();
 }
 
 void UMainMenuWidget::NativeConstruct()
@@ -38,11 +41,11 @@ void UMainMenuWidget::NativeConstruct()
 	TogglePanel(PresetMakerWidgetClass);
 }
 
-void UMainMenuWidget::InjectLightButton()
+UButton* UMainMenuWidget::InsertMenuButtonBeforeExit(const TCHAR* WidgetName, const FText& Label)
 {
-	if (Btn_Light || !WidgetTree)
+	if (!WidgetTree)
 	{
-		return;
+		return nullptr;
 	}
 
 	// 메뉴 세로 목록을 찾는다. 이름은 WBP_MainMenu 의 VBox_Menu.
@@ -50,31 +53,31 @@ void UMainMenuWidget::InjectLightButton()
 	if (!Menu)
 	{
 		// 구조가 바뀌었어도 패널 자체는 TogglePanel(BlueprintCallable)로 열 수 있다.
-		UE_LOG(LogTemp, Warning, TEXT("[MainMenu] VBox_Menu 를 찾지 못해 조명 버튼을 넣지 못했습니다."));
-		return;
+		UE_LOG(LogTemp, Warning, TEXT("[MainMenu] VBox_Menu 를 찾지 못해 '%s' 버튼을 넣지 못했습니다."), *Label.ToString());
+		return nullptr;
 	}
 
-	Btn_Light = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("Btn_Light"));
+	UButton* Button = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), WidgetName);
 
 	// 스타일·패딩을 기존 버튼에서 그대로 가져와 메뉴 모양이 흐트러지지 않게 한다.
 	if (Btn_MapSize)
 	{
-		Btn_Light->SetStyle(Btn_MapSize->GetStyle());
+		Button->SetStyle(Btn_MapSize->GetStyle());
 	}
 
-	UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
-	Label->SetText(FText::FromString(TEXT("조명 설정")));
-	Label->SetJustification(ETextJustify::Center);
+	UTextBlock* LabelText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+	LabelText->SetText(Label);
+	LabelText->SetJustification(ETextJustify::Center);
 	if (Btn_MapSize)
 	{
 		// 기존 버튼 라벨의 폰트를 복사(한글 폰트·크기 일치).
 		if (UTextBlock* SrcLabel = Cast<UTextBlock>(Btn_MapSize->GetChildAt(0)))
 		{
-			Label->SetFont(SrcLabel->GetFont());
-			Label->SetColorAndOpacity(SrcLabel->GetColorAndOpacity());
+			LabelText->SetFont(SrcLabel->GetFont());
+			LabelText->SetColorAndOpacity(SrcLabel->GetColorAndOpacity());
 		}
 	}
-	Btn_Light->AddChild(Label);
+	Button->AddChild(LabelText);
 
 	// Exit 바로 앞에 넣는다(Exit 는 항상 마지막이어야 한다).
 	// Btn_Exit 가 VBox 의 직계 자식이 아니라 래퍼(SizeBox 등) 안에 들어 있을 수 있으므로,
@@ -93,14 +96,14 @@ void UMainMenuWidget::InjectLightButton()
 		}
 	}
 
-	UPanelSlot* NewSlot = Menu->AddChild(Btn_Light);
+	UPanelSlot* NewSlot = Menu->AddChild(Button);
 	if (ExitIndex != INDEX_NONE)
 	{
-		Menu->ShiftChild(ExitIndex, Btn_Light);
+		Menu->ShiftChild(ExitIndex, Button);
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[MainMenu] Exit 위치를 찾지 못해 조명 버튼을 목록 끝에 둡니다."));
+		UE_LOG(LogTemp, Warning, TEXT("[MainMenu] Exit 위치를 찾지 못해 '%s' 버튼을 목록 끝에 둡니다."), *Label.ToString());
 	}
 
 	// 세로 목록 간격을 기존 항목과 맞춘다.
@@ -116,8 +119,46 @@ void UMainMenuWidget::InjectLightButton()
 			}
 		}
 	}
+	return Button;
+}
 
-	Btn_Light->OnClicked.AddUniqueDynamic(this, &UMainMenuWidget::HandleLight);
+void UMainMenuWidget::InjectLightButton()
+{
+	if (Btn_Light)
+	{
+		return;
+	}
+	Btn_Light = InsertMenuButtonBeforeExit(TEXT("Btn_Light"), FText::FromString(TEXT("조명 설정")));
+	if (Btn_Light)
+	{
+		Btn_Light->OnClicked.AddUniqueDynamic(this, &UMainMenuWidget::HandleLight);
+	}
+}
+
+void UMainMenuWidget::InjectSimButton()
+{
+	if (Btn_Sim)
+	{
+		return;
+	}
+	Btn_Sim = InsertMenuButtonBeforeExit(TEXT("Btn_Sim"), FText::FromString(TEXT("주차 시뮬레이션")));
+	if (Btn_Sim)
+	{
+		Btn_Sim->OnClicked.AddUniqueDynamic(this, &UMainMenuWidget::HandleSimPanel);
+	}
+}
+
+void UMainMenuWidget::HandleSimPanel()
+{
+	// HUD 의 주인은 게임모드다(F9/F10 단축키도 같은 인스턴스를 쓴다) — 메뉴는 토글만 요청한다.
+	if (APark3DGameMode* GM = Cast<APark3DGameMode>(UGameplayStatics::GetGameMode(this)))
+	{
+		GM->ToggleSimPanel();
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[MainMenu] Park3DGameMode 를 찾지 못해 시뮬레이션 HUD 를 토글하지 못했습니다."));
+	}
 }
 
 void UMainMenuWidget::HandleLight()

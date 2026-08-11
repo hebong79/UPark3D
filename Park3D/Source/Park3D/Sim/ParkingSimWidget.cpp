@@ -19,6 +19,14 @@ namespace
 	constexpr float SimTitleFontSize = 16.f;
 	constexpr float SimBodyFontSize = 13.f;
 
+	/**
+	 * 패널 배경. 기존 패널(프리셋 메이커 등)과 같은 "밝은 회녹색 반투명" 계열로 맞춘 값이다.
+	 * 화면 캡처에서 프리셋 메이커 패널이 바닥 위에 sRGB(139,142,127)로 합성되는 것을 재서,
+	 * 알파 0.85 기준으로 역산했다. 배경이 밝아지므로 글자색은 검정으로 둔다.
+	 */
+	const FLinearColor SimPanelColor(0.27f, 0.29f, 0.23f, 0.85f);
+	const FSlateColor SimTextColor(FLinearColor::Black);
+
 	/** 버튼 + 가운데 검은 라벨(다른 패널과 같은 규약 — 기본 흰 라벨은 밝은 버튼 위에서 안 보인다). */
 	UButton* MakeSimButton(UWidgetTree* Tree, const TCHAR* Name, const FText& Label)
 	{
@@ -52,7 +60,7 @@ void UParkingSimWidget::BuildUI()
 	WidgetTree->RootWidget = Canvas;
 
 	UBorder* Panel = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("SimPanel"));
-	Panel->SetBrushColor(FLinearColor(0.06f, 0.06f, 0.07f, 0.92f));
+	Panel->SetBrushColor(SimPanelColor);
 	Panel->SetPadding(FMargin(10));
 
 	// 좌하단 고정. 카메라 뷰어(우측)·메인 메뉴(상단)와 겹치지 않는 자리.
@@ -71,10 +79,12 @@ void UParkingSimWidget::BuildUI()
 	UTextBlock* Title = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 	Title->SetText(FText::FromString(TEXT("주차 시뮬레이션")));
 	Title->SetFontSize(SimTitleFontSize);
+	Title->SetColorAndOpacity(SimTextColor);
 	Box->AddChild(Title);
 
 	StatusText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("SimStatusText"));
 	StatusText->SetFontSize(SimBodyFontSize);
+	StatusText->SetColorAndOpacity(SimTextColor);
 	StatusText->SetText(FText::FromString(TEXT("상태: 대기")));
 	if (UVerticalBoxSlot* S = Cast<UVerticalBoxSlot>(Box->AddChild(StatusText)))
 	{
@@ -103,6 +113,7 @@ void UParkingSimWidget::BuildUI()
 
 	MessageText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("SimMessageText"));
 	MessageText->SetFontSize(SimBodyFontSize - 1.f);
+	MessageText->SetColorAndOpacity(SimTextColor);
 	MessageText->SetAutoWrapText(true);
 	MessageText->SetText(FText::FromString(TEXT("입구에서 랜덤 주차면까지 1대가 진입합니다.")));
 	Box->AddChild(MessageText);

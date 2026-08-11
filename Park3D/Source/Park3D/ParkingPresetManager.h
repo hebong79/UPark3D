@@ -52,6 +52,13 @@ public:
 	UPROPERTY(Transient, BlueprintReadWrite, Category = "Parking|Data")
 	bool bUseDecalView = true;
 
+	/**
+	 * 3D 큐브를 숨길 PresetIdx 집합(setBoxVisible). 비어 있으면 bShow3DView 가 그대로 전체에 걸린다.
+	 * 데칼 모드(bUseDecalView)는 애초에 큐브를 그리지 않으므로 영향 없음.
+	 */
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Parking|Data")
+	TSet<int32> HiddenBoxPresetIdxs;
+
 	const TArray<FParkingPreset>& GetPresets() const { return StoredPresets; }
 
 	/** PresetIdx 로 프리셋 검색(없으면 nullptr). */
@@ -76,6 +83,18 @@ public:
 	/** PresetIdx 를 선택(-1=해제). */
 	UFUNCTION(BlueprintCallable, Category = "Parking|Data")
 	void SetSelectedByIdx(int32 PresetIdx);
+
+	/**
+	 * 프리셋 단위 3D 큐브 가시성(Unity SPresetObjUI.ShowQubeLineList 대응).
+	 * 여기서 숨긴 프리셋은 bShow3DView 가 켜져 있어도 큐브를 그리지 않는다. 바닥 사각형은 영향받지 않는다.
+	 * @return 해당 PresetIdx 의 프리셋이 존재하면 true.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Parking|Data")
+	bool SetBoxVisible(int32 PresetIdx, bool bVisible);
+
+	/** 프리셋의 3D 큐브 표시 여부(숨김 목록에 없으면 true). */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Parking|Data")
+	bool IsBoxVisible(int32 PresetIdx) const { return !HiddenBoxPresetIdxs.Contains(PresetIdx); }
 
 	/** 저장된 목록/선택/3D 상태로 다시 그린다. */
 	UFUNCTION(BlueprintCallable, Category = "Parking|Data")

@@ -8,9 +8,11 @@
 #include "../../PTZCameraActor.h"
 #include "../../CameraControlLibrary.h"
 #include "../CamStreamSubsystem.h"
+#include "../../Park3DDataPaths.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
+#include "Misc/Paths.h"
 #include "TextureResource.h"
 
 namespace
@@ -35,10 +37,74 @@ namespace
 		}
 	}
 
-	TSharedPtr<FJsonValue> NotImplemented(FRpcError& E, const TCHAR* Method, const TCHAR* Reason)
+	/** fileName(확장자 생략 가능) -> Save/3D/CameraPos/<fileName>.json. 위젯 저장 위치와 같은 폴더. */
+	FString ResolveCamPresetPath(const TSharedPtr<FJsonObject>& P)
 	{
-		E.FailDomain(FString::Printf(TEXT("미구현(%s): %s"), Method, Reason));
-		return nullptr;
+		FString FileName = RpcParam::GetString(P, TEXT("fileName"), TEXT("CameraPos"));
+		if (!FileName.EndsWith(TEXT(".json")))
+		{
+			FileName += TEXT(".json");
+		}
+		return Park3DDataPaths::GetDataFilePath(TEXT("CameraPos"), *FileName);
+	}
+
+	/** camId(1-based) 슬롯 확보. 부족하면 빈 FCameraPos 로 채운다. */
+	FCameraPos& EnsureCamSlot(FCameraPosList& List, int32 CamId)
+	{
+		while (List.datas.Num() < CamId)
+		{
+			List.datas.Add(FCameraPos());
+		}
+		return List.datas[CamId - 1];
+	}
+
+	/** preset_id 로 FCamDir 검색. bCreate 면 없을 때 새로 추가하고 그 참조를 준다. */
+	FCamDir* FindDir(FCameraPos& CamPos, int32 CamId, int32 PresetId, bool bCreate)
+	{
+		for (FCamDir& D : CamPos.datas)
+		{
+			if (D.preset_id == PresetId)
+			{
+				return &D;
+			}
+		}
+		if (!bCreate)
+		{
+			return nullptr;
+		}
+		FCamDir New;
+		New.idx = CamPos.datas.Num();
+		New.sname = FString::Printf(TEXT("Preset %d"), PresetId);
+		New.cam_id = CamId;
+		New.preset_id = PresetId;
+		// 슬라이더 범위는 기존 CamPos_*.json 관례를 따른다(zoom 상한만 카메라 실제 MaxZoom 으로 덮는다).
+		New.ptzmin = FCamPtz{ -180.f, -90.f, 1.f };
+		New.ptzmax = FCamPtz{ 180.f, 90.f, 36.f };
+		return &CamPos.datas[CamPos.datas.Add(New)];
+	}
+
+	/** 메모리에서 (camId, presetId) FCamDir 조회. 없으면 nullptr. */
+	FCamDir* FindDirConst(FCameraPosList& List, int32 CamId, int32 PresetId)
+	{
+		if (!List.datas.IsValidIndex(CamId - 1))
+		{
+			return nullptr;
+		}
+		return FindDir(List.datas[CamId - 1], CamId, PresetId, /*bCreate=*/false);
+	}
+
+	/** 프리셋 적용 결과 공통 응답. */
+	TSharedPtr<FJsonValue> PresetResult(int32 CamId, int32 PresetId, const FCamDir& Dir)
+	{
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetNumberField(TEXT("camId"), CamId);
+		O->SetNumberField(TEXT("presetId"), PresetId);
+		O->SetObjectField(TEXT("pos"), RpcDto::Vec3(Dir.pos.x, Dir.pos.y, Dir.pos.z));
+		O->SetNumberField(TEXT("pan"), Dir.pan);
+		O->SetNumberField(TEXT("tilt"), Dir.tilt);
+		O->SetNumberField(TEXT("zoom"), Dir.zoom);
+		return RpcDto::MakeObject(O);
 	}
 
 	/** 카메라 렌더타깃 → JPEG/PNG base64 응답. RHI 없으면(-nullrhi) -32000. */
@@ -316,11 +382,92 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 		return RpcDto::OkTrue();
 	});
 
-	// ---- 미구현(-32000) ----
+	// ---- 프리셋(PresetMemory 권위) ----
+	// 세 method 의 차이: save=파일쓰기+메모리갱신(적용 없음) / load=파일읽기+메모리교체+적용 / apply=메모리읽기+적용.
 	Dispatcher.Register(TEXT("cam.savePreset"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
-	{ return NotImplemented(E, TEXT("cam.savePreset"), TEXT("per-camera 프리셋 메모리 없음")); });
+	{
+		ACameraControlManager* Mgr = GetCameraManager(E); if (!Mgr) return nullptr;
+		int32 CamId = 0;
+		if (!RpcParam::RequireInt(P, TEXT("camId"), CamId, E)) return nullptr;
+		APTZCameraActor* Cam = GetCamById(Mgr, CamId, E); if (!Cam) return nullptr;
+		const int32 PresetId = RpcParam::GetInt(P, TEXT("presetId"), 1);
+
+		FCamDir* Dir = FindDir(EnsureCamSlot(PresetMemory, CamId), CamId, PresetId, /*bCreate=*/true);
+		if (!Dir) { E.FailDomain(TEXT("프리셋 슬롯 확보 실패")); return nullptr; }
+
+		float Pan = 0.f, Tilt = 0.f; CurrentPanTilt(Cam, Pan, Tilt);
+		Dir->pos = UCameraControlLibrary::WorldToUnrealMeters(Cam->GetActorLocation(), Mgr->MetersToUU);
+		Dir->pan = Pan;
+		Dir->tilt = Tilt;
+		Dir->zoom = Cam->GetZoom();
+		// 로드 시 pan/tilt 는 rot 에서 복원되므로(NormalizeLoaded) rot 도 반드시 같이 쓴다.
+		Dir->rot = FCamVec3{ Tilt, Pan, 0.f };
+		Dir->ptzmax.z = Cam->MaxZoom;
+
+		const FString Path = ResolveCamPresetPath(P);
+		if (!UCameraControlLibrary::SaveToJson(Path, PresetMemory))
+		{
+			E.FailDomain(FString::Printf(TEXT("카메라 프리셋 저장 실패: %s"), *Path));
+			return nullptr;
+		}
+
+		TSharedPtr<FJsonValue> Result = PresetResult(CamId, PresetId, *Dir);
+		Result->AsObject()->SetStringField(TEXT("path"), Path);
+		Result->AsObject()->SetStringField(TEXT("fileName"), FPaths::GetCleanFilename(Path));
+		return Result;
+	});
+
 	Dispatcher.Register(TEXT("cam.loadPreset"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
-	{ return NotImplemented(E, TEXT("cam.loadPreset"), TEXT("per-camera 프리셋 메모리 없음")); });
+	{
+		ACameraControlManager* Mgr = GetCameraManager(E); if (!Mgr) return nullptr;
+		int32 CamId = 0;
+		if (!RpcParam::RequireInt(P, TEXT("camId"), CamId, E)) return nullptr;
+		if (!GetCamById(Mgr, CamId, E)) return nullptr;
+		const int32 PresetId = RpcParam::GetInt(P, TEXT("presetId"), 1);
+
+		const FString Path = ResolveCamPresetPath(P);
+		FCameraPosList Loaded;
+		if (!UCameraControlLibrary::LoadFromJson(Path, Loaded))
+		{
+			E.FailDomain(FString::Printf(TEXT("카메라 프리셋 로드 실패: %s"), *Path));
+			return nullptr;
+		}
+		PresetMemory = MoveTemp(Loaded); // 파일이 메모리를 교체한다(부분 병합 아님 — Unity 동일).
+
+		FCamDir* Dir = FindDirConst(PresetMemory, CamId, PresetId);
+		if (!Dir)
+		{
+			E.FailDomain(FString::Printf(TEXT("파일에 프리셋 없음: camId=%d presetId=%d (%s)"), CamId, PresetId, *Path));
+			return nullptr;
+		}
+		Mgr->ApplyDir(CamId - 1, *Dir);
+		if (UCamStreamSubsystem* S = GetStreamSubsystem(GetWorldPtr())) { S->NotifyPtzCommand(CamId); }
+
+		TSharedPtr<FJsonValue> Result = PresetResult(CamId, PresetId, *Dir);
+		Result->AsObject()->SetStringField(TEXT("path"), Path);
+		Result->AsObject()->SetNumberField(TEXT("camCount"), PresetMemory.datas.Num());
+		return Result;
+	});
+
 	Dispatcher.Register(TEXT("cam.applyPreset"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
-	{ return NotImplemented(E, TEXT("cam.applyPreset"), TEXT("per-camera 프리셋 메모리 없음")); });
+	{
+		ACameraControlManager* Mgr = GetCameraManager(E); if (!Mgr) return nullptr;
+		int32 CamId = 0;
+		if (!RpcParam::RequireInt(P, TEXT("camId"), CamId, E)) return nullptr;
+		if (!GetCamById(Mgr, CamId, E)) return nullptr;
+		const int32 PresetId = RpcParam::GetInt(P, TEXT("presetId"), 1);
+
+		FCamDir* Dir = FindDirConst(PresetMemory, CamId, PresetId);
+		if (!Dir)
+		{
+			// Unity 는 InvalidOperationException — 먼저 savePreset 또는 loadPreset 이 필요하다.
+			E.FailDomain(FString::Printf(
+				TEXT("메모리에 프리셋 없음: camId=%d presetId=%d — 먼저 cam.savePreset 또는 cam.loadPreset 을 호출하세요"),
+				CamId, PresetId));
+			return nullptr;
+		}
+		Mgr->ApplyDir(CamId - 1, *Dir);
+		if (UCamStreamSubsystem* S = GetStreamSubsystem(GetWorldPtr())) { S->NotifyPtzCommand(CamId); }
+		return PresetResult(CamId, PresetId, *Dir);
+	});
 }

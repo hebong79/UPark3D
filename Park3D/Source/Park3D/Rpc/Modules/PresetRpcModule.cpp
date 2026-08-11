@@ -305,9 +305,27 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 
 	Dispatcher.Register(TEXT("preset.setBoxVisible"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
-		// 렌더러가 면 단위 큐브 가시성을 지원하지 않음(전역 3D 토글만). preset.rebuildAll(showQubeBox) 사용.
-		E.FailDomain(TEXT("미구현: 면 단위 큐브 가시성 미지원(전역 3D는 preset.rebuildAll 사용)"));
-		return nullptr;
+		AParkingPresetManager* Mgr = GetPresetManager(E); if (!Mgr) return nullptr;
+		int32 Idx = 0; bool bVisible = true;
+		if (!RpcParam::RequireInt(P, TEXT("idx"), Idx, E)) return nullptr;
+		if (!RpcParam::RequireBool(P, TEXT("visible"), bVisible, E)) return nullptr;
+		if (!Mgr->SetBoxVisible(Idx, bVisible))
+		{
+			E.FailDomain(FString::Printf(TEXT("프리셋 없음: idx=%d"), Idx));
+			return nullptr;
+		}
+		// Unity 는 큐브 오브젝트만 껐다 켜므로 재빌드가 없지만, 이 포트의 큐브는 영구 디버그 라인이라
+		// 다시 그리지 않으면 화면이 바뀌지 않는다. 바닥 사각형은 같은 값으로 다시 그려지므로 결과는 동일하다.
+		Mgr->RefreshView();
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetNumberField(TEXT("idx"), Idx);
+		O->SetBoolField(TEXT("visible"), bVisible);
+		// 데칼 모드/3D 토글 off 에서는 큐브 자체를 안 그리므로 이 설정이 화면에 나타나지 않는다.
+		O->SetBoolField(TEXT("show3D"), Mgr->bShow3DView);
+		O->SetBoolField(TEXT("useDecal"), Mgr->bUseDecalView);
+		return RpcDto::MakeObject(O);
 	});
 
 	Dispatcher.Register(TEXT("preset.renumber"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>

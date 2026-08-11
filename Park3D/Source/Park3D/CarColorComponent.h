@@ -29,6 +29,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Car|Color")
 	FName ColorParamName = TEXT("BaseColorFactor");
 
+	/** 금속성 스칼라 파라미터 이름 (glTF M_Default 노출 → MetallicFactor). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Car|Color")
+	FName MetallicParamName = TEXT("MetallicFactor");
+
+	/** 거칠기 스칼라 파라미터 이름 (glTF M_Default 노출 → RoughnessFactor). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Car|Color")
+	FName RoughnessParamName = TEXT("RoughnessFactor");
+
 	/** 도색 색상 적용. 동적 머티리얼이 없으면 생성 후 적용. */
 	UFUNCTION(BlueprintCallable, Category = "Car|Color")
 	void SetColor(FLinearColor Color);
@@ -41,8 +49,24 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Car|Color")
 	void ResetColor();
 
+	/**
+	 * 금속성/광택 적용. Unity CVehicleColorController.SetMetallic(:188) 포팅.
+	 * Unity smoothness 는 UE roughness 의 반대 개념이므로 roughness = 1-smoothness 로 넣는다.
+	 * 두 인자 모두 0~1 로 클램프한다.
+	 * @return 머티리얼에 해당 파라미터가 실제로 있어 적용된 경우 true. 없으면 SetScalar 가 조용히 무시되므로
+	 *         호출자가 "적용됨"을 거짓 보고하지 않도록 false 를 돌려준다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Car|Color")
+	bool SetMetallic(float Metallic, float Smoothness);
+
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Car|Color")
 	FLinearColor GetCurrentColor() const { return CurrentColor; }
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Car|Color")
+	float GetMetallicValue() const { return CurrentMetallic; }
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Car|Color")
+	float GetSmoothnessValue() const { return CurrentSmoothness; }
 
 	/** ECarColor → FLinearColor 매핑(순수). */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Car|Color")
@@ -61,4 +85,8 @@ private:
 	bool bInitialized = false;
 	FLinearColor OriginalColor = FLinearColor::White;
 	FLinearColor CurrentColor = FLinearColor::White;
+
+	/** 마지막으로 적용한 금속성/광택(Unity 기본값과 동일: 0 / 0.5). */
+	float CurrentMetallic = 0.f;
+	float CurrentSmoothness = 0.5f;
 };

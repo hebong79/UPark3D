@@ -46,6 +46,9 @@ APark3DGameMode::APark3DGameMode()
 	SimStartKey = EKeys::F9;
 	SimReplayKey = EKeys::F10;
 
+	// 카메라 뷰어 토글 기본값: Ctrl + Space.
+	ViewerToggleChord = FInputChord(EKeys::SpaceBar, /*bShift=*/false, /*bCtrl=*/true, /*bAlt=*/false, /*bCmd=*/false);
+
 	// 이동(WASD/방향키)을 마우스 오른쪽 버튼 보유 시에만 허용하는 Pawn 사용.
 	DefaultPawnClass = AParkFlyPawn::StaticClass();
 }
@@ -124,6 +127,36 @@ void APark3DGameMode::BeginPlay()
 	if (InputComponent && SimReplayKey.IsValid())
 	{
 		InputComponent->BindKey(SimReplayKey, IE_Pressed, this, &APark3DGameMode::ReplayParkingSim);
+	}
+	if (InputComponent && ViewerToggleChord.Key.IsValid())
+	{
+		InputComponent->BindKey(ViewerToggleChord, IE_Pressed, this, &APark3DGameMode::ToggleCameraViewer);
+	}
+}
+
+void APark3DGameMode::ToggleCameraViewer()
+{
+	// 메뉴 토글과 달리 뷰포트에서 빼지 않고 "가시성"만 바꾼다.
+	// RemoveFromParent 후 다시 AddToViewport 하면 로그상 추가는 되는데 화면에 다시 나타나지 않았다
+	// (뷰어가 최초 표시 때 화면비를 재서 크기를 한 번만 확정하는 구조 때문으로 보인다 —
+	//  "[CameraViewer] 기본 크기 확정" 로그가 재표시 때 다시 찍히지 않는다).
+	if (!ViewerWidget || !ViewerWidget->IsInViewport())
+	{
+		ShowCameraViewer();
+		return;
+	}
+
+	if (ViewerWidget->GetVisibility() == ESlateVisibility::Collapsed)
+	{
+		// 숨기기 전 값으로 되돌린다 — 뷰어는 드래그/클릭을 받으므로 히트테스트 설정을 임의로 바꾸면 안 된다.
+		ViewerWidget->SetVisibility(ViewerSavedVisibility);
+		UE_LOG(LogTemp, Log, TEXT("[Park3DGameMode] 카메라 뷰어를 표시했습니다."));
+	}
+	else
+	{
+		ViewerSavedVisibility = ViewerWidget->GetVisibility();
+		ViewerWidget->SetVisibility(ESlateVisibility::Collapsed);
+		UE_LOG(LogTemp, Log, TEXT("[Park3DGameMode] 카메라 뷰어를 숨겼습니다."));
 	}
 }
 

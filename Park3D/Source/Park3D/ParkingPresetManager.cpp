@@ -191,7 +191,9 @@ void AParkingPresetManager::RebuildAll(const TArray<FParkingPreset>& Presets, in
 
 	for (int32 i = 0; i < Presets.Num(); ++i)
 	{
-		DrawPreset(Presets[i], i == SelectedIndex, bShow3D);
+		// 프리셋 단위 큐브 숨김(setBoxVisible)은 전역 3D 토글보다 우선한다. 바닥 사각형은 계속 그린다.
+		const bool bBox = bShow3D && !HiddenBoxPresetIdxs.Contains(Presets[i].PresetIdx);
+		DrawPreset(Presets[i], i == SelectedIndex, bBox);
 	}
 
 	UE_LOG(LogTemp, Log, TEXT("[ParkingManager] %d개 프리셋 라인 생성(3D=%s)"),
@@ -274,6 +276,23 @@ void AParkingPresetManager::SetSelectedByIdx(int32 PresetIdx)
 			if (StoredPresets[i].PresetIdx == PresetIdx) { SelectedPresetIndex = i; break; }
 		}
 	}
+}
+
+bool AParkingPresetManager::SetBoxVisible(int32 PresetIdx, bool bVisible)
+{
+	if (!FindPresetByIdx(PresetIdx))
+	{
+		return false;
+	}
+	if (bVisible)
+	{
+		HiddenBoxPresetIdxs.Remove(PresetIdx);
+	}
+	else
+	{
+		HiddenBoxPresetIdxs.Add(PresetIdx);
+	}
+	return true;
 }
 
 void AParkingPresetManager::RefreshView()

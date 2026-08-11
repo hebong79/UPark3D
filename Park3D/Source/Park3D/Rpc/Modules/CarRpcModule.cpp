@@ -264,9 +264,27 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 
 	Dispatcher.Register(TEXT("car.setMetallic"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
-		// 포트 미지원: UCarColorComponent 에 metallic/smoothness 파라미터가 없다.
-		E.FailDomain(TEXT("미구현: 포트에 metallic 도색 파라미터 없음(car.setMetallic)"));
-		return nullptr;
+		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
+		FString Id; double Metallic = 0.0;
+		if (!RpcParam::RequireString(P, TEXT("carNameId"), Id, E)) return nullptr;
+		if (!RpcParam::RequireFloat(P, TEXT("metallic"), Metallic, E)) return nullptr;
+		const double Smoothness = RpcParam::GetFloat(P, TEXT("smoothness"), 0.5);
+
+		ACarActor* Car = Mgr->FindByNameId(Id);
+		if (!Car) { E.FailDomain(FString::Printf(TEXT("차량 없음: %s"), *Id)); return nullptr; }
+		// Unity 는 컴포넌트가 없으면 InvalidOperationException — 여기서는 도메인 오류로 매핑한다.
+		if (!Car->ColorComp) { E.FailDomain(FString::Printf(TEXT("도색 컴포넌트 없음: %s"), *Id)); return nullptr; }
+
+		const bool bApplied = Car->ColorComp->SetMetallic(static_cast<float>(Metallic), static_cast<float>(Smoothness));
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetStringField(TEXT("carNameId"), Id);
+		O->SetNumberField(TEXT("metallic"), Car->ColorComp->GetMetallicValue());
+		O->SetNumberField(TEXT("smoothness"), Car->ColorComp->GetSmoothnessValue());
+		// 머티리얼에 MetallicFactor/RoughnessFactor 가 없으면 값은 기록되어도 화면은 변하지 않는다.
+		O->SetBoolField(TEXT("applied"), bApplied);
+		return RpcDto::MakeObject(O);
 	});
 
 	Dispatcher.Register(TEXT("car.resetColor"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>

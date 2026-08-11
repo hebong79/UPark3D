@@ -89,6 +89,36 @@ void UCarColorComponent::ResetColor()
 	CurrentColor = OriginalColor;
 }
 
+bool UCarColorComponent::SetMetallic(float Metallic, float Smoothness)
+{
+	EnsureMIDs();
+	CurrentMetallic = FMath::Clamp(Metallic, 0.f, 1.f);
+	CurrentSmoothness = FMath::Clamp(Smoothness, 0.f, 1.f);
+
+	bool bApplied = false;
+	for (UMaterialInstanceDynamic* MID : PaintMIDs)
+	{
+		if (!MID)
+		{
+			continue;
+		}
+		// SetScalarParameterValue 는 없는 파라미터를 조용히 무시한다 → 존재 여부를 먼저 물어본다.
+		float Probe = 0.f;
+		const bool bHasMetallic = MID->GetScalarParameterValue(FMaterialParameterInfo(MetallicParamName), Probe);
+		const bool bHasRoughness = MID->GetScalarParameterValue(FMaterialParameterInfo(RoughnessParamName), Probe);
+		if (bHasMetallic)
+		{
+			MID->SetScalarParameterValue(MetallicParamName, CurrentMetallic);
+		}
+		if (bHasRoughness)
+		{
+			MID->SetScalarParameterValue(RoughnessParamName, 1.f - CurrentSmoothness);
+		}
+		bApplied |= (bHasMetallic || bHasRoughness);
+	}
+	return bApplied;
+}
+
 FLinearColor UCarColorComponent::ColorForEnum(ECarColor InColor)
 {
 	switch (InColor)

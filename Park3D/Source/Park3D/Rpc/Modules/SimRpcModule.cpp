@@ -15,6 +15,7 @@ namespace
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetStringField(TEXT("state"), AParkingSimManager::StateLabel(Sim->GetState()));
 		O->SetStringField(TEXT("phase"), Sim->GetPhaseLabel());
+		O->SetStringField(TEXT("simMode"), R.simMode);     // 입차 / 출차
 		O->SetNumberField(TEXT("elapsedSec"), Sim->GetElapsed());
 		O->SetNumberField(TEXT("presetId"), R.presetId);
 		O->SetNumberField(TEXT("slotIndex"), R.slotIndex);
@@ -65,7 +66,7 @@ void FSimRpcModule::Register(URpcDispatcher& Dispatcher)
 			RpcParam::GetString(P, TEXT("parkMode"), TEXT("random")));
 
 		FString Err;
-		if (!Sim->StartSim(PresetId, SlotIndex, Seed, Mode, Err))
+		if (!Sim->StartSim(EParkSimDir::Enter, PresetId, SlotIndex, Seed, Mode, Err))
 		{
 			E.FailDomain(Err);
 			return nullptr;
@@ -92,7 +93,7 @@ void FSimRpcModule::Register(URpcDispatcher& Dispatcher)
 			RpcParam::GetString(P, TEXT("parkMode"), TEXT("random")));
 
 		FString Err;
-		if (!Sim->StartScenario(PresetId, SlotIndex, Seed, Mode, bReplay, Delay, Speed, Err))
+		if (!Sim->StartScenario(EParkSimDir::Enter, PresetId, SlotIndex, Seed, Mode, bReplay, Delay, Speed, Err))
 		{
 			E.FailDomain(Err);
 			return nullptr;
@@ -103,6 +104,36 @@ void FSimRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetBoolField(TEXT("replayScheduled"), bReplay);
 		O->SetNumberField(TEXT("replayDelaySec"), Delay);
 		O->SetNumberField(TEXT("replaySpeed"), Speed);
+		return RpcDto::MakeObject(O);
+	});
+
+	// 출차: 무작위(또는 지정) 주차면에 세운 차량 1대가 출구로 나간 뒤 제거된다.
+	// 기본 주차 자세는 후면주차 — 코가 통로 쪽이라 전진으로 빠져나온다. 전면주차면 면에서 후진으로 빠져나온다.
+	// replay=true 면 출차 완료 후 자동 재생까지 한 번에 예약한다(sim.scenario 와 같은 구조).
+	Dispatcher.Register(TEXT("sim.exit"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		AParkingSimManager* Sim = GetSimManager(E); if (!Sim) return nullptr;
+
+		const int32 PresetId = RpcParam::GetInt(P, TEXT("presetId"), 0);
+		const int32 SlotIndex = RpcParam::GetInt(P, TEXT("slotIndex"), 0);
+		const int32 Seed = RpcParam::GetInt(P, TEXT("seed"), 0);
+		const bool bReplay = RpcParam::GetBool(P, TEXT("replay"), false);
+		const float Delay = static_cast<float>(RpcParam::GetFloat(P, TEXT("replayDelaySec"), 1.5));
+		const float Speed = static_cast<float>(RpcParam::GetFloat(P, TEXT("replaySpeed"), 1.0));
+		// 요구사항상 기본은 후면주차다("front"/"random" 을 주면 바뀐다).
+		const EParkSimParkMode Mode = AParkingSimManager::ParseParkMode(
+			RpcParam::GetString(P, TEXT("parkMode"), TEXT("rear")));
+
+		FString Err;
+		if (!Sim->StartScenario(EParkSimDir::Exit, PresetId, SlotIndex, Seed, Mode, bReplay, Delay, Speed, Err))
+		{
+			E.FailDomain(Err);
+			return nullptr;
+		}
+
+		TSharedPtr<FJsonObject> O = RecordToDto(Sim);
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetBoolField(TEXT("replayScheduled"), bReplay);
 		return RpcDto::MakeObject(O);
 	});
 

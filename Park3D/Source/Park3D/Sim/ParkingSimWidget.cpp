@@ -70,7 +70,7 @@ void UParkingSimWidget::BuildUI()
 		CS->SetAnchors(FAnchors(0.f, 1.f));
 		CS->SetAlignment(FVector2D(0.f, 1.f));
 		CS->SetPosition(FVector2D(20.f, -20.f));
-		CS->SetSize(FVector2D(430.f, 132.f));
+		CS->SetSize(FVector2D(520.f, 132.f));   // 버튼 4개(입차·출차·리플레이·정지)가 들어간다.
 		CS->SetAutoSize(false);
 	}
 
@@ -94,11 +94,12 @@ void UParkingSimWidget::BuildUI()
 
 	{
 		UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
-		Btn_Start = MakeSimButton(WidgetTree, TEXT("Btn_SimStart"), FText::FromString(TEXT("시작 (F9)")));
+		Btn_Start = MakeSimButton(WidgetTree, TEXT("Btn_SimStart"), FText::FromString(TEXT("입차 (F9)")));
+		Btn_Exit = MakeSimButton(WidgetTree, TEXT("Btn_SimExit"), FText::FromString(TEXT("출차 (F8)")));
 		Btn_Replay = MakeSimButton(WidgetTree, TEXT("Btn_SimReplay"), FText::FromString(TEXT("리플레이 (F10)")));
 		Btn_Stop = MakeSimButton(WidgetTree, TEXT("Btn_SimStop"), FText::FromString(TEXT("정지")));
 
-		for (UButton* B : { Btn_Start.Get(), Btn_Replay.Get(), Btn_Stop.Get() })
+		for (UButton* B : { Btn_Start.Get(), Btn_Exit.Get(), Btn_Replay.Get(), Btn_Stop.Get() })
 		{
 			if (UHorizontalBoxSlot* S = Cast<UHorizontalBoxSlot>(Row->AddChild(B)))
 			{
@@ -116,7 +117,7 @@ void UParkingSimWidget::BuildUI()
 	MessageText->SetFontSize(SimBodyFontSize - 1.f);
 	MessageText->SetColorAndOpacity(SimTextColor);
 	MessageText->SetAutoWrapText(true);
-	MessageText->SetText(FText::FromString(TEXT("입구에서 랜덤 주차면까지 1대가 진입합니다.")));
+	MessageText->SetText(FText::FromString(TEXT("입차: 입구→랜덤 주차면 / 출차: 랜덤 주차면→출구(도착 시 차량 제거).")));
 	Box->AddChild(MessageText);
 }
 
@@ -125,6 +126,7 @@ void UParkingSimWidget::NativeConstruct()
 	Super::NativeConstruct();
 
 	if (Btn_Start)  { Btn_Start->OnClicked.AddUniqueDynamic(this, &UParkingSimWidget::HandleStart); }
+	if (Btn_Exit)   { Btn_Exit->OnClicked.AddUniqueDynamic(this, &UParkingSimWidget::HandleExit); }
 	if (Btn_Stop)   { Btn_Stop->OnClicked.AddUniqueDynamic(this, &UParkingSimWidget::HandleStop); }
 	if (Btn_Replay) { Btn_Replay->OnClicked.AddUniqueDynamic(this, &UParkingSimWidget::HandleReplay); }
 }
@@ -153,13 +155,34 @@ void UParkingSimWidget::HandleStart()
 
 	FString Err;
 	// HUD/단축키는 전면·후면을 랜덤으로 섞는다(특정 모드가 필요하면 sim.start 의 parkMode 를 쓴다).
-	if (!Sim->StartSim(0, 0, 0, EParkSimParkMode::Random, Err))
+	if (!Sim->StartSim(EParkSimDir::Enter, 0, 0, 0, EParkSimParkMode::Random, Err))
 	{
 		SetStatus(Err);
 		return;
 	}
 	const FParkSimRecord& R = Sim->GetRecord();
-	SetStatus(FString::Printf(TEXT("시작 — 목표 프리셋 %d / %d번 면 (%s), 입구(%.1f, %.1f)"),
+	SetStatus(FString::Printf(TEXT("입차 시작 — 목표 프리셋 %d / %d번 면 (%s), 입구(%.1f, %.1f)"),
+		R.presetId, R.slotIndex, *R.parkMode, R.entranceX, R.entranceY));
+}
+
+void UParkingSimWidget::HandleExit()
+{
+	AParkingSimManager* Sim = GetManager();
+	if (!Sim)
+	{
+		SetStatus(TEXT("시뮬레이션 매니저를 만들지 못했습니다."));
+		return;
+	}
+
+	FString Err;
+	// 요구사항상 기본은 후면주차 상태에서의 출차다(전면/랜덤은 sim.exit 의 parkMode 로).
+	if (!Sim->StartSim(EParkSimDir::Exit, 0, 0, 0, EParkSimParkMode::Rear, Err))
+	{
+		SetStatus(Err);
+		return;
+	}
+	const FParkSimRecord& R = Sim->GetRecord();
+	SetStatus(FString::Printf(TEXT("출차 시작 — 프리셋 %d / %d번 면 (%s) 에서 출구(%.1f, %.1f)로"),
 		R.presetId, R.slotIndex, *R.parkMode, R.entranceX, R.entranceY));
 }
 
@@ -240,7 +263,9 @@ void UParkingSimWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTim
 	}
 
 	const FParkSimRecord& R = Sim->GetRecord();
+	// 면 번호의 뜻이 방향에 따라 다르다(입차=목표, 출차=출발).
+	const FString SlotLabel = R.simMode.IsEmpty() ? TEXT("대상") : R.simMode;
 	StatusText->SetText(FText::FromString(FString::Printf(
-		TEXT("상태: %s   경과 %.1fs   이동 %.1fm   목표 %d-%d면"),
-		*Sim->GetPhaseLabel(), Sim->GetElapsed(), Sim->GetDistance(), R.presetId, R.slotIndex)));
+		TEXT("상태: %s   경과 %.1fs   이동 %.1fm   %s %d-%d면"),
+		*Sim->GetPhaseLabel(), Sim->GetElapsed(), Sim->GetDistance(), *SlotLabel, R.presetId, R.slotIndex)));
 }

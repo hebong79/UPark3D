@@ -23,6 +23,8 @@ class PARK3D_API UParkingSimWidget : public UUserWidget
 public:
 	/** 매니저를 찾거나 스폰해 시뮬레이션을 시작한다(단축키 경로와 동일). */
 	UFUNCTION(BlueprintCallable, Category = "Sim") void HandleStart();
+	/** 출차: 무작위 주차면의 차량 1대가 출구로 나가고, 도착하면 제거된다. */
+	UFUNCTION(BlueprintCallable, Category = "Sim") void HandleExit();
 	UFUNCTION(BlueprintCallable, Category = "Sim") void HandleStop();
 	UFUNCTION(BlueprintCallable, Category = "Sim") void HandleReplay();
 
@@ -47,6 +49,7 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UTextBlock> StatusText = nullptr;
 	UPROPERTY(Transient) TObjectPtr<UTextBlock> MessageText = nullptr;
 	UPROPERTY(Transient) TObjectPtr<UButton> Btn_Start = nullptr;
+	UPROPERTY(Transient) TObjectPtr<UButton> Btn_Exit = nullptr;
 	UPROPERTY(Transient) TObjectPtr<UButton> Btn_Stop = nullptr;
 	UPROPERTY(Transient) TObjectPtr<UButton> Btn_Replay = nullptr;
 

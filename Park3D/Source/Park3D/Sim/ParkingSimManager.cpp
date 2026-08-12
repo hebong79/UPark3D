@@ -527,11 +527,13 @@ bool AParkingSimManager::StartSim(EParkSimDir InDir, int32 InPresetId, int32 InS
 	else
 	{
 		// 출차는 같은 경로를 뒤집는다: 주차면 중심(출발) → 진입점 → 통로 → 출구.
+		// 통로는 주차면 바깥쪽으로 ExitLaneOffsetM 만큼 민다 — 같은 열에서 마주 오는 입차와
+		// 정면으로 마주치지 않고 옆으로 스쳐 지나가게 하는 차선 분리다.
 		Waypoints.Add(Front);
 		WaypointRoles.Add(TEXT("진입점"));
 		if (bUseLane)
 		{
-			Waypoints.Add(Lane);
+			Waypoints.Add(Lane + OpenDir * ExitLaneOffsetM);
 			WaypointRoles.Add(TEXT("통로"));
 		}
 		Waypoints.Add(Entrance);
@@ -554,6 +556,9 @@ bool AParkingSimManager::StartSim(EParkSimDir InDir, int32 InPresetId, int32 InS
 	SampleAccum = 0.f;
 	TraveledM = 0.f;
 	FinalYawDeg = ParkedYaw;   // 입차 완주 시 자세를 딱 맞추는 데 쓴다(출차는 사용하지 않는다).
+	BlockedSec = 0.f;
+	BlockerRunId = INDEX_NONE;
+	bDeadlockLogged = false;
 
 	// 기록 초기화.
 	Record = FParkSimRecord();
@@ -784,6 +789,9 @@ void AParkingSimManager::TickDrive(float Dt)
 		TargetSpeed = FMath::Min(Cruise, FMath::Sqrt(2.f * DecelMps2 * BrakeDist) + Floor);
 	}
 
+	// 앞차가 있으면 여기서 한 번 더 깎는다(조향은 건드리지 않는다 — 경로를 벗어나 피하지는 않는다).
+	TargetSpeed = ApplyAvoidance(TargetSpeed, Dir2D(YawDeg) * (bReverseLeg ? -1.f : 1.f), Dt);
+
 	SpeedMps = (SpeedMps < TargetSpeed)
 		? FMath::Min(TargetSpeed, SpeedMps + AccelMps2 * Dt)
 		: FMath::Max(TargetSpeed, SpeedMps - DecelMps2 * Dt);
@@ -841,6 +849,88 @@ void AParkingSimManager::TickDrive(float Dt)
 		SampleAccum = 0.f;
 		RecordFrame(/*bForce=*/false);
 	}
+}
+
+float AParkingSimManager::ApplyAvoidance(float InTargetSpeed, const FVector2D& TravelDir, float Dt)
+{
+	if (!bAvoidCollision)
+	{
+		return InTargetSpeed;
+	}
+
+	// 내 진행 통로 안에서 가장 가까운 앞차를 찾는다. 서 있는(주차 완료) 차량은 통로 밖이라 보지 않는다.
+	TArray<AParkingSimManager*> Runs;
+	CollectRuns(GetWorld(), Runs);
+
+	float NearestGap = TNumericLimits<float>::Max();
+	int32 NearestId = INDEX_NONE;
+	for (const AParkingSimManager* R : Runs)
+	{
+		if (R == this || !R->IsDriving() || !IsValid(R->Car))
+		{
+			continue;
+		}
+		const FVector2D Rel = R->PosM - PosM;
+		const float Along = FVector2D::DotProduct(Rel, TravelDir);
+		if (Along <= 0.f || Along > AvoidLookAheadM)
+		{
+			continue;   // 뒤에 있거나 너무 멀다.
+		}
+		if (FMath::Abs(FVector2D::CrossProduct(TravelDir, Rel)) > AvoidCorridorHalfM)
+		{
+			continue;   // 옆으로 비켜 있다(마주 오는 차선 등).
+		}
+		if (Along < NearestGap)
+		{
+			NearestGap = Along;
+			NearestId = R->RunId;
+		}
+	}
+
+	if (NearestId == INDEX_NONE)
+	{
+		if (BlockerRunId != INDEX_NONE)
+		{
+			LogEvent(FString::Printf(TEXT("전방 정리 — #%d 이 비켰습니다, 주행 재개"), BlockerRunId));
+			BlockerRunId = INDEX_NONE;
+		}
+		BlockedSec = 0.f;
+		bDeadlockLogged = false;
+		return InTargetSpeed;
+	}
+
+	if (BlockerRunId != NearestId)
+	{
+		BlockerRunId = NearestId;
+		bDeadlockLogged = false;
+		LogEvent(FString::Printf(TEXT("전방 회피 — #%d 이 %.1fm 앞에 있어 감속(안전거리 %.1fm)"),
+			NearestId, NearestGap, AvoidSafeGapM));
+	}
+
+	// 안전거리 앞에서 설 수 있는 속도. 간격이 안전거리 이내면 0 이 되어 멈춘다.
+	const float Allowed = FMath::Sqrt(2.f * DecelMps2 * FMath::Max(NearestGap - AvoidSafeGapM, 0.f));
+	const float Capped = FMath::Min(InTargetSpeed, Allowed);
+
+	if (Capped >= 0.05f)
+	{
+		BlockedSec = 0.f;
+		return Capped;
+	}
+
+	// 굳었다. 마주 보고 선 두 대가 영원히 서 있지 않도록, 먼저 시작한(RunId 가 작은) 쪽이 통과한다.
+	// 사이클이 생길 수 없는 순서라 교착이 남지 않는다 — 대신 이 순간 두 차가 겹쳐 지나간다.
+	BlockedSec += Dt;
+	if (BlockedSec > AvoidDeadlockSec && RunId < NearestId)
+	{
+		if (!bDeadlockLogged)
+		{
+			bDeadlockLogged = true;
+			LogEvent(FString::Printf(TEXT("교착 해소 — %.1f초 대치 후 우선순위(#%d < #%d)로 통과합니다(이 구간은 겹칩니다)"),
+				BlockedSec, RunId, NearestId));
+		}
+		return InTargetSpeed;
+	}
+	return Capped;
 }
 
 void AParkingSimManager::ApplyCarPose(const FVector2D& InPos, float InYawDeg)

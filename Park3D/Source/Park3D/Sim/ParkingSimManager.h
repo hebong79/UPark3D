@@ -162,6 +162,27 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Drive") float SampleIntervalSec = 0.05f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Drive") float MaxSimSeconds = 180.f;
 
+	// ---- 차량 간 충돌 회피 ----
+	// 조향은 그대로 두고 속도만 줄인다(경로를 벗어나 피하지는 않는다). 앞차와 나란히 서는 "종방향 회피".
+	/** 끄면 예전처럼 서로 통과한다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Avoid") bool bAvoidCollision = true;
+	/** 진행 방향 몇 미터 앞까지 다른 주행 차량을 보는가. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Avoid") float AvoidLookAheadM = 9.f;
+	/** 진행축 기준 좌우 감시 폭(반폭). 이보다 옆으로 벗어난 차는 내 길을 막지 않는 것으로 본다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Avoid") float AvoidCorridorHalfM = 1.7f;
+	/** 앞차와 유지할 최소 중심간 거리(차 길이를 감안한 값). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Avoid") float AvoidSafeGapM = 4.5f;
+	/**
+	 * 이만큼 계속 막혀 있으면 교착으로 보고 RunId 가 작은(먼저 시작한) 쪽이 통과한다.
+	 * 마주 보고 선 두 대가 영원히 서 있는 것을 막는 안전장치다 — 이때는 두 차가 겹쳐 지나간다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Avoid") float AvoidDeadlockSec = 4.f;
+	/**
+	 * 출차 통로를 주차면 바깥쪽으로 이만큼 민다. 입차는 통로 중심을 그대로 쓰므로
+	 * 같은 열에서 마주쳐도 옆으로 스쳐 지나간다(우측통행 대용).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Layout") float ExitLaneOffsetM = 2.5f;
+
 private:
 	// ---- 기하 ----
 	AParkingPresetManager* FindPresetManager() const;
@@ -195,6 +216,14 @@ private:
 
 	// ---- 주행 ----
 	void TickDrive(float Dt);
+
+	/**
+	 * 전방 감시로 목표 속도를 깎는다. 진행 통로(폭 ±AvoidCorridorHalfM, 길이 AvoidLookAheadM) 안에
+	 * 다른 주행 차량이 있으면 그 앞 AvoidSafeGapM 에서 설 수 있는 속도로 제한한다.
+	 * 서로 막아 AvoidDeadlockSec 이상 굳으면 RunId 가 작은 쪽이 통과해 교착을 끊는다.
+	 * @param TravelDir 실제로 나아가는 방향(후진 구간은 차 방위의 반대).
+	 */
+	float ApplyAvoidance(float InTargetSpeed, const FVector2D& TravelDir, float Dt);
 	void TickReplay(float Dt);
 	void ApplyCarPose(const FVector2D& PosM, float YawDegIn);
 
@@ -252,6 +281,14 @@ private:
 	int32 SlotLegIndex = INDEX_NONE;
 	/** 후진 구간에 들어섰음을 로그에 한 번만 남기기 위한 래치. */
 	bool bReverseLogged = false;
+
+	// 충돌 회피 상태
+	/** 회피 때문에 서 있은 시간(교착 판정용). 길이 뚫리면 0 으로 돌아간다. */
+	float BlockedSec = 0.f;
+	/** 지금 내 앞을 막고 있는 주행의 RunId(없으면 INDEX_NONE). 바뀔 때만 로그를 남긴다. */
+	int32 BlockerRunId = INDEX_NONE;
+	/** 이번 교착에서 "우선순위 통과" 로그를 이미 남겼는가. */
+	bool bDeadlockLogged = false;
 
 	// 리플레이
 	float ReplayTime = 0.f;

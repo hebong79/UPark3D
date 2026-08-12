@@ -132,18 +132,36 @@ async function httpErrorResult(resp: globalThis.Response): Promise<ToolResult> {
   return { ok: false, error: `HTTP ${resp.status}: ${JSON.stringify(detail)}` };
 }
 
-function connectErrorResult(e: unknown): ToolResult {
+function connectErrorResult(e: unknown, base: string): ToolResult {
   const reason = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-  return { ok: false, error: `서버 연결 실패(${BASE_URL}): ${reason}. Park3D가 실행 중인지 확인하라.` };
+  return { ok: false, error: `서버 연결 실패(${base}): ${reason}. Park3D가 실행 중인지 확인하라.` };
 }
 
-async function fetchRpc(path: string, init: RequestInit): Promise<globalThis.Response> {
-  return fetch(`${BASE_URL}${path}`, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS) });
+/**
+ * 호출 대상 베이스 URL. port 를 주면 그 포트로 갈아끼운다.
+ *
+ * 인스턴스를 여러 개 띄우고(예: 외부 클라이언트용 13510 + 개발 검증용 13610) 하나의 브리지로
+ * 골라 부르기 위한 것이다. 포트를 브리지 기동 환경변수에만 박아 두면 인스턴스를 바꿀 때마다
+ * MCP 서버를 다시 띄워야 한다.
+ */
+function baseUrlFor(port?: number): string {
+  if (port === undefined) return BASE_URL;
+  try {
+    const u = new URL(BASE_URL);
+    u.port = String(port);
+    return u.toString().replace(/\/+$/, "");
+  } catch {
+    return BASE_URL;
+  }
 }
 
-async function postRpc(method: string, params: unknown): Promise<unknown> {
+async function fetchRpc(base: string, path: string, init: RequestInit): Promise<globalThis.Response> {
+  return fetch(`${base}${path}`, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS) });
+}
+
+async function postRpc(base: string, method: string, params: unknown): Promise<unknown> {
   const payload = { jsonrpc: "2.0", id: 1, method, params: params ?? {} };
-  const resp = await fetchRpc("/rpc", {
+  const resp = await fetchRpc(base, "/rpc", {
     method: "POST",
     headers: rpcHeaders(true),
     body: JSON.stringify(payload),
@@ -152,12 +170,13 @@ async function postRpc(method: string, params: unknown): Promise<unknown> {
   return JSON.parse(await resp.text());
 }
 
-async function callCatalog(): Promise<ToolResult> {
+async function callCatalog(port?: number): Promise<ToolResult> {
+  const base = baseUrlFor(port);
   let resp: globalThis.Response;
   try {
-    resp = await fetchRpc("/rpc/catalog", { method: "GET", headers: rpcHeaders(false) });
+    resp = await fetchRpc(base, "/rpc/catalog", { method: "GET", headers: rpcHeaders(false) });
   } catch (e) {
-    return connectErrorResult(e);
+    return connectErrorResult(e, base);
   }
   if (!resp.ok) return httpErrorResult(resp);
   try {
@@ -172,12 +191,13 @@ async function callCatalog(): Promise<ToolResult> {
   }
 }
 
-async function callRpc(method: string, params: unknown): Promise<ToolResult> {
+async function callRpc(method: string, params: unknown, port?: number): Promise<ToolResult> {
+  const base = baseUrlFor(port);
   let body: unknown;
   try {
-    body = await postRpc(method, params);
+    body = await postRpc(base, method, params);
   } catch (e) {
-    return connectErrorResult(e);
+    return connectErrorResult(e, base);
   }
 
   if (body !== null && typeof body === "object") {
@@ -205,10 +225,14 @@ function createServer(): McpServer {
       description:
         "Park3D RPC 서버가 등록한 메서드 이름 목록을 조회한다(GET /rpc/catalog).\n\n" +
         '반환: {"ok": true, "methods": ["car.list", "preset.create", ...]} 또는 {"ok": false, "error": "..."}.\n' +
-        "호출 전 어떤 도메인 메서드가 실동작하는지 확인할 때 사용한다.",
-      inputSchema: {},
+        "호출 전 어떤 도메인 메서드가 실동작하는지 확인할 때 사용한다.\n" +
+        "port 를 주면 그 포트의 인스턴스에 묻는다(기본은 브리지 기동 시의 PARK3D_RPC_URL).",
+      inputSchema: {
+        port: z.number().int().min(1).max(65535).optional()
+          .describe("대상 인스턴스의 RPC 포트. 생략하면 기본 인스턴스."),
+      },
     },
-    async () => asToolContent(await callCatalog()),
+    async ({ port }) => asToolContent(await callCatalog(port)),
   );
 
   server.registerTool(
@@ -222,13 +246,16 @@ function createServer(): McpServer {
         "반환:\n" +
         '  성공: {"ok": true, "result": <서버 result>}\n' +
         '  실패: {"ok": false, "error": {code, message}}  (JSON-RPC 에러, 도메인 오류는 code -32000)\n' +
-        "catalog에 없는 메서드는 -32601, 파라미터 문제도 -32000(Domain)으로 온다.",
+        "catalog에 없는 메서드는 -32601, 파라미터 문제도 -32000(Domain)으로 온다.\n" +
+        "  port: 대상 인스턴스의 RPC 포트. 인스턴스를 여러 개 띄웠을 때 골라 부른다. 생략 시 기본 인스턴스.",
       inputSchema: {
         method: z.string().describe('도메인 메서드 이름. 예) "car.list"'),
         params: z.record(z.string(), z.unknown()).optional().describe('메서드 파라미터 객체. 예) {"presetId": 1}'),
+        port: z.number().int().min(1).max(65535).optional()
+          .describe("대상 인스턴스의 RPC 포트. 생략하면 기본 인스턴스."),
       },
     },
-    async ({ method, params }) => asToolContent(await callRpc(method, params)),
+    async ({ method, params, port }) => asToolContent(await callRpc(method, params, port)),
   );
 
   return server;

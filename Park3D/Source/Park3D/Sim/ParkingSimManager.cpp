@@ -68,8 +68,24 @@ FString AParkingSimManager::StateLabel(EParkSimState S)
 	case EParkSimState::Stopped: return TEXT("정지");
 	case EParkSimState::Parked:  return TEXT("주차");
 	case EParkSimState::Replay:  return TEXT("리플레이");
+	case EParkSimState::Exited:  return TEXT("출차");
 	default:                     return TEXT("대기");
 	}
+}
+
+EParkSimDir AParkingSimManager::ParseDir(const FString& Text)
+{
+	const FString T = Text.TrimStartAndEnd().ToLower();
+	if (T == TEXT("exit") || T == TEXT("out") || T == TEXT("출차") || T == TEXT("출고"))
+	{
+		return EParkSimDir::Exit;
+	}
+	return EParkSimDir::Enter;
+}
+
+FString AParkingSimManager::DirLabel(EParkSimDir InDir)
+{
+	return InDir == EParkSimDir::Exit ? TEXT("출차") : TEXT("입차");
 }
 
 EParkSimParkMode AParkingSimManager::ParseParkMode(const FString& Text)
@@ -96,11 +112,11 @@ FString AParkingSimManager::GetPhaseLabel() const
 	if (State == EParkSimState::Replay)                    { return TEXT("리플레이"); }
 	if (State == EParkSimState::Moving ||
 		State == EParkSimState::Stopped)                   { return TEXT("주행"); }
-	if (State == EParkSimState::Parked)
+	if (State == EParkSimState::Parked || State == EParkSimState::Exited)
 	{
 		if (bAutoReplayArmed) { return TEXT("리플레이대기"); }
 		if (bScenarioDone)    { return TEXT("완료"); }
-		return TEXT("주차");
+		return StateLabel(State);
 	}
 	return TEXT("대기");
 }
@@ -263,6 +279,7 @@ bool AParkingSimManager::ComputeEntrance(FVector2D& OutEntrance)
 		return false;
 	}
 	// "가장 우측" = 메인 뷰(+X 를 바라봄) 기준 화면 오른쪽 = 월드 +Y. 그 바깥, 나머지 축(X)은 중앙.
+	// 입차의 입구이자 출차의 출구다(요구사항이 같은 지점).
 	OutEntrance = FVector2D((Bounds.Min.X + Bounds.Max.X) * 0.5f, Bounds.Max.Y + EntranceMarginM);
 	return true;
 }
@@ -308,7 +325,7 @@ FVector2D AParkingSimManager::ChooseOpenDir(const FParkSimSlot& Target, const TA
 
 // ===== 시작/중단 =====
 
-bool AParkingSimManager::StartSim(int32 InPresetId, int32 InSlotIndex, int32 Seed, EParkSimParkMode Mode, FString& OutError)
+bool AParkingSimManager::StartSim(EParkSimDir InDir, int32 InPresetId, int32 InSlotIndex, int32 Seed, EParkSimParkMode Mode, FString& OutError)
 {
 	// 이전 시나리오 예약을 먼저 지운다 — 실패로 끝나도 남은 예약이 다음 주행에 끼어들면 안 된다.
 	bScenarioActive = false;
@@ -355,41 +372,78 @@ bool AParkingSimManager::StartSim(int32 InPresetId, int32 InSlotIndex, int32 See
 	const EParkSimParkMode Resolved = (Mode == EParkSimParkMode::Random)
 		? (Stream.FRand() < 0.5f ? EParkSimParkMode::Front : EParkSimParkMode::Rear)
 		: Mode;
-	bBackIn = (Resolved == EParkSimParkMode::Rear);
+	RunDir = InDir;
 	bReverseLogged = false;
 
-	// 경로: 입구 → 통로 → 진입점 → 주차면 중심.
+	// 경로 골격은 두 방향이 같다: 입구/출구 ─ 통로 ─ 진입점 ─ 주차면 중심.
 	const FVector2D OpenDir = ChooseOpenDir(Target, Slots, Bounds);
 	const FVector2D Front = Target.Center + OpenDir * (Target.DepthM * 0.5f + ApproachMarginM);
 	const float LaneT = FVector2D::DotProduct(Entrance - Front, Target.RowDir);
 	const FVector2D Lane = Front + Target.RowDir * LaneT;
+	const bool bUseLane = FMath::Abs(LaneT) > ArriveRadiusM * 1.5f;
+
+	// 주차 자세: 후면주차는 코가 통로 쪽(+OpenDir), 전면주차는 면 안쪽(-OpenDir).
+	const float ParkedYaw = (Resolved == EParkSimParkMode::Rear) ? Yaw2D(OpenDir) : Yaw2D(-OpenDir);
 
 	Waypoints.Reset();
 	WaypointRoles.Reset();
-	if (FMath::Abs(LaneT) > ArriveRadiusM * 1.5f)
+
+	FVector2D StartPos;
+	float StartYaw;
+	if (RunDir == EParkSimDir::Enter)
 	{
-		Waypoints.Add(Lane);
-		WaypointRoles.Add(TEXT("통로"));
+		if (bUseLane)
+		{
+			Waypoints.Add(Lane);
+			WaypointRoles.Add(TEXT("통로"));
+		}
+		Waypoints.Add(Front);
+		WaypointRoles.Add(TEXT("진입점"));
+		Waypoints.Add(Target.Center);
+		WaypointRoles.Add(TEXT("주차면"));
+
+		SlotLegIndex = Waypoints.Num() - 1;
+		// 후면주차만 마지막 구간을 후진으로 간다.
+		ReverseLegIndex = (Resolved == EParkSimParkMode::Rear) ? SlotLegIndex : INDEX_NONE;
+
+		StartPos = Entrance;
+		StartYaw = Yaw2D((Waypoints[0] - Entrance).GetSafeNormal());
 	}
-	Waypoints.Add(Front);
-	WaypointRoles.Add(TEXT("진입점"));
-	Waypoints.Add(Target.Center);
-	WaypointRoles.Add(TEXT("주차면"));
+	else
+	{
+		// 출차는 같은 경로를 뒤집는다: 주차면 중심(출발) → 진입점 → 통로 → 출구.
+		Waypoints.Add(Front);
+		WaypointRoles.Add(TEXT("진입점"));
+		if (bUseLane)
+		{
+			Waypoints.Add(Lane);
+			WaypointRoles.Add(TEXT("통로"));
+		}
+		Waypoints.Add(Entrance);
+		WaypointRoles.Add(TEXT("출구"));
+
+		SlotLegIndex = 0;
+		// 전면주차 차량은 코가 면 안쪽이므로 후진으로 빠져나온다. 후면주차는 그대로 전진.
+		ReverseLegIndex = (Resolved == EParkSimParkMode::Front) ? 0 : INDEX_NONE;
+
+		StartPos = Target.Center;
+		StartYaw = ParkedYaw;
+	}
 
 	// 주행 상태 초기화.
 	WpIndex = 0;
-	PosM = Entrance;
-	YawDeg = Yaw2D((Waypoints[0] - Entrance).GetSafeNormal());
+	PosM = StartPos;
+	YawDeg = StartYaw;
 	SpeedMps = 0.f;
 	ElapsedSec = 0.f;
 	SampleAccum = 0.f;
 	TraveledM = 0.f;
-	// 전면주차는 코가 주차면 안쪽(-OpenDir), 후면주차는 코가 통로 쪽(+OpenDir)을 본다.
-	FinalYawDeg = bBackIn ? Yaw2D(OpenDir) : Yaw2D(-OpenDir);
+	FinalYawDeg = ParkedYaw;   // 입차 완주 시 자세를 딱 맞추는 데 쓴다(출차는 사용하지 않는다).
 
 	// 기록 초기화.
 	Record = FParkSimRecord();
 	Record.startedAt = Now2String();
+	Record.simMode = DirLabel(RunDir);
 	Record.presetId = Target.PresetId;
 	Record.slotIndex = Target.SlotIndex;
 	Record.seed = Seed;
@@ -397,8 +451,10 @@ bool AParkingSimManager::StartSim(int32 InPresetId, int32 InSlotIndex, int32 See
 	Record.entranceX = Entrance.X;
 	Record.entranceY = Entrance.Y;
 	{
+		// 첫 항목은 출발점(입차=입구, 출차=주차면 중심)이고 나머지는 주행 경유지다.
 		FParkSimWaypoint W;
-		W.x = Entrance.X; W.y = Entrance.Y; W.role = TEXT("입구");
+		W.x = StartPos.X; W.y = StartPos.Y;
+		W.role = (RunDir == EParkSimDir::Enter) ? TEXT("입구") : TEXT("주차면");
 		Record.waypoints.Add(W);
 		for (int32 i = 0; i < Waypoints.Num(); ++i)
 		{
@@ -415,11 +471,7 @@ bool AParkingSimManager::StartSim(int32 InPresetId, int32 InSlotIndex, int32 See
 		OutError = TEXT("차량 매니저를 찾지 못했습니다.");
 		return false;
 	}
-	if (IsValid(Car))
-	{
-		CarMgr->RemoveCarById(Car->CarData.id);
-	}
-	Car = nullptr;
+	RemoveCar();
 
 	const TArray<FCarPresetEntry>& Catalog = EnsureCatalog();
 	FCarPos NewCar;
@@ -444,11 +496,22 @@ bool AParkingSimManager::StartSim(int32 InPresetId, int32 InSlotIndex, int32 See
 
 	State = EParkSimState::Idle;
 	SetSimState(EParkSimState::Moving);
-	LogEvent(FString::Printf(
-		TEXT("입구 진입 — 위치(%.2f, %.2f), 목표 프리셋 %d / %d번 면 중심(%.2f, %.2f), 차량 %s, %s(%s)"),
-		Entrance.X, Entrance.Y, Target.PresetId, Target.SlotIndex, Target.Center.X, Target.Center.Y, *Record.carId,
-		*Record.parkMode,
-		bBackIn ? TEXT("후진 진입 · 차 앞이 통로 쪽") : TEXT("전진 진입 · 차 앞이 주차면 안쪽")));
+	if (RunDir == EParkSimDir::Enter)
+	{
+		LogEvent(FString::Printf(
+			TEXT("입구 진입 — 위치(%.2f, %.2f), 목표 프리셋 %d / %d번 면 중심(%.2f, %.2f), 차량 %s, %s(%s)"),
+			StartPos.X, StartPos.Y, Target.PresetId, Target.SlotIndex, Target.Center.X, Target.Center.Y, *Record.carId,
+			*Record.parkMode,
+			ReverseLegIndex != INDEX_NONE ? TEXT("후진 진입 · 차 앞이 통로 쪽") : TEXT("전진 진입 · 차 앞이 주차면 안쪽")));
+	}
+	else
+	{
+		LogEvent(FString::Printf(
+			TEXT("출차 시작 — 프리셋 %d / %d번 면 중심(%.2f, %.2f)에서 출발, 출구(%.2f, %.2f), 차량 %s, %s(%s)"),
+			Target.PresetId, Target.SlotIndex, StartPos.X, StartPos.Y, Entrance.X, Entrance.Y, *Record.carId,
+			*Record.parkMode,
+			ReverseLegIndex != INDEX_NONE ? TEXT("후진으로 면을 빠져나옴 · 차 앞이 면 안쪽") : TEXT("전진으로 면을 빠져나옴 · 차 앞이 통로 쪽")));
+	}
 	for (int32 i = 0; i < Waypoints.Num(); ++i)
 	{
 		LogEvent(FString::Printf(TEXT("경로 %d/%d %s (%.2f, %.2f)"),
@@ -458,10 +521,10 @@ bool AParkingSimManager::StartSim(int32 InPresetId, int32 InSlotIndex, int32 See
 	return true;
 }
 
-bool AParkingSimManager::StartScenario(int32 InPresetId, int32 InSlotIndex, int32 Seed, EParkSimParkMode Mode,
+bool AParkingSimManager::StartScenario(EParkSimDir InDir, int32 InPresetId, int32 InSlotIndex, int32 Seed, EParkSimParkMode Mode,
 	bool bReplay, float ReplayDelaySec, float ReplaySpeedScale, FString& OutError)
 {
-	if (!StartSim(InPresetId, InSlotIndex, Seed, Mode, OutError))
+	if (!StartSim(InDir, InPresetId, InSlotIndex, Seed, Mode, OutError))
 	{
 		return false;
 	}
@@ -472,12 +535,12 @@ bool AParkingSimManager::StartScenario(int32 InPresetId, int32 InSlotIndex, int3
 		bAutoReplayArmed = true;
 		AutoReplayDelayLeft = FMath::Max(ReplayDelaySec, 0.f);
 		AutoReplaySpeed = FMath::Clamp(ReplaySpeedScale, 0.1f, 10.f);
-		LogEvent(FString::Printf(TEXT("시나리오 예약 — 주차 완료 %.1f초 뒤 리플레이 자동 재생(%.2f배속)"),
-			AutoReplayDelayLeft, AutoReplaySpeed));
+		LogEvent(FString::Printf(TEXT("시나리오 예약 — %s 완료 %.1f초 뒤 리플레이 자동 재생(%.2f배속)"),
+			*DirLabel(RunDir), AutoReplayDelayLeft, AutoReplaySpeed));
 	}
 	else
 	{
-		LogEvent(TEXT("시나리오 예약 — 리플레이 없이 주차까지만"));
+		LogEvent(FString::Printf(TEXT("시나리오 예약 — 리플레이 없이 %s까지만"), *DirLabel(RunDir)));
 	}
 	return true;
 }
@@ -490,13 +553,9 @@ void AParkingSimManager::StopSim(bool bRemoveCar)
 
 	const bool bWasRunning = (State == EParkSimState::Moving || State == EParkSimState::Stopped);
 
-	if (bRemoveCar && IsValid(Car))
+	if (bRemoveCar)
 	{
-		if (ACarPlacementManager* CarMgr = FindCarManager())
-		{
-			CarMgr->RemoveCarById(Car->CarData.id);
-		}
-		Car = nullptr;
+		RemoveCar();
 	}
 
 	if (bWasRunning)
@@ -530,8 +589,8 @@ void AParkingSimManager::Tick(float DeltaSeconds)
 		TickDrive(DeltaSeconds);
 	}
 
-	// 시나리오: 주차가 끝나면 지연 시간을 세고 리플레이로 넘어간다.
-	if (bAutoReplayArmed && State == EParkSimState::Parked)
+	// 시나리오: 주차/출차가 끝나면 지연 시간을 세고 리플레이로 넘어간다.
+	if (bAutoReplayArmed && (State == EParkSimState::Parked || State == EParkSimState::Exited))
 	{
 		AutoReplayDelayLeft -= DeltaSeconds;
 		if (AutoReplayDelayLeft <= 0.f)
@@ -567,17 +626,21 @@ void AParkingSimManager::TickDrive(float Dt)
 		return;
 	}
 
+	// 마지막 구간(여기서 멈춘다) 과 슬롯 구간(면 안팎을 오가는 저속 구간)은 방향에 따라 다른 인덱스다.
 	const bool bFinalLeg = (WpIndex == Waypoints.Num() - 1);
+	const bool bSlotLeg = (WpIndex == SlotLegIndex);
 	const FVector2D Target = Waypoints[WpIndex];
 	const FVector2D To = Target - PosM;
 	const float Dist = To.Size();
 
-	// 후면주차의 마지막 구간은 후진이다: 차 뒤를 면 쪽으로 두므로 조향 기준이 반대가 된다.
-	const bool bReverseLeg = bFinalLeg && bBackIn;
+	// 후진 구간은 차 뒤로 나아가므로 조향 기준이 반대가 된다(입차 후면주차의 진입, 출차 전면주차의 탈출).
+	const bool bReverseLeg = (WpIndex == ReverseLegIndex);
 	if (bReverseLeg && !bReverseLogged)
 	{
 		bReverseLogged = true;
-		LogEvent(FString::Printf(TEXT("후면주차 — 진입점에서 돌아서서 후진 시작 (위치 %.2f, %.2f)"), PosM.X, PosM.Y));
+		LogEvent(RunDir == EParkSimDir::Enter
+			? FString::Printf(TEXT("후면주차 — 진입점에서 돌아서서 후진 시작 (위치 %.2f, %.2f)"), PosM.X, PosM.Y)
+			: FString::Printf(TEXT("전면주차 출차 — 주차면에서 후진으로 빠져나오기 시작 (위치 %.2f, %.2f)"), PosM.X, PosM.Y));
 	}
 
 	// 조향(각속도 제한). 남은 거리가 아주 짧으면 방향이 튀므로 현재 방향을 유지한다.
@@ -592,7 +655,7 @@ void AParkingSimManager::TickDrive(float Dt)
 	float TargetSpeed = 0.f;
 	if (FMath::Abs(YawErr) <= PivotYawErrDeg)
 	{
-		const float Cruise = bReverseLeg ? ReverseSpeedMps : (bFinalLeg ? FinalSpeedMps : CruiseSpeedMps);
+		const float Cruise = bReverseLeg ? ReverseSpeedMps : (bSlotLeg ? FinalSpeedMps : CruiseSpeedMps);
 		const float BrakeDist = bFinalLeg ? Dist : FMath::Max(Dist - ArriveRadiusM, 0.f);
 		const float Floor = bFinalLeg ? 0.05f : 0.4f; // 경유지에서는 완전히 서지 않는다.
 		TargetSpeed = FMath::Min(Cruise, FMath::Sqrt(2.f * DecelMps2 * BrakeDist) + Floor);
@@ -613,17 +676,31 @@ void AParkingSimManager::TickDrive(float Dt)
 	const float RemainDist = (Target - PosM).Size();
 	if (bFinalLeg)
 	{
-		// 주차 완료: 중심에 충분히 붙었거나, 붙은 채로 속도가 죽었을 때.
+		// 완료 판정: 목표에 충분히 붙었거나, 붙은 채로 속도가 죽었을 때.
 		if (RemainDist <= ParkToleranceM || (SpeedMps < 0.02f && RemainDist < 0.4f))
 		{
 			PosM = Target;
-			YawDeg = FinalYawDeg;
 			SpeedMps = 0.f;
-			ApplyCarPose(PosM, YawDeg);
-			SetSimState(EParkSimState::Parked);
-			LogEvent(FString::Printf(TEXT("주차 완료(%s) — 프리셋 %d / %d번 면 중심(%.2f, %.2f), 중심오차 %.2fm, 차량 방위 %.1f°, 총 이동 %.1fm, 소요 %.1f초"),
-				*Record.parkMode, Record.presetId, Record.slotIndex, Target.X, Target.Y, RemainDist, FinalYawDeg, TraveledM, ElapsedSec));
-			FinishRun(TEXT("주차완료"));
+
+			if (RunDir == EParkSimDir::Enter)
+			{
+				YawDeg = FinalYawDeg;      // 주차 자세를 면에 딱 맞춘다.
+				ApplyCarPose(PosM, YawDeg);
+				SetSimState(EParkSimState::Parked);
+				LogEvent(FString::Printf(TEXT("주차 완료(%s) — 프리셋 %d / %d번 면 중심(%.2f, %.2f), 중심오차 %.2fm, 차량 방위 %.1f°, 총 이동 %.1fm, 소요 %.1f초"),
+					*Record.parkMode, Record.presetId, Record.slotIndex, Target.X, Target.Y, RemainDist, FinalYawDeg, TraveledM, ElapsedSec));
+				FinishRun(TEXT("주차완료"));
+			}
+			else
+			{
+				// 출차는 출구에 닿는 순간 차량을 주차장에서 없앤다(요구사항: 나간 차량은 제거).
+				ApplyCarPose(PosM, YawDeg);
+				SetSimState(EParkSimState::Exited);
+				LogEvent(FString::Printf(TEXT("출차 완료 — 출구(%.2f, %.2f) 도달, 오차 %.2fm, 총 이동 %.1fm, 소요 %.1f초 · 차량 %s 제거"),
+					Target.X, Target.Y, RemainDist, TraveledM, ElapsedSec, *Record.carId));
+				RemoveCar();
+				FinishRun(TEXT("출차완료"));
+			}
 			return;
 		}
 	}
@@ -655,6 +732,18 @@ void AParkingSimManager::ApplyCarPose(const FVector2D& InPos, float InYawDeg)
 	Car->CarData.rotY = InYawDeg;
 	Car->CarData.isFront = true;
 	Car->ApplyTransformFromData();
+}
+
+void AParkingSimManager::RemoveCar()
+{
+	if (IsValid(Car))
+	{
+		if (ACarPlacementManager* CarMgr = FindCarManager())
+		{
+			CarMgr->RemoveCarById(Car->CarData.id);
+		}
+	}
+	Car = nullptr;
 }
 
 void AParkingSimManager::SetSimState(EParkSimState New)
@@ -712,7 +801,7 @@ void AParkingSimManager::FinishRun(const FString& Result)
 	Record.result = Result;
 	RecordFrame(/*bForce=*/true);
 
-	if (State != EParkSimState::Parked)
+	if (State != EParkSimState::Parked && State != EParkSimState::Exited)
 	{
 		State = EParkSimState::Idle;
 	}
@@ -732,11 +821,16 @@ void AParkingSimManager::WriteLogFiles()
 
 	// 1) 사람이 읽는 로그.
 	TArray<FString> Lines;
-	Lines.Add(TEXT("=== Park3D 주차 진입 시뮬레이션 로그 ==="));
+	const bool bExitRun = (Record.simMode == TEXT("출차"));
+
+	Lines.Add(FString::Printf(TEXT("=== Park3D 주차 %s 시뮬레이션 로그 ==="),
+		bExitRun ? TEXT("출차") : TEXT("진입")));
 	Lines.Add(FString::Printf(TEXT("시작: %s"), *Record.startedAt));
 	Lines.Add(FString::Printf(TEXT("차량: %s"), *Record.carId));
-	Lines.Add(FString::Printf(TEXT("입구: (%.2f, %.2f)  [UE 월드 미터, X=깊이축 Y=우측축]"), Record.entranceX, Record.entranceY));
-	Lines.Add(FString::Printf(TEXT("목표: 프리셋 %d / %d번 면 (%s)"), Record.presetId, Record.slotIndex, *Record.parkMode));
+	Lines.Add(FString::Printf(TEXT("%s: (%.2f, %.2f)  [UE 월드 미터, X=깊이축 Y=우측축]"),
+		bExitRun ? TEXT("출구") : TEXT("입구"), Record.entranceX, Record.entranceY));
+	Lines.Add(FString::Printf(TEXT("%s: 프리셋 %d / %d번 면 (%s)"),
+		bExitRun ? TEXT("출발") : TEXT("목표"), Record.presetId, Record.slotIndex, *Record.parkMode));
 	Lines.Add(FString::Printf(TEXT("결과: %s (소요 %.2f초, 이동 %.2fm, 프레임 %d개)"),
 		*Record.result, Record.durationSec, Record.distanceM, Record.frames.Num()));
 	Lines.Add(TEXT(""));
@@ -746,7 +840,7 @@ void AParkingSimManager::WriteLogFiles()
 		Lines.Add(FString::Printf(TEXT("  %s (%.2f, %.2f)"), *W.role, W.x, W.y));
 	}
 	Lines.Add(TEXT(""));
-	Lines.Add(TEXT("-- 이벤트(이동/정지/주차) --"));
+	Lines.Add(FString::Printf(TEXT("-- 이벤트(이동/정지/%s) --"), bExitRun ? TEXT("출차") : TEXT("주차")));
 	Lines.Append(Record.events);
 	Lines.Add(TEXT(""));
 	Lines.Add(TEXT("-- 궤적 샘플(t초, x, y, yaw도, 속도m/s, 상태) --"));
@@ -873,13 +967,29 @@ void AParkingSimManager::TickReplay(float Dt)
 		ApplyCarPose(FVector2D(Last.x, Last.y), Last.yaw);
 		State = StateBeforeReplay;
 		UE_LOG(LogTemp, Log, TEXT("[Sim] 리플레이 종료 — %.2f초 재생"), EndT);
+
+		// 출차 기록은 재생용으로 되살린 차량을 다시 없앤다(재생 후에도 "나간 차"로 남아야 한다).
+		const bool bExitRecord = (Record.simMode == TEXT("출차"));
+		if (bExitRecord)
+		{
+			RemoveCar();
+		}
+
 		if (bScenarioActive)
 		{
-			// 차량은 주차 자세 그대로 남긴다(마지막 프레임 = 주차 완료 자세).
 			bScenarioActive = false;
 			bScenarioDone = true;
-			UE_LOG(LogTemp, Log, TEXT("[Sim] 시나리오 완료 — 차량은 프리셋 %d / %d번 면에 유지"),
-				Record.presetId, Record.slotIndex);
+			if (bExitRecord)
+			{
+				UE_LOG(LogTemp, Log, TEXT("[Sim] 시나리오 완료 — 프리셋 %d / %d번 면에서 출차, 차량 제거됨"),
+					Record.presetId, Record.slotIndex);
+			}
+			else
+			{
+				// 차량은 주차 자세 그대로 남긴다(마지막 프레임 = 주차 완료 자세).
+				UE_LOG(LogTemp, Log, TEXT("[Sim] 시나리오 완료 — 차량은 프리셋 %d / %d번 면에 유지"),
+					Record.presetId, Record.slotIndex);
+			}
 		}
 		return;
 	}

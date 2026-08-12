@@ -74,6 +74,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Park3D|Sim")
 	FKey SimStartKey;
 
+	/** 출차 시뮬레이션 시작 단축키. 기본 F8. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Park3D|Sim")
+	FKey SimExitKey;
+
 	/** 리플레이 단축키. 기본 F10. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Park3D|Sim")
 	FKey SimReplayKey;
@@ -81,6 +85,10 @@ public:
 	/** 단축키 핸들러(HUD 버튼과 같은 진입점을 쓴다). */
 	UFUNCTION(BlueprintCallable, Category = "Park3D|Sim")
 	void StartParkingSim();
+
+	/** 출차 시뮬레이션 시작(무작위 주차면 → 출구, 도착 시 차량 제거). */
+	UFUNCTION(BlueprintCallable, Category = "Park3D|Sim")
+	void StartParkingSimExit();
 
 	UFUNCTION(BlueprintCallable, Category = "Park3D|Sim")
 	void ReplayParkingSim();

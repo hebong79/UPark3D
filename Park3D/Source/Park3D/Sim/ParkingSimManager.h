@@ -1,5 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
-// ParkingSimManager : 차량 1대가 입구로 진입해 무작위 주차면에 주차하기까지를 시뮬레이션한다.
+// ParkingSimManager : 차량 1대의 입차(입구 → 무작위 주차면)와 출차(무작위 주차면 → 출구)를 시뮬레이션한다.
+// 두 방향은 같은 경로 골격을 뒤집어 쓴다. 출차는 출구에 닿는 순간 차량을 제거한다.
 //
 // 기하 권위는 AParkingPresetManager::ComputeSlotCorners 다(라인/데칼/차량배치와 같은 사각형 위에서 움직인다).
 // 경로는 탐색 없이 "입구 → 통로 → 진입점 → 주차면 중심" 4점으로 만든다. 통로는 대상 면의 열린 쪽
@@ -48,12 +49,14 @@ public:
 
 	/**
 	 * 시뮬레이션 시작. 진행 중이면 기존 주행을 버리고 새로 시작한다.
+	 * @param Dir         Enter=입구→주차면(차량은 면에 남는다), Exit=주차면→출구(도착하면 차량을 제거한다).
 	 * @param InPresetId  0 이하면 무작위. 지정하면 그 프리셋 안에서만 면을 고른다.
 	 * @param InSlotIndex 0 이하면 무작위(1-based).
 	 * @param Seed        0 이하면 비결정.
 	 * @param Mode        전면/후면/랜덤 주차. 랜덤은 같은 Seed 스트림에서 50:50 으로 뽑는다.
+	 *                    출차에서는 "출발 시점의 주차 자세"이며, 전면주차면 슬롯에서 후진으로 빠져나온다.
 	 */
-	bool StartSim(int32 InPresetId, int32 InSlotIndex, int32 Seed, EParkSimParkMode Mode, FString& OutError);
+	bool StartSim(EParkSimDir Dir, int32 InPresetId, int32 InSlotIndex, int32 Seed, EParkSimParkMode Mode, FString& OutError);
 
 	/** 주행 중단. bRemoveCar 면 차량도 제거한다. */
 	void StopSim(bool bRemoveCar);
@@ -62,12 +65,12 @@ public:
 	bool StartReplay(float SpeedScale, FString& OutError);
 
 	/**
-	 * 시나리오 1회분: 주행 시작 → 주차 완료 감지 → DelaySec 뒤 리플레이 자동 재생까지 한 번에 예약한다.
+	 * 시나리오 1회분: 주행 시작 → 완료 감지 → DelaySec 뒤 리플레이 자동 재생까지 한 번에 예약한다.
 	 * 호출은 즉시 반환하고(핸들러가 게임 스레드라 기다리면 시뮬이 멈춘다), 진행은 GetPhaseLabel/sim.status 로 본다.
-	 * 차량은 끝나도 주차면에 그대로 남는다.
-	 * @param bReplay false 면 StartSim 과 동일(주차까지만).
+	 * 입차는 끝나도 차량이 주차면에 남고, 출차는 출구 도착 시 제거된다(리플레이 재생 중에만 다시 나타난다).
+	 * @param bReplay false 면 StartSim 과 동일(주행까지만).
 	 */
-	bool StartScenario(int32 InPresetId, int32 InSlotIndex, int32 Seed, EParkSimParkMode Mode,
+	bool StartScenario(EParkSimDir Dir, int32 InPresetId, int32 InSlotIndex, int32 Seed, EParkSimParkMode Mode,
 		bool bReplay, float ReplayDelaySec, float ReplaySpeedScale, FString& OutError);
 
 	/** "front"/"rear"/"random"(및 "전면"/"후면") 문자열 → 모드. 빈 문자열/미인식은 Random. */
@@ -75,6 +78,12 @@ public:
 
 	/** 모드 한글 라벨(로그·응답 공용). */
 	static FString ParkModeLabel(EParkSimParkMode Mode);
+
+	/** "exit"/"출차"/"out" 이면 Exit, 그 외(빈 문자열 포함)는 Enter. */
+	static EParkSimDir ParseDir(const FString& Text);
+
+	/** 방향 한글 라벨(입차/출차). */
+	static FString DirLabel(EParkSimDir Dir);
 
 	// ---- 조회 ----
 	EParkSimState GetState() const { return State; }
@@ -88,15 +97,18 @@ public:
 	static FString StateLabel(EParkSimState S);
 
 	/**
-	 * 시나리오 진행 단계 라벨. 상태만으로는 "주차 후 리플레이를 기다리는 중"과 "다 끝남"을 구분할 수 없어 따로 둔다.
-	 * 대기 / 주행 / 주차 / 리플레이대기 / 리플레이 / 완료
+	 * 시나리오 진행 단계 라벨. 상태만으로는 "완료 후 리플레이를 기다리는 중"과 "다 끝남"을 구분할 수 없어 따로 둔다.
+	 * 대기 / 주행 / 주차 / 출차 / 리플레이대기 / 리플레이 / 완료
 	 */
 	FString GetPhaseLabel() const;
+
+	/** 이번 주행의 방향(입차/출차). */
+	EParkSimDir GetDir() const { return RunDir; }
 
 	/** 모든 주차면을 감싸는 사각형(m). 면이 하나도 없으면 false. */
 	bool ComputeLotBounds(FBox2D& OutBounds);
 
-	/** 입구 = 주차면 전체의 가장 우측(+Y) 바깥, 나머지 축은 중앙. */
+	/** 입구 겸 출구 = 주차면 전체의 가장 우측(+Y) 바깥, 나머지 축은 중앙. */
 	bool ComputeEntrance(FVector2D& OutEntrance);
 
 	// ---- 주행 파라미터(미터/초/도) ----
@@ -145,6 +157,9 @@ private:
 	void TickDrive(float Dt);
 	void TickReplay(float Dt);
 	void ApplyCarPose(const FVector2D& PosM, float YawDegIn);
+
+	/** 차량 매니저에서 이번 주행 차량을 지운다(출차 완료·재시작 공용). */
+	void RemoveCar();
 	void SetSimState(EParkSimState New);
 	void RecordFrame(bool bForce);
 	void LogEvent(const FString& Message);
@@ -181,8 +196,17 @@ private:
 	float TraveledM = 0.f;
 	float FinalYawDeg = 0.f;
 
-	/** true 면 마지막 구간(진입점 → 면 중심)을 후진으로 간다(= 후면주차). */
-	bool bBackIn = false;
+	/** 이번 주행의 방향. */
+	EParkSimDir RunDir = EParkSimDir::Enter;
+
+	/**
+	 * 후진으로 가는 구간의 인덱스. INDEX_NONE 이면 전 구간 전진.
+	 *  - 입차 + 후면주차 : 마지막 구간(진입점 → 면 중심)
+	 *  - 출차 + 전면주차 : 첫 구간(면 중심 → 진입점) — 코가 면 안쪽을 보고 있으니 빼낼 때 후진이다.
+	 */
+	int32 ReverseLegIndex = INDEX_NONE;
+	/** 슬롯 안팎을 오가는 저속 구간의 인덱스(입차=마지막, 출차=첫 구간). */
+	int32 SlotLegIndex = INDEX_NONE;
 	/** 후진 구간에 들어섰음을 로그에 한 번만 남기기 위한 래치. */
 	bool bReverseLogged = false;
 

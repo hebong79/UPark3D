@@ -44,6 +44,7 @@ APark3DGameMode::APark3DGameMode()
 
 	// 주차 시뮬레이션 단축키 기본값(F11 은 전체화면 토글이라 피한다).
 	SimStartKey = EKeys::F9;
+	SimExitKey = EKeys::F8;
 	SimReplayKey = EKeys::F10;
 
 	// 카메라 뷰어 토글 기본값: Ctrl + Space.
@@ -124,6 +125,10 @@ void APark3DGameMode::BeginPlay()
 	{
 		InputComponent->BindKey(SimStartKey, IE_Pressed, this, &APark3DGameMode::StartParkingSim);
 	}
+	if (InputComponent && SimExitKey.IsValid())
+	{
+		InputComponent->BindKey(SimExitKey, IE_Pressed, this, &APark3DGameMode::StartParkingSimExit);
+	}
 	if (InputComponent && SimReplayKey.IsValid())
 	{
 		InputComponent->BindKey(SimReplayKey, IE_Pressed, this, &APark3DGameMode::ReplayParkingSim);
@@ -189,7 +194,7 @@ bool APark3DGameMode::ToggleSimPanel()
 
 	// ZOrder 20 = 카메라 뷰어(5)·컨트롤 패널(10)보다 앞, 메인 메뉴(100)보다 뒤.
 	Panel->AddToViewport(20);
-	UE_LOG(LogTemp, Log, TEXT("[Sim] 주차 시뮬레이션 HUD 를 열었습니다(F9 시작 / F10 리플레이)."));
+	UE_LOG(LogTemp, Log, TEXT("[Sim] 주차 시뮬레이션 HUD 를 열었습니다(F9 입차 / F8 출차 / F10 리플레이)."));
 	return true;
 }
 
@@ -203,9 +208,26 @@ void APark3DGameMode::StartParkingSim()
 	if (AParkingSimManager* Sim = AParkingSimManager::GetOrSpawn(GetWorld()))
 	{
 		FString Err;
-		if (!Sim->StartSim(0, 0, 0, EParkSimParkMode::Random, Err))
+		if (!Sim->StartSim(EParkSimDir::Enter, 0, 0, 0, EParkSimParkMode::Random, Err))
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[Sim] 시작 실패: %s"), *Err);
+		}
+	}
+}
+
+void APark3DGameMode::StartParkingSimExit()
+{
+	if (SimWidget)
+	{
+		SimWidget->HandleExit();   // HUD 메시지까지 같이 갱신되도록 버튼 경로를 그대로 쓴다.
+		return;
+	}
+	if (AParkingSimManager* Sim = AParkingSimManager::GetOrSpawn(GetWorld()))
+	{
+		FString Err;
+		if (!Sim->StartSim(EParkSimDir::Exit, 0, 0, 0, EParkSimParkMode::Rear, Err))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Sim] 출차 시작 실패: %s"), *Err);
 		}
 	}
 }

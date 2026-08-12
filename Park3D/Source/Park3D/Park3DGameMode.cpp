@@ -205,13 +205,19 @@ void APark3DGameMode::StartParkingSim()
 		SimWidget->HandleStart();   // HUD 메시지까지 같이 갱신되도록 버튼 경로를 그대로 쓴다.
 		return;
 	}
-	if (AParkingSimManager* Sim = AParkingSimManager::GetOrSpawn(GetWorld()))
+	FString SpawnErr;
+	if (AParkingSimManager* Sim = AParkingSimManager::SpawnRun(GetWorld(), SpawnErr))
 	{
 		FString Err;
 		if (!Sim->StartSim(EParkSimDir::Enter, 0, 0, 0, EParkSimParkMode::Random, Err))
 		{
+			Sim->Destroy();
 			UE_LOG(LogTemp, Warning, TEXT("[Sim] 시작 실패: %s"), *Err);
 		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Sim] 시작 실패: %s"), *SpawnErr);
 	}
 }
 
@@ -222,13 +228,19 @@ void APark3DGameMode::StartParkingSimExit()
 		SimWidget->HandleExit();   // HUD 메시지까지 같이 갱신되도록 버튼 경로를 그대로 쓴다.
 		return;
 	}
-	if (AParkingSimManager* Sim = AParkingSimManager::GetOrSpawn(GetWorld()))
+	FString SpawnErr;
+	if (AParkingSimManager* Sim = AParkingSimManager::SpawnRun(GetWorld(), SpawnErr))
 	{
 		FString Err;
 		if (!Sim->StartSim(EParkSimDir::Exit, 0, 0, 0, EParkSimParkMode::Rear, Err))
 		{
+			Sim->Destroy();
 			UE_LOG(LogTemp, Warning, TEXT("[Sim] 출차 시작 실패: %s"), *Err);
 		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Sim] 출차 시작 실패: %s"), *SpawnErr);
 	}
 }
 
@@ -239,7 +251,7 @@ void APark3DGameMode::ReplayParkingSim()
 		SimWidget->HandleReplay();
 		return;
 	}
-	if (AParkingSimManager* Sim = AParkingSimManager::GetOrSpawn(GetWorld()))
+	if (AParkingSimManager* Sim = AParkingSimManager::LatestRun(GetWorld()))
 	{
 		FString Err;
 		if (!Sim->StartReplay(1.f, Err))

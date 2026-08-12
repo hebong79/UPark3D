@@ -21,11 +21,13 @@ class PARK3D_API UParkingSimWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	/** 매니저를 찾거나 스폰해 시뮬레이션을 시작한다(단축키 경로와 동일). */
+	/** 입차 주행을 하나 더 시작한다(단축키 경로와 동일). 이미 도는 주행은 그대로 둔다. */
 	UFUNCTION(BlueprintCallable, Category = "Sim") void HandleStart();
-	/** 출차: 무작위 주차면의 차량 1대가 출구로 나가고, 도착하면 제거된다. */
+	/** 출차: 무작위 주차면의 차량 1대가 출구로 나가고, 도착하면 제거된다. 역시 동시 실행된다. */
 	UFUNCTION(BlueprintCallable, Category = "Sim") void HandleExit();
+	/** 지금 도는 주행을 전부 정지한다(개별 정지는 sim.stop {runId}). */
 	UFUNCTION(BlueprintCallable, Category = "Sim") void HandleStop();
+	/** 가장 최근 주행을 재생한다. */
 	UFUNCTION(BlueprintCallable, Category = "Sim") void HandleReplay();
 
 protected:
@@ -40,7 +42,8 @@ protected:
 
 private:
 	void BuildUI();
-	AParkingSimManager* GetManager() const;
+	/** 새 주행을 만든다(실패하면 메시지를 띄우고 nullptr). */
+	AParkingSimManager* SpawnRun();
 	void SetStatus(const FString& Text);
 
 	/** 배경 프레임 겸 드래그 핸들. RenderTranslation 으로 옮긴다. */

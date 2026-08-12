@@ -45,19 +45,121 @@ AParkingSimManager::AParkingSimManager()
 	PrimaryActorTick.bStartWithTickEnabled = true;
 }
 
-AParkingSimManager* AParkingSimManager::GetOrSpawn(UWorld* World)
+void AParkingSimManager::CollectRuns(UWorld* World, TArray<AParkingSimManager*>& Out)
 {
+	Out.Reset();
 	if (!World)
+	{
+		return;
+	}
+	for (TActorIterator<AParkingSimManager> It(World); It; ++It)
+	{
+		Out.Add(*It);
+	}
+	Out.Sort([](const AParkingSimManager& A, const AParkingSimManager& B) { return A.RunId < B.RunId; });
+}
+
+AParkingSimManager* AParkingSimManager::FindRun(UWorld* World, int32 InRunId)
+{
+	if (!World || InRunId <= 0)
 	{
 		return nullptr;
 	}
 	for (TActorIterator<AParkingSimManager> It(World); It; ++It)
 	{
-		return *It;
+		if (It->RunId == InRunId)
+		{
+			return *It;
+		}
 	}
+	return nullptr;
+}
+
+AParkingSimManager* AParkingSimManager::LatestRun(UWorld* World)
+{
+	TArray<AParkingSimManager*> Runs;
+	CollectRuns(World, Runs);
+	return Runs.Num() > 0 ? Runs.Last() : nullptr;
+}
+
+int32 AParkingSimManager::CountBusyRuns(UWorld* World)
+{
+	TArray<AParkingSimManager*> Runs;
+	CollectRuns(World, Runs);
+
+	int32 Count = 0;
+	for (const AParkingSimManager* R : Runs)
+	{
+		if (R->IsBusy()) { ++Count; }
+	}
+	return Count;
+}
+
+void AParkingSimManager::PruneFinishedRuns(UWorld* World)
+{
+	TArray<AParkingSimManager*> Runs;
+	CollectRuns(World, Runs);
+
+	// 오래된 순으로 훑으면서, 끝난 주행이 상한을 넘는 만큼만 앞에서부터 파괴한다.
+	int32 Finished = 0;
+	for (const AParkingSimManager* R : Runs)
+	{
+		if (!R->IsBusy()) { ++Finished; }
+	}
+	for (AParkingSimManager* R : Runs)
+	{
+		if (Finished <= KeepFinishedRuns) { break; }
+		if (R->IsBusy()) { continue; }
+		R->Destroy();
+		--Finished;
+	}
+}
+
+AParkingSimManager* AParkingSimManager::SpawnRun(UWorld* World, FString& OutError)
+{
+	if (!World)
+	{
+		OutError = TEXT("월드가 없습니다(맵 로드 필요).");
+		return nullptr;
+	}
+	if (CountBusyRuns(World) >= MaxConcurrentRuns)
+	{
+		OutError = FString::Printf(TEXT("동시 주행 상한(%d건)에 도달했습니다 — 끝나기를 기다리거나 sim.stop 으로 정리하세요."),
+			MaxConcurrentRuns);
+		return nullptr;
+	}
+	PruneFinishedRuns(World);
+
+	TArray<AParkingSimManager*> Runs;
+	CollectRuns(World, Runs);
+	const int32 NewId = (Runs.Num() > 0) ? Runs.Last()->RunId + 1 : 1;   // CollectRuns 가 RunId 오름차순
+
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	return World->SpawnActor<AParkingSimManager>(AParkingSimManager::StaticClass(), FTransform::Identity, Params);
+	AParkingSimManager* New = World->SpawnActor<AParkingSimManager>(AParkingSimManager::StaticClass(), FTransform::Identity, Params);
+	if (!New)
+	{
+		OutError = TEXT("시뮬레이션 매니저 스폰에 실패했습니다.");
+		return nullptr;
+	}
+	New->RunId = NewId;
+	return New;
+}
+
+void AParkingSimManager::CollectOccupiedSlots(TSet<TPair<int32, int32>>& Out) const
+{
+	Out.Reset();
+
+	TArray<AParkingSimManager*> Runs;
+	CollectRuns(GetWorld(), Runs);
+	for (const AParkingSimManager* R : Runs)
+	{
+		// 자기 자신과 이미 끝난 주행은 면을 붙잡고 있지 않다.
+		// 입차가 끝난 주행은 차량이 그 면에 남아 있으므로 Parked 도 점유로 본다.
+		if (R == this) { continue; }
+		if (!R->IsBusy() && R->State != EParkSimState::Parked) { continue; }
+		Out.Add(TPair<int32, int32>(R->Record.presetId, R->Record.slotIndex));
+	}
 }
 
 FString AParkingSimManager::StateLabel(EParkSimState S)
@@ -352,16 +454,29 @@ bool AParkingSimManager::StartSim(EParkSimDir InDir, int32 InPresetId, int32 InS
 	}
 
 	// 대상 면 선정(요구사항: 랜덤). presetId/slotIndex 를 주면 그 범위로 좁힌다.
+	// 동시 주행 중인 다른 주행이 쓰고 있는 면은 뺀다 — 안 그러면 두 대가 같은 면에 겹쳐 선다.
+	TSet<TPair<int32, int32>> Occupied;
+	CollectOccupiedSlots(Occupied);
+
 	TArray<int32> Candidates;
+	int32 SkippedByOccupancy = 0;
 	for (int32 i = 0; i < Slots.Num(); ++i)
 	{
 		if (InPresetId > 0 && Slots[i].PresetId != InPresetId) { continue; }
 		if (InSlotIndex > 0 && Slots[i].SlotIndex != InSlotIndex) { continue; }
+		if (Occupied.Contains(TPair<int32, int32>(Slots[i].PresetId, Slots[i].SlotIndex)))
+		{
+			++SkippedByOccupancy;
+			continue;
+		}
 		Candidates.Add(i);
 	}
 	if (Candidates.Num() == 0)
 	{
-		OutError = FString::Printf(TEXT("조건에 맞는 주차면이 없습니다(presetId=%d slotIndex=%d)."), InPresetId, InSlotIndex);
+		OutError = (SkippedByOccupancy > 0)
+			? FString::Printf(TEXT("쓸 수 있는 주차면이 없습니다 — 조건에 맞는 %d개를 다른 주행이 사용 중입니다(presetId=%d slotIndex=%d)."),
+				SkippedByOccupancy, InPresetId, InSlotIndex)
+			: FString::Printf(TEXT("조건에 맞는 주차면이 없습니다(presetId=%d slotIndex=%d)."), InPresetId, InSlotIndex);
 		return false;
 	}
 
@@ -475,7 +590,15 @@ bool AParkingSimManager::StartSim(EParkSimDir InDir, int32 InPresetId, int32 InS
 
 	const TArray<FCarPresetEntry>& Catalog = EnsureCatalog();
 	FCarPos NewCar;
-	NewCar.id = UCarPlacementLibrary::MakeCarId(CarMgr->GetCarCount());
+	// id 는 "{인덱스}-{HH.mm.ss}" 라 같은 초에 여러 주행이 차를 만들면 겹친다 → 빌 때까지 인덱스를 민다.
+	{
+		int32 IdIndex = CarMgr->GetCarCount();
+		NewCar.id = UCarPlacementLibrary::MakeCarId(IdIndex);
+		while (CarMgr->FindByNameId(NewCar.id))
+		{
+			NewCar.id = UCarPlacementLibrary::MakeCarId(++IdIndex);
+		}
+	}
 	NewCar.prefabId = Catalog.Num() > 0 ? Catalog[Stream.RandRange(0, Catalog.Num() - 1)].Idx : 1;
 	NewCar.prefabName = UCarPlacementLibrary::PrefabNameFromId(Catalog, NewCar.prefabId);
 	NewCar.presetId = Target.PresetId;
@@ -599,12 +722,12 @@ void AParkingSimManager::Tick(float DeltaSeconds)
 			FString Err;
 			if (StartReplay(AutoReplaySpeed, Err))
 			{
-				UE_LOG(LogTemp, Log, TEXT("[Sim] 시나리오 — 리플레이 자동 시작(%.2f배속)"), AutoReplaySpeed);
+				UE_LOG(LogTemp, Log, TEXT("[Sim #%d] 시나리오 — 리플레이 자동 시작(%.2f배속)"), RunId, AutoReplaySpeed);
 			}
 			else
 			{
 				bScenarioDone = true;
-				UE_LOG(LogTemp, Warning, TEXT("[Sim] 시나리오 — 리플레이 자동 시작 실패: %s"), *Err);
+				UE_LOG(LogTemp, Warning, TEXT("[Sim #%d] 시나리오 — 리플레이 자동 시작 실패: %s"), RunId, *Err);
 			}
 		}
 	}
@@ -791,7 +914,8 @@ void AParkingSimManager::LogEvent(const FString& Message)
 {
 	const FString Line = FString::Printf(TEXT("[%6.2fs] %s"), ElapsedSec, *Message);
 	Record.events.Add(Line);
-	UE_LOG(LogTemp, Log, TEXT("[Sim] %s"), *Line);
+	// 동시 주행이면 로그가 뒤섞이므로 콘솔 줄에는 RunId 를 붙인다(파일에는 주행별로 나뉘어 있어 불필요).
+	UE_LOG(LogTemp, Log, TEXT("[Sim #%d] %s"), RunId, *Line);
 }
 
 void AParkingSimManager::FinishRun(const FString& Result)
@@ -815,9 +939,10 @@ void AParkingSimManager::WriteLogFiles()
 	const FString Dir = FPaths::Combine(Park3DDataPaths::GetSaveRootDir(), TEXT("3D"), TEXT("Sim"));
 	IFileManager::Get().MakeDirectory(*Dir, /*Tree=*/true);
 
+	// 동시 주행이면 같은 초에 여러 건이 끝나 파일명이 겹친다 → RunId 를 섞는다.
 	const FString Stamp = FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S"));
-	LastLogPath = FPaths::Combine(Dir, FString::Printf(TEXT("%s_sim.log"), *Stamp));
-	LastJsonPath = FPaths::Combine(Dir, FString::Printf(TEXT("%s_sim.json"), *Stamp));
+	LastLogPath = FPaths::Combine(Dir, FString::Printf(TEXT("%s_r%d_sim.log"), *Stamp, RunId));
+	LastJsonPath = FPaths::Combine(Dir, FString::Printf(TEXT("%s_r%d_sim.json"), *Stamp, RunId));
 
 	// 1) 사람이 읽는 로그.
 	TArray<FString> Lines;
@@ -825,7 +950,7 @@ void AParkingSimManager::WriteLogFiles()
 
 	Lines.Add(FString::Printf(TEXT("=== Park3D 주차 %s 시뮬레이션 로그 ==="),
 		bExitRun ? TEXT("출차") : TEXT("진입")));
-	Lines.Add(FString::Printf(TEXT("시작: %s"), *Record.startedAt));
+	Lines.Add(FString::Printf(TEXT("시작: %s  (주행 #%d)"), *Record.startedAt, RunId));
 	Lines.Add(FString::Printf(TEXT("차량: %s"), *Record.carId));
 	Lines.Add(FString::Printf(TEXT("%s: (%.2f, %.2f)  [UE 월드 미터, X=깊이축 Y=우측축]"),
 		bExitRun ? TEXT("출구") : TEXT("입구"), Record.entranceX, Record.entranceY));
@@ -857,7 +982,7 @@ void AParkingSimManager::WriteLogFiles()
 		FFileHelper::SaveStringToFile(Json, *LastJsonPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("[Sim] 로그 저장: %s / %s"), *LastLogPath, *LastJsonPath);
+	UE_LOG(LogTemp, Log, TEXT("[Sim #%d] 로그 저장: %s / %s"), RunId, *LastLogPath, *LastJsonPath);
 }
 
 bool AParkingSimManager::LoadLatestRecord()
@@ -921,7 +1046,14 @@ bool AParkingSimManager::StartReplay(float SpeedScale, FString& OutError)
 	{
 		const TArray<FCarPresetEntry>& Catalog = EnsureCatalog();
 		FCarPos NewCar;
-		NewCar.id = UCarPlacementLibrary::MakeCarId(CarMgr->GetCarCount());
+		{
+			int32 IdIndex = CarMgr->GetCarCount();
+			NewCar.id = UCarPlacementLibrary::MakeCarId(IdIndex);
+			while (CarMgr->FindByNameId(NewCar.id))
+			{
+				NewCar.id = UCarPlacementLibrary::MakeCarId(++IdIndex);
+			}
+		}
 		NewCar.prefabId = Catalog.Num() > 0 ? Catalog[0].Idx : 1;
 		NewCar.prefabName = UCarPlacementLibrary::PrefabNameFromId(Catalog, NewCar.prefabId);
 		NewCar.presetId = Record.presetId;
@@ -945,8 +1077,8 @@ bool AParkingSimManager::StartReplay(float SpeedScale, FString& OutError)
 	ReplayIndex = 0;
 	ApplyCarPose(FVector2D(Record.frames[0].x, Record.frames[0].y), Record.frames[0].yaw);
 
-	UE_LOG(LogTemp, Log, TEXT("[Sim] 리플레이 시작 — 프레임 %d개, 길이 %.2f초, 배속 %.2f"),
-		Record.frames.Num(), Record.frames.Last().t, ReplaySpeed);
+	UE_LOG(LogTemp, Log, TEXT("[Sim #%d] 리플레이 시작 — 프레임 %d개, 길이 %.2f초, 배속 %.2f"),
+		RunId, Record.frames.Num(), Record.frames.Last().t, ReplaySpeed);
 	return true;
 }
 
@@ -966,7 +1098,7 @@ void AParkingSimManager::TickReplay(float Dt)
 		const FParkSimFrame& Last = Record.frames.Last();
 		ApplyCarPose(FVector2D(Last.x, Last.y), Last.yaw);
 		State = StateBeforeReplay;
-		UE_LOG(LogTemp, Log, TEXT("[Sim] 리플레이 종료 — %.2f초 재생"), EndT);
+		UE_LOG(LogTemp, Log, TEXT("[Sim #%d] 리플레이 종료 — %.2f초 재생"), RunId, EndT);
 
 		// 출차 기록은 재생용으로 되살린 차량을 다시 없앤다(재생 후에도 "나간 차"로 남아야 한다).
 		const bool bExitRecord = (Record.simMode == TEXT("출차"));
@@ -981,14 +1113,14 @@ void AParkingSimManager::TickReplay(float Dt)
 			bScenarioDone = true;
 			if (bExitRecord)
 			{
-				UE_LOG(LogTemp, Log, TEXT("[Sim] 시나리오 완료 — 프리셋 %d / %d번 면에서 출차, 차량 제거됨"),
-					Record.presetId, Record.slotIndex);
+				UE_LOG(LogTemp, Log, TEXT("[Sim #%d] 시나리오 완료 — 프리셋 %d / %d번 면에서 출차, 차량 제거됨"),
+					RunId, Record.presetId, Record.slotIndex);
 			}
 			else
 			{
 				// 차량은 주차 자세 그대로 남긴다(마지막 프레임 = 주차 완료 자세).
-				UE_LOG(LogTemp, Log, TEXT("[Sim] 시나리오 완료 — 차량은 프리셋 %d / %d번 면에 유지"),
-					Record.presetId, Record.slotIndex);
+				UE_LOG(LogTemp, Log, TEXT("[Sim #%d] 시나리오 완료 — 차량은 프리셋 %d / %d번 면에 유지"),
+					RunId, Record.presetId, Record.slotIndex);
 			}
 		}
 		return;

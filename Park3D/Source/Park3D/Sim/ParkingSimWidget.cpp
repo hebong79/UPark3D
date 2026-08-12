@@ -117,7 +117,7 @@ void UParkingSimWidget::BuildUI()
 	MessageText->SetFontSize(SimBodyFontSize - 1.f);
 	MessageText->SetColorAndOpacity(SimTextColor);
 	MessageText->SetAutoWrapText(true);
-	MessageText->SetText(FText::FromString(TEXT("입차: 입구→랜덤 주차면 / 출차: 랜덤 주차면→출구(도착 시 차량 제거).")));
+	MessageText->SetText(FText::FromString(TEXT("입차: 입구→랜덤 주차면 / 출차: 랜덤 주차면→출구(도착 시 차량 제거). 여러 번 눌러 동시 주행.")));
 	Box->AddChild(MessageText);
 }
 
@@ -131,9 +131,15 @@ void UParkingSimWidget::NativeConstruct()
 	if (Btn_Replay) { Btn_Replay->OnClicked.AddUniqueDynamic(this, &UParkingSimWidget::HandleReplay); }
 }
 
-AParkingSimManager* UParkingSimWidget::GetManager() const
+AParkingSimManager* UParkingSimWidget::SpawnRun()
 {
-	return AParkingSimManager::GetOrSpawn(GetWorld());
+	FString Err;
+	AParkingSimManager* Sim = AParkingSimManager::SpawnRun(GetWorld(), Err);
+	if (!Sim)
+	{
+		SetStatus(Err);
+	}
+	return Sim;
 }
 
 void UParkingSimWidget::SetStatus(const FString& Text)
@@ -146,10 +152,9 @@ void UParkingSimWidget::SetStatus(const FString& Text)
 
 void UParkingSimWidget::HandleStart()
 {
-	AParkingSimManager* Sim = GetManager();
+	AParkingSimManager* Sim = SpawnRun();
 	if (!Sim)
 	{
-		SetStatus(TEXT("시뮬레이션 매니저를 만들지 못했습니다."));
 		return;
 	}
 
@@ -157,20 +162,20 @@ void UParkingSimWidget::HandleStart()
 	// HUD/단축키는 전면·후면을 랜덤으로 섞는다(특정 모드가 필요하면 sim.start 의 parkMode 를 쓴다).
 	if (!Sim->StartSim(EParkSimDir::Enter, 0, 0, 0, EParkSimParkMode::Random, Err))
 	{
+		Sim->Destroy();
 		SetStatus(Err);
 		return;
 	}
 	const FParkSimRecord& R = Sim->GetRecord();
-	SetStatus(FString::Printf(TEXT("입차 시작 — 목표 프리셋 %d / %d번 면 (%s), 입구(%.1f, %.1f)"),
-		R.presetId, R.slotIndex, *R.parkMode, R.entranceX, R.entranceY));
+	SetStatus(FString::Printf(TEXT("입차 시작 #%d — 목표 프리셋 %d / %d번 면 (%s), 입구(%.1f, %.1f)"),
+		Sim->GetRunId(), R.presetId, R.slotIndex, *R.parkMode, R.entranceX, R.entranceY));
 }
 
 void UParkingSimWidget::HandleExit()
 {
-	AParkingSimManager* Sim = GetManager();
+	AParkingSimManager* Sim = SpawnRun();
 	if (!Sim)
 	{
-		SetStatus(TEXT("시뮬레이션 매니저를 만들지 못했습니다."));
 		return;
 	}
 
@@ -178,28 +183,39 @@ void UParkingSimWidget::HandleExit()
 	// 요구사항상 기본은 후면주차 상태에서의 출차다(전면/랜덤은 sim.exit 의 parkMode 로).
 	if (!Sim->StartSim(EParkSimDir::Exit, 0, 0, 0, EParkSimParkMode::Rear, Err))
 	{
+		Sim->Destroy();
 		SetStatus(Err);
 		return;
 	}
 	const FParkSimRecord& R = Sim->GetRecord();
-	SetStatus(FString::Printf(TEXT("출차 시작 — 프리셋 %d / %d번 면 (%s) 에서 출구(%.1f, %.1f)로"),
-		R.presetId, R.slotIndex, *R.parkMode, R.entranceX, R.entranceY));
+	SetStatus(FString::Printf(TEXT("출차 시작 #%d — 프리셋 %d / %d번 면 (%s) 에서 출구(%.1f, %.1f)로"),
+		Sim->GetRunId(), R.presetId, R.slotIndex, *R.parkMode, R.entranceX, R.entranceY));
 }
 
 void UParkingSimWidget::HandleStop()
 {
-	if (AParkingSimManager* Sim = GetManager())
+	// 버튼 하나로 개별 주행을 고를 수 없으므로 도는 주행을 전부 세운다(개별 정지는 sim.stop {runId}).
+	TArray<AParkingSimManager*> Runs;
+	AParkingSimManager::CollectRuns(GetWorld(), Runs);
+
+	int32 Stopped = 0;
+	for (AParkingSimManager* R : Runs)
 	{
-		Sim->StopSim(/*bRemoveCar=*/false);
-		SetStatus(FString::Printf(TEXT("정지 — 로그: %s"), *Sim->GetLastLogPath()));
+		if (!R->IsBusy()) { continue; }
+		R->StopSim(/*bRemoveCar=*/false);
+		++Stopped;
 	}
+	SetStatus(Stopped > 0
+		? FString::Printf(TEXT("정지 — 주행 %d건을 세웠습니다."), Stopped)
+		: TEXT("정지 — 도는 주행이 없습니다."));
 }
 
 void UParkingSimWidget::HandleReplay()
 {
-	AParkingSimManager* Sim = GetManager();
+	AParkingSimManager* Sim = AParkingSimManager::LatestRun(GetWorld());
 	if (!Sim)
 	{
+		SetStatus(TEXT("재생할 주행이 없습니다 — 먼저 입차/출차를 실행하세요."));
 		return;
 	}
 
@@ -209,7 +225,7 @@ void UParkingSimWidget::HandleReplay()
 		SetStatus(Err);
 		return;
 	}
-	SetStatus(FString::Printf(TEXT("리플레이 재생 — 프레임 %d개"), Sim->GetRecord().frames.Num()));
+	SetStatus(FString::Printf(TEXT("리플레이 재생 #%d — 프레임 %d개"), Sim->GetRunId(), Sim->GetRecord().frames.Num()));
 }
 
 // ===== 패널 드래그 (기존 패널 선례와 동일) =====
@@ -256,9 +272,11 @@ void UParkingSimWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTim
 	{
 		return;
 	}
-	AParkingSimManager* Sim = AParkingSimManager::GetOrSpawn(GetWorld());
+	// 여러 건이 동시에 돌 수 있으므로 "도는 건수 + 가장 최근 주행"을 한 줄에 보여준다.
+	AParkingSimManager* Sim = AParkingSimManager::LatestRun(GetWorld());
 	if (!Sim)
 	{
+		StatusText->SetText(FText::FromString(TEXT("상태: 대기   주행 0건")));
 		return;
 	}
 
@@ -266,6 +284,7 @@ void UParkingSimWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTim
 	// 면 번호의 뜻이 방향에 따라 다르다(입차=목표, 출차=출발).
 	const FString SlotLabel = R.simMode.IsEmpty() ? TEXT("대상") : R.simMode;
 	StatusText->SetText(FText::FromString(FString::Printf(
-		TEXT("상태: %s   경과 %.1fs   이동 %.1fm   %s %d-%d면"),
-		*Sim->GetPhaseLabel(), Sim->GetElapsed(), Sim->GetDistance(), *SlotLabel, R.presetId, R.slotIndex)));
+		TEXT("주행 %d건   #%d %s   경과 %.1fs   이동 %.1fm   %s %d-%d면"),
+		AParkingSimManager::CountBusyRuns(GetWorld()), Sim->GetRunId(), *Sim->GetPhaseLabel(),
+		Sim->GetElapsed(), Sim->GetDistance(), *SlotLabel, R.presetId, R.slotIndex)));
 }

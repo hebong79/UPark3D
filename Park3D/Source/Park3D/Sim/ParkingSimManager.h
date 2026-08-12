@@ -2,6 +2,11 @@
 // ParkingSimManager : 차량 1대의 입차(입구 → 무작위 주차면)와 출차(무작위 주차면 → 출구)를 시뮬레이션한다.
 // 두 방향은 같은 경로 골격을 뒤집어 쓴다. 출차는 출구에 닿는 순간 차량을 제거한다.
 //
+// 액터 1개 = 주행 1건이다. 주행 상태(경로·위치·기록·리플레이)가 전부 이 액터의 멤버이고 Tick 이 그 상태를
+// 돌리므로, 동시에 여러 대를 굴리려면 액터를 그만큼 스폰한다(SpawnRun). 각 주행은 RunId 로 식별하고
+// 완료 뒤에도 기록 조회를 위해 액터가 남는다(KeepFinishedRuns 를 넘으면 오래된 것부터 정리).
+// 주의: 차량 간 충돌 회피는 없다 — 경로가 겹치면 두 차가 서로 통과한다.
+//
 // 기하 권위는 AParkingPresetManager::ComputeSlotCorners 다(라인/데칼/차량배치와 같은 사각형 위에서 움직인다).
 // 경로는 탐색 없이 "입구 → 통로 → 진입점 → 주차면 중심" 4점으로 만든다. 통로는 대상 면의 열린 쪽
 // (맞은편 열이 없는 쪽) 앞을 지나는 직선이며, 입구가 주차장 바깥에 있으므로 첫 구간은 항상 외곽을 지난다.
@@ -42,10 +47,39 @@ class PARK3D_API AParkingSimManager : public AActor
 public:
 	AParkingSimManager();
 
-	/** 월드에서 찾거나 없으면 스폰(다른 매니저들과 같은 관례). */
-	static AParkingSimManager* GetOrSpawn(UWorld* World);
+	/** 동시에 굴릴 수 있는 주행 수 상한(폭주 방지). */
+	static constexpr int32 MaxConcurrentRuns = 16;
+	/** 끝난 주행 액터를 몇 건까지 남겨 둘지(기록 조회용). 넘으면 오래된 것부터 파괴한다. */
+	static constexpr int32 KeepFinishedRuns = 20;
+
+	/**
+	 * 새 주행용 매니저를 스폰한다(RunId 자동 부여). 기존 주행은 건드리지 않으므로 동시에 여러 건이 돈다.
+	 * 활성 주행이 MaxConcurrentRuns 를 넘으면 nullptr 을 돌려주고 OutError 를 채운다.
+	 */
+	static AParkingSimManager* SpawnRun(UWorld* World, FString& OutError);
+
+	/** RunId 로 주행을 찾는다(없으면 nullptr). */
+	static AParkingSimManager* FindRun(UWorld* World, int32 RunId);
+
+	/** 월드의 모든 주행을 RunId 오름차순으로 모은다(끝난 주행 포함). */
+	static void CollectRuns(UWorld* World, TArray<AParkingSimManager*>& Out);
+
+	/** 가장 최근에 만들어진 주행(없으면 nullptr). runId 를 생략한 RPC·HUD 의 기본 대상이다. */
+	static AParkingSimManager* LatestRun(UWorld* World);
+
+	/** 지금 움직이고 있는(주행 또는 리플레이) 주행 수. */
+	static int32 CountBusyRuns(UWorld* World);
 
 	virtual void Tick(float DeltaSeconds) override;
+
+	/** 이 주행의 식별자(1부터). 완료 후에도 유지된다. */
+	int32 GetRunId() const { return RunId; }
+
+	/** 주행 중인가(이동/정지). 리플레이는 제외. */
+	bool IsDriving() const { return State == EParkSimState::Moving || State == EParkSimState::Stopped; }
+
+	/** 주행이든 리플레이든 진행 중인가(정리·상한 판정 기준). */
+	bool IsBusy() const { return IsDriving() || State == EParkSimState::Replay; }
 
 	/**
 	 * 시뮬레이션 시작. 진행 중이면 기존 주행을 버리고 새로 시작한다.
@@ -144,6 +178,12 @@ private:
 	/** 모든 프리셋의 모든 면을 주행용 기하로 펼친다. */
 	void BuildAllSlots(TArray<FParkSimSlot>& Out);
 
+	/** 다른 주행이 지금 쓰고 있는 (프리셋 idx, 면 번호) 집합. 같은 면에 두 대가 겹치지 않게 후보에서 뺀다. */
+	void CollectOccupiedSlots(TSet<TPair<int32, int32>>& Out) const;
+
+	/** 끝난 주행 액터가 KeepFinishedRuns 를 넘으면 오래된 것부터 파괴한다(SpawnRun 에서 호출). */
+	static void PruneFinishedRuns(UWorld* World);
+
 	/** 대상 면이 드나들 수 있는 쪽(±DepthDir)을 고른다. 맞은편 열에 막히지 않은 쪽 우선. */
 	FVector2D ChooseOpenDir(const FParkSimSlot& Target, const TArray<FParkSimSlot>& All, const FBox2D& Bounds) const;
 
@@ -172,6 +212,9 @@ private:
 	bool LoadLatestRecord();
 
 	// ---- 상태 ----
+	/** 주행 식별자. SpawnRun 이 월드의 최대값+1 로 채운다(0 이면 아직 미부여). */
+	UPROPERTY(Transient) int32 RunId = 0;
+
 	EParkSimState State = EParkSimState::Idle;
 	EParkSimState StateBeforeReplay = EParkSimState::Idle;
 

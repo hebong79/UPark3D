@@ -34,6 +34,12 @@ public:
 	//~ APawn: 이동 입력을 RMB 보유 시에만 적용(Left Alt 패닝 중에는 차단)
 	virtual void AddMovementInput(FVector WorldDirection, float ScaleValue = 1.0f, bool bForce = false) override;
 
+	/**
+	 * ADefaultPawn: 좌/우 방향키는 엔진 기본 매핑상 이동이 아니라 요 회전(DefaultPawn_TurnRate)이다.
+	 * 이 경로는 AddControllerYawInput 이라 AddMovementInput 게이트를 지나지 않으므로 여기서 따로 막는다.
+	 */
+	virtual void TurnAtRate(float Rate) override;
+
 	//~ AActor: Left Alt+방향키 패닝 처리
 	virtual void Tick(float DeltaSeconds) override;
 

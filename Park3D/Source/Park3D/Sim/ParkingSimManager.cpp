@@ -154,10 +154,10 @@ void AParkingSimManager::CollectOccupiedSlots(TSet<TPair<int32, int32>>& Out) co
 	CollectRuns(GetWorld(), Runs);
 	for (const AParkingSimManager* R : Runs)
 	{
-		// 자기 자신과 이미 끝난 주행은 면을 붙잡고 있지 않다.
-		// 입차가 끝난 주행은 차량이 그 면에 남아 있으므로 Parked 도 점유로 본다.
-		if (R == this) { continue; }
-		if (!R->IsBusy() && R->State != EParkSimState::Parked) { continue; }
+		// "지금 그 면을 향해 움직이는 중"인 주행만 면을 붙잡는다.
+		// 끝난 주행은 차량이 남아 있어도 여기서 보지 않는다 — 서 있는 차량은 FindCarInSlot 이
+		// 실제 위치로 판정한다. 여기서까지 막으면 출차가 그 차를 빼내지 못한다.
+		if (R == this || !R->IsBusy()) { continue; }
 		Out.Add(TPair<int32, int32>(R->Record.presetId, R->Record.slotIndex));
 	}
 }
@@ -454,39 +454,56 @@ bool AParkingSimManager::StartSim(EParkSimDir InDir, int32 InPresetId, int32 InS
 	}
 
 	// 대상 면 선정(요구사항: 랜덤). presetId/slotIndex 를 주면 그 범위로 좁힌다.
-	// 동시 주행 중인 다른 주행이 쓰고 있는 면은 뺀다 — 안 그러면 두 대가 같은 면에 겹쳐 선다.
+	//  - 다른 주행이 쓰고 있는 면은 양쪽 다 뺀다(두 대가 같은 면에 겹쳐 서는 것 방지).
+	//  - 입차는 "빈 면"만 고른다. 이미 차가 서 있는 면을 목표로 삼으면 도착점에서 반드시 겹친다.
+	//  - 출차는 반대로 "차가 서 있는 면"을 고르고 그 차를 몰고 나간다. 예전처럼 새 차를 스폰하면
+	//    이미 서 있던 차 위에 한 대가 더 얹힌다.
 	TSet<TPair<int32, int32>> Occupied;
 	CollectOccupiedSlots(Occupied);
 
-	TArray<int32> Candidates;
-	int32 SkippedByOccupancy = 0;
+	TArray<int32> EmptySlots;     // 차가 없는 면
+	TArray<int32> ParkedSlots;    // 차가 서 있는 면
+	int32 SkippedByRun = 0;
 	for (int32 i = 0; i < Slots.Num(); ++i)
 	{
 		if (InPresetId > 0 && Slots[i].PresetId != InPresetId) { continue; }
 		if (InSlotIndex > 0 && Slots[i].SlotIndex != InSlotIndex) { continue; }
 		if (Occupied.Contains(TPair<int32, int32>(Slots[i].PresetId, Slots[i].SlotIndex)))
 		{
-			++SkippedByOccupancy;
+			++SkippedByRun;
 			continue;
 		}
-		Candidates.Add(i);
+		(FindCarInSlot(Slots[i]) ? ParkedSlots : EmptySlots).Add(i);
 	}
+
+	// 입차는 빈 면만. 출차는 서 있는 차를 우선 빼내고, 그런 면이 없을 때만 빈 면에서 새로 만들어 내보낸다.
+	const TArray<int32>& Candidates = (InDir == EParkSimDir::Enter)
+		? EmptySlots
+		: (ParkedSlots.Num() > 0 ? ParkedSlots : EmptySlots);
+
 	if (Candidates.Num() == 0)
 	{
-		OutError = (SkippedByOccupancy > 0)
-			? FString::Printf(TEXT("쓸 수 있는 주차면이 없습니다 — 조건에 맞는 %d개를 다른 주행이 사용 중입니다(presetId=%d slotIndex=%d)."),
-				SkippedByOccupancy, InPresetId, InSlotIndex)
-			: FString::Printf(TEXT("조건에 맞는 주차면이 없습니다(presetId=%d slotIndex=%d)."), InPresetId, InSlotIndex);
+		if (InDir == EParkSimDir::Enter && ParkedSlots.Num() > 0)
+		{
+			OutError = FString::Printf(TEXT("빈 주차면이 없습니다 — 조건에 맞는 %d개에 이미 차량이 서 있습니다(presetId=%d slotIndex=%d)."),
+				ParkedSlots.Num(), InPresetId, InSlotIndex);
+		}
+		else
+		{
+			OutError = (SkippedByRun > 0)
+				? FString::Printf(TEXT("쓸 수 있는 주차면이 없습니다 — 조건에 맞는 %d개를 다른 주행이 사용 중입니다(presetId=%d slotIndex=%d)."),
+					SkippedByRun, InPresetId, InSlotIndex)
+				: FString::Printf(TEXT("조건에 맞는 주차면이 없습니다(presetId=%d slotIndex=%d)."), InPresetId, InSlotIndex);
+		}
 		return false;
 	}
 
 	FRandomStream Stream = Seed > 0 ? FRandomStream(Seed) : FRandomStream(FMath::Rand());
 	const FParkSimSlot& Target = Slots[Candidates[Stream.RandRange(0, Candidates.Num() - 1)]];
 
-	// 전면/후면 결정. 랜덤은 같은 스트림에서 뽑아 seed 재현성을 유지한다.
-	const EParkSimParkMode Resolved = (Mode == EParkSimParkMode::Random)
-		? (Stream.FRand() < 0.5f ? EParkSimParkMode::Front : EParkSimParkMode::Rear)
-		: Mode;
+	// 출차면 이 면에 서 있는 차량을 그대로 인수한다(새로 만들지 않는다).
+	ACarActor* const ExistingCar = (InDir == EParkSimDir::Exit) ? FindCarInSlot(Target) : nullptr;
+
 	RunDir = InDir;
 	bReverseLogged = false;
 
@@ -497,8 +514,27 @@ bool AParkingSimManager::StartSim(EParkSimDir InDir, int32 InPresetId, int32 InS
 	const FVector2D Lane = Front + Target.RowDir * LaneT;
 	const bool bUseLane = FMath::Abs(LaneT) > ArriveRadiusM * 1.5f;
 
+	// 전면/후면 결정. 랜덤은 같은 스트림에서 뽑아 seed 재현성을 유지한다.
+	// 인수한 차량이 있으면 요청 모드가 아니라 그 차의 실제 자세를 따른다 — 서 있는 방향을 무시하고
+	// 빼내면 차가 그 자리에서 획 돌아버린다.
+	EParkSimParkMode Resolved;
+	if (ExistingCar)
+	{
+		const float Facing = FVector2D::DotProduct(Dir2D(ExistingCar->CarData.rotY), OpenDir);
+		Resolved = (Facing > 0.f) ? EParkSimParkMode::Rear : EParkSimParkMode::Front;
+	}
+	else
+	{
+		Resolved = (Mode == EParkSimParkMode::Random)
+			? (Stream.FRand() < 0.5f ? EParkSimParkMode::Front : EParkSimParkMode::Rear)
+			: Mode;
+	}
+
 	// 주차 자세: 후면주차는 코가 통로 쪽(+OpenDir), 전면주차는 면 안쪽(-OpenDir).
-	const float ParkedYaw = (Resolved == EParkSimParkMode::Rear) ? Yaw2D(OpenDir) : Yaw2D(-OpenDir);
+	// 인수한 차량은 실제 방위를 그대로 써서 출발 순간에 자세가 튀지 않게 한다.
+	const float ParkedYaw = ExistingCar
+		? ExistingCar->CarData.rotY
+		: ((Resolved == EParkSimParkMode::Rear) ? Yaw2D(OpenDir) : Yaw2D(-OpenDir));
 
 	Waypoints.Reset();
 	WaypointRoles.Reset();
@@ -543,7 +579,10 @@ bool AParkingSimManager::StartSim(EParkSimDir InDir, int32 InPresetId, int32 InS
 		// 전면주차 차량은 코가 면 안쪽이므로 후진으로 빠져나온다. 후면주차는 그대로 전진.
 		ReverseLegIndex = (Resolved == EParkSimParkMode::Front) ? 0 : INDEX_NONE;
 
-		StartPos = Target.Center;
+		// 인수한 차량은 서 있던 자리에서 그대로 출발한다(면 중심으로 순간이동시키지 않는다).
+		StartPos = ExistingCar
+			? FVector2D(ExistingCar->CarData.pos.x, ExistingCar->CarData.pos.y)
+			: Target.Center;
 		StartYaw = ParkedYaw;
 	}
 
@@ -584,7 +623,7 @@ bool AParkingSimManager::StartSim(EParkSimDir InDir, int32 InPresetId, int32 InS
 		}
 	}
 
-	// 차량 1대 생성(이전 주행 차량은 치운다).
+	// 차량 확보(이전 주행 차량은 치운다).
 	ACarPlacementManager* CarMgr = FindCarManager();
 	if (!CarMgr)
 	{
@@ -592,6 +631,27 @@ bool AParkingSimManager::StartSim(EParkSimDir InDir, int32 InPresetId, int32 InS
 		return false;
 	}
 	RemoveCar();
+
+	// 출차로 인수한 차량이 있으면 그 차를 그대로 몰고 나간다.
+	if (ExistingCar)
+	{
+		Car = ExistingCar;
+		Record.carId = Car->CarData.id;
+		State = EParkSimState::Idle;
+		SetSimState(EParkSimState::Moving);
+		LogEvent(FString::Printf(
+			TEXT("출차 시작 — 프리셋 %d / %d번 면에 서 있던 차량 %s 를 인수(%.2f, %.2f), 출구(%.2f, %.2f), %s(%s)"),
+			Target.PresetId, Target.SlotIndex, *Record.carId, StartPos.X, StartPos.Y, Entrance.X, Entrance.Y,
+			*Record.parkMode,
+			ReverseLegIndex != INDEX_NONE ? TEXT("후진으로 면을 빠져나옴 · 차 앞이 면 안쪽") : TEXT("전진으로 면을 빠져나옴 · 차 앞이 통로 쪽")));
+		for (int32 i = 0; i < Waypoints.Num(); ++i)
+		{
+			LogEvent(FString::Printf(TEXT("경로 %d/%d %s (%.2f, %.2f)"),
+				i + 1, Waypoints.Num(), *WaypointRoles[i], Waypoints[i].X, Waypoints[i].Y));
+		}
+		RecordFrame(/*bForce=*/true);
+		return true;
+	}
 
 	const TArray<FCarPresetEntry>& Catalog = EnsureCatalog();
 	FCarPos NewCar;
@@ -790,7 +850,21 @@ void AParkingSimManager::TickDrive(float Dt)
 	}
 
 	// 앞차가 있으면 여기서 한 번 더 깎는다(조향은 건드리지 않는다 — 경로를 벗어나 피하지는 않는다).
-	TargetSpeed = ApplyAvoidance(TargetSpeed, Dir2D(YawDeg) * (bReverseLeg ? -1.f : 1.f), Dt);
+	// 마지막 구간에서는 목적지까지만 본다 — 마주 보는 뒷열에 주차된 차를 "앞을 막는 차"로 오인하면
+	// 자기 주차면 코앞에서 서 버린다.
+	TargetSpeed = ApplyAvoidance(TargetSpeed, Dir2D(YawDeg) * (bReverseLeg ? -1.f : 1.f),
+		bFinalLeg ? Dist : AvoidLookAheadM, Dt);
+
+	// 움직이지 않는 차량에 막힌 경우는 기다려도 풀리지 않는다. 뚫고 지나가지 않고 주행을 접는다
+	// (겹쳐 통과하는 것보다 "막혔다"고 알리는 편이 낫다). 다른 주행끼리의 대치는 ApplyAvoidance 가 푼다.
+	if (BlockerRunId == 0 && BlockedSec > AvoidDeadlockSec)
+	{
+		LogEvent(FString::Printf(TEXT("정체 중단 — 서 있는 차량에 %.1f초 막혀 통로가 열리지 않습니다(위치 %.2f, %.2f)"),
+			BlockedSec, PosM.X, PosM.Y));
+		SpeedMps = 0.f;
+		FinishRun(TEXT("정체중단"));
+		return;
+	}
 
 	SpeedMps = (SpeedMps < TargetSpeed)
 		? FMath::Min(TargetSpeed, SpeedMps + AccelMps2 * Dt)
@@ -851,47 +925,72 @@ void AParkingSimManager::TickDrive(float Dt)
 	}
 }
 
-float AParkingSimManager::ApplyAvoidance(float InTargetSpeed, const FVector2D& TravelDir, float Dt)
+ACarActor* AParkingSimManager::FindCarInSlot(const FParkSimSlot& Slot) const
+{
+	ACarPlacementManager* CarMgr = FindCarManager();
+	if (!CarMgr)
+	{
+		return nullptr;
+	}
+	for (const TObjectPtr<ACarActor>& C : CarMgr->GetCars())
+	{
+		if (!IsValid(C))
+		{
+			continue;
+		}
+		if (IsInsideQuad(FVector2D(C->CarData.pos.x, C->CarData.pos.y), Slot.Corners))
+		{
+			return C;
+		}
+	}
+	return nullptr;
+}
+
+float AParkingSimManager::ApplyAvoidance(float InTargetSpeed, const FVector2D& TravelDir, float MaxRangeM, float Dt)
 {
 	if (!bAvoidCollision)
 	{
 		return InTargetSpeed;
 	}
 
-	// 내 진행 통로 안에서 가장 가까운 앞차를 찾는다. 서 있는(주차 완료) 차량은 통로 밖이라 보지 않는다.
-	TArray<AParkingSimManager*> Runs;
-	CollectRuns(GetWorld(), Runs);
-
-	float NearestGap = TNumericLimits<float>::Max();
-	int32 NearestId = INDEX_NONE;
-	for (const AParkingSimManager* R : Runs)
+	ACarPlacementManager* CarMgr = FindCarManager();
+	if (!CarMgr)
 	{
-		if (R == this || !R->IsDriving() || !IsValid(R->Car))
+		return InTargetSpeed;
+	}
+
+	// 내 진행 통로 안에서 가장 가까운 장애물을 찾는다. 주차장의 모든 차량이 대상이다 —
+	// 다른 주행 차량뿐 아니라 손으로/랜덤으로 배치돼 서 있는 차량도 막으면 선다.
+	float NearestGap = TNumericLimits<float>::Max();
+	ACarActor* Nearest = nullptr;
+	for (const TObjectPtr<ACarActor>& C : CarMgr->GetCars())
+	{
+		if (!IsValid(C) || C == Car)
 		{
 			continue;
 		}
-		const FVector2D Rel = R->PosM - PosM;
+		const FVector2D Rel = FVector2D(C->CarData.pos.x, C->CarData.pos.y) - PosM;
 		const float Along = FVector2D::DotProduct(Rel, TravelDir);
-		if (Along <= 0.f || Along > AvoidLookAheadM)
+		if (Along <= 0.f || Along > FMath::Min(AvoidLookAheadM, MaxRangeM))
 		{
-			continue;   // 뒤에 있거나 너무 멀다.
+			continue;   // 뒤에 있거나, 감시 범위 밖이거나, 내 목적지보다 멀다.
 		}
 		if (FMath::Abs(FVector2D::CrossProduct(TravelDir, Rel)) > AvoidCorridorHalfM)
 		{
-			continue;   // 옆으로 비켜 있다(마주 오는 차선 등).
+			continue;   // 옆으로 비켜 있다(마주 오는 차선, 통로 옆 주차면 등).
 		}
 		if (Along < NearestGap)
 		{
 			NearestGap = Along;
-			NearestId = R->RunId;
+			Nearest = C;
 		}
 	}
 
-	if (NearestId == INDEX_NONE)
+	if (!Nearest)
 	{
 		if (BlockerRunId != INDEX_NONE)
 		{
-			LogEvent(FString::Printf(TEXT("전방 정리 — #%d 이 비켰습니다, 주행 재개"), BlockerRunId));
+			LogEvent(TEXT("전방 정리 — 앞이 비었습니다, 주행 재개"));
 			BlockerRunId = INDEX_NONE;
 		}
 		BlockedSec = 0.f;
@@ -899,12 +998,30 @@ float AParkingSimManager::ApplyAvoidance(float InTargetSpeed, const FVector2D& T
 		return InTargetSpeed;
 	}
 
+	// 막고 있는 것이 다른 주행의 차량이면 그 RunId, 그냥 서 있는 차량이면 0(정적 장애물).
+	int32 NearestId = 0;
+	{
+		TArray<AParkingSimManager*> Runs;
+		CollectRuns(GetWorld(), Runs);
+		for (const AParkingSimManager* R : Runs)
+		{
+			if (R != this && R->IsDriving() && R->Car == Nearest)
+			{
+				NearestId = R->RunId;
+				break;
+			}
+		}
+	}
+
 	if (BlockerRunId != NearestId)
 	{
 		BlockerRunId = NearestId;
 		bDeadlockLogged = false;
-		LogEvent(FString::Printf(TEXT("전방 회피 — #%d 이 %.1fm 앞에 있어 감속(안전거리 %.1fm)"),
-			NearestId, NearestGap, AvoidSafeGapM));
+		LogEvent(NearestId > 0
+			? FString::Printf(TEXT("전방 회피 — #%d 이 %.1fm 앞에 있어 감속(안전거리 %.1fm)"),
+				NearestId, NearestGap, AvoidSafeGapM)
+			: FString::Printf(TEXT("전방 회피 — 서 있는 차량 %s 이 %.1fm 앞에 있어 감속(안전거리 %.1fm)"),
+				*Nearest->CarData.id, NearestGap, AvoidSafeGapM));
 	}
 
 	// 안전거리 앞에서 설 수 있는 속도. 간격이 안전거리 이내면 0 이 되어 멈춘다.
@@ -919,8 +1036,9 @@ float AParkingSimManager::ApplyAvoidance(float InTargetSpeed, const FVector2D& T
 
 	// 굳었다. 마주 보고 선 두 대가 영원히 서 있지 않도록, 먼저 시작한(RunId 가 작은) 쪽이 통과한다.
 	// 사이클이 생길 수 없는 순서라 교착이 남지 않는다 — 대신 이 순간 두 차가 겹쳐 지나간다.
+	// 서 있는 차량(NearestId == 0)에는 이 규칙을 쓰지 않는다. 뚫고 가지 않고 TickDrive 가 주행을 접는다.
 	BlockedSec += Dt;
-	if (BlockedSec > AvoidDeadlockSec && RunId < NearestId)
+	if (NearestId > 0 && BlockedSec > AvoidDeadlockSec && RunId < NearestId)
 	{
 		if (!bDeadlockLogged)
 		{

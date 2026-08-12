@@ -211,6 +211,12 @@ private:
 	/** 볼록 사각형 내부 판정. */
 	static bool IsInsideQuad(const FVector2D& P, const FVector2D(&Q)[4]);
 
+	/**
+	 * 이 주차면 안에 서 있는 차량(없으면 nullptr). 손으로 배치했든 랜덤이든 시뮬이 세웠든 가리지 않는다.
+	 * 입차는 이걸로 "빈 면"을 고르고, 출차는 이걸로 "몰고 나갈 차"를 고른다.
+	 */
+	ACarActor* FindCarInSlot(const FParkSimSlot& Slot) const;
+
 	/** DT_CarCatalog 를 1회 로드해 캐시(RPC·UI 어느 쪽에서 시작해도 같은 카탈로그를 쓴다). */
 	const TArray<FCarPresetEntry>& EnsureCatalog();
 
@@ -219,11 +225,14 @@ private:
 
 	/**
 	 * 전방 감시로 목표 속도를 깎는다. 진행 통로(폭 ±AvoidCorridorHalfM, 길이 AvoidLookAheadM) 안에
-	 * 다른 주행 차량이 있으면 그 앞 AvoidSafeGapM 에서 설 수 있는 속도로 제한한다.
-	 * 서로 막아 AvoidDeadlockSec 이상 굳으면 RunId 가 작은 쪽이 통과해 교착을 끊는다.
+	 * 차량이 있으면 그 앞 AvoidSafeGapM 에서 설 수 있는 속도로 제한한다. 대상은 주차장의 모든 차량이다
+	 * — 다른 주행 차량이든 그냥 서 있는 차량이든 막으면 선다.
+	 * 다른 주행과 서로 막아 AvoidDeadlockSec 이상 굳으면 RunId 가 작은 쪽이 통과해 교착을 끊는다.
+	 * 서 있는 차량에 막힌 경우는 여기서 풀지 않는다(TickDrive 가 "정체중단"으로 접는다).
 	 * @param TravelDir 실제로 나아가는 방향(후진 구간은 차 방위의 반대).
+	 * @param MaxRangeM 이 거리 너머는 보지 않는다. 마지막 구간에서 목적지 뒤의 주차 차량을 오인하지 않게 한다.
 	 */
-	float ApplyAvoidance(float InTargetSpeed, const FVector2D& TravelDir, float Dt);
+	float ApplyAvoidance(float InTargetSpeed, const FVector2D& TravelDir, float MaxRangeM, float Dt);
 	void TickReplay(float Dt);
 	void ApplyCarPose(const FVector2D& PosM, float YawDegIn);
 
@@ -285,7 +294,10 @@ private:
 	// 충돌 회피 상태
 	/** 회피 때문에 서 있은 시간(교착 판정용). 길이 뚫리면 0 으로 돌아간다. */
 	float BlockedSec = 0.f;
-	/** 지금 내 앞을 막고 있는 주행의 RunId(없으면 INDEX_NONE). 바뀔 때만 로그를 남긴다. */
+	/**
+	 * 지금 내 앞을 막고 있는 대상. INDEX_NONE=없음, 0=그냥 서 있는 차량, >0=그 RunId 의 주행 차량.
+	 * 바뀔 때만 로그를 남긴다.
+	 */
 	int32 BlockerRunId = INDEX_NONE;
 	/** 이번 교착에서 "우선순위 통과" 로그를 이미 남겼는가. */
 	bool bDeadlockLogged = false;

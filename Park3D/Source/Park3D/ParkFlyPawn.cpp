@@ -48,6 +48,17 @@ void AParkFlyPawn::AddMovementInput(FVector WorldDirection, float ScaleValue, bo
 	}
 }
 
+void AParkFlyPawn::TurnAtRate(float Rate)
+{
+	// 좌/우 방향키가 물려 있는 회전축. Left Alt 보유 중에는 패닝이 좌우를 전담한다.
+	if (IsLeftAltHeld())
+	{
+		return;
+	}
+
+	Super::TurnAtRate(Rate);
+}
+
 void AParkFlyPawn::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);

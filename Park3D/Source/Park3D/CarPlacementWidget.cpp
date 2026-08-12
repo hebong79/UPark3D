@@ -267,6 +267,9 @@ void UCarPlacementWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaT
 	// 좌클릭(Ctrl 없이): 차량을 집으면 선택. Ctrl+좌클릭: 배치 모드일 때 빈 바닥에 차량 추가.
 	// UI 패널(RootBorder) 위 클릭은 제외해 패널 뒤 차량의 오선택을 방지.
 	const bool bCtrl = PC->IsInputKeyDown(EKeys::LeftControl) || PC->IsInputKeyDown(EKeys::RightControl);
+	// Left Alt 는 ParkFlyPawn 의 화면기준 패닝 수정자. (PIE 가 Alt 를 가로챌 수 있어 Slate 수정자도 함께 본다)
+	const bool bLeftAlt = PC->IsInputKeyDown(EKeys::LeftAlt)
+		|| (FSlateApplication::IsInitialized() && FSlateApplication::Get().GetModifierKeys().IsLeftAltDown());
 	const bool bOverPanel = (RootBorder && RootBorder->IsHovered());
 	if (!bOverPanel && PC->WasInputKeyJustPressed(EKeys::LeftMouseButton))
 	{
@@ -301,7 +304,8 @@ void UCarPlacementWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaT
 
 	// 선택 차량 WASD/방향키 이동(회전 모드면 좌우키로 회전). 배치 모드에서만.
 	// RMB(카메라 조작) 보유 중이면 양보 — ParkFlyPawn 의 WASD 와 충돌 방지.
-	if (bPlacing && CarData.datas.IsValidIndex(PrimaryIndex) && !PC->IsInputKeyDown(EKeys::RightMouseButton))
+	// Left Alt 보유 중에도 양보 — Alt+방향키는 ParkFlyPawn 의 화면기준 패닝이다.
+	if (bPlacing && CarData.datas.IsValidIndex(PrimaryIndex) && !bLeftAlt && !PC->IsInputKeyDown(EKeys::RightMouseButton))
 	{
 		ACarPlacementManager* Mgr = GetCarManager();
 		ACarActor* Car = Mgr ? Mgr->GetCar(PrimaryIndex) : nullptr;

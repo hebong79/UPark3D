@@ -625,6 +625,12 @@ FReply UPresetMakerWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FK
 			return FReply::Handled();
 		}
 
+		// Left Alt+방향키는 ParkFlyPawn 의 화면기준 패닝이므로 소비하지 않고 폰으로 양보한다.
+		if (InKeyEvent.IsLeftAltDown())
+		{
+			return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
+		}
+
 		// 이동/회전은 선택된 프리셋이 있을 때만.
 		if (Presets.IsValidIndex(SelectedIndex))
 		{

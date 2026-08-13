@@ -48,6 +48,22 @@ void AParkFlyPawn::AddMovementInput(FVector WorldDirection, float ScaleValue, bo
 	}
 }
 
+void AParkFlyPawn::MoveForward(float Val)
+{
+	if (Val != 0.0f && Controller)
+	{
+		AddMovementInput(GetGroundMoveAxis(EAxis::X), Val);
+	}
+}
+
+void AParkFlyPawn::MoveRight(float Val)
+{
+	if (Val != 0.0f && Controller)
+	{
+		AddMovementInput(GetGroundMoveAxis(EAxis::Y), Val);
+	}
+}
+
 void AParkFlyPawn::TurnAtRate(float Rate)
 {
 	// 좌/우 방향키가 물려 있는 회전축. Left Alt 보유 중에는 패닝이 좌우를 전담한다.
@@ -109,6 +125,14 @@ void AParkFlyPawn::OnMouseWheelDown()
 void AParkFlyPawn::ZoomAlongView(float Amount)
 {
 	AddActorWorldOffset(GetViewRotation().Vector() * Amount, /*bSweep=*/false);
+}
+
+FVector AParkFlyPawn::GetGroundMoveAxis(EAxis::Type Axis) const
+{
+	// 시선 벡터를 투영해 평탄화하면 수직으로 내려다볼 때 전방 길이가 0 이 되므로, 요만 남긴 회전에서
+	// 축을 새로 만든다. 어떤 피치/롤에서도 전방=(cos yaw, sin yaw, 0), 우측=(-sin yaw, cos yaw, 0).
+	const FRotator GroundRot(0.0f, Controller ? Controller->GetControlRotation().Yaw : GetActorRotation().Yaw, 0.0f);
+	return FRotationMatrix(GroundRot).GetScaledAxis(Axis);
 }
 
 bool AParkFlyPawn::IsLeftAltHeld() const

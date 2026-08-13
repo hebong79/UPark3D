@@ -35,6 +35,16 @@ public:
 	virtual void AddMovementInput(FVector WorldDirection, float ScaleValue = 1.0f, bool bForce = false) override;
 
 	/**
+	 * ADefaultPawn: W/S(및 같은 축의 상/하 방향키)는 기본적으로 피치까지 포함한 시선 방향으로 이동해
+	 * 내려다보면 바닥으로 파고들고 올려다보면 떠오른다. 요(yaw)만 남긴 지면 평면 전방으로 바꿔
+	 * 화면에 보이는 앞뒤로만 이동하게 한다(월드 Z 성분 0, 높이는 Q/E 가 전담).
+	 */
+	virtual void MoveForward(float Val) override;
+
+	/** 위와 같은 이유로 A/D 도 요만 남긴 지면 평면 우측 축으로 이동한다(롤이 끼어도 Z 성분 0 보장). */
+	virtual void MoveRight(float Val) override;
+
+	/**
 	 * ADefaultPawn: 좌/우 방향키는 엔진 기본 매핑상 이동이 아니라 요 회전(DefaultPawn_TurnRate)이다.
 	 * 이 경로는 AddControllerYawInput 이라 AddMovementInput 게이트를 지나지 않으므로 여기서 따로 막는다.
 	 */
@@ -63,6 +73,9 @@ private:
 
 	/** 시선 방향으로 Amount(cm) 만큼 이동. 휠 줌 공용. */
 	void ZoomAlongView(float Amount);
+
+	/** 컨트롤 회전에서 요만 남긴 지면 평면 축(EAxis::X=전방, EAxis::Y=우측). Z 성분은 항상 0. */
+	FVector GetGroundMoveAxis(EAxis::Type Axis) const;
 
 	/**
 	 * Left Alt 보유 여부. PlayerController 폴링이 비면 Slate 수정자 키로 한 번 더 본다

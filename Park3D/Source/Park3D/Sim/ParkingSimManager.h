@@ -89,8 +89,10 @@ public:
 	 * @param Seed        0 이하면 비결정.
 	 * @param Mode        전면/후면/랜덤 주차. 랜덤은 같은 Seed 스트림에서 50:50 으로 뽑는다.
 	 *                    출차에서는 "출발 시점의 주차 자세"이며, 전면주차면 슬롯에서 후진으로 빠져나온다.
+	 * @param InPrefabId  0 이하면 카탈로그에서 무작위. 지정하면 그 차종으로 스폰한다(가림 연출은 가리개 크기가 중요하다).
 	 */
-	bool StartSim(EParkSimDir Dir, int32 InPresetId, int32 InSlotIndex, int32 Seed, EParkSimParkMode Mode, FString& OutError);
+	bool StartSim(EParkSimDir Dir, int32 InPresetId, int32 InSlotIndex, int32 Seed, EParkSimParkMode Mode,
+		FString& OutError, int32 InPrefabId = 0);
 
 	/** 주행 중단. bRemoveCar 면 차량도 제거한다. */
 	void StopSim(bool bRemoveCar);
@@ -105,7 +107,7 @@ public:
 	 * @param bReplay false 면 StartSim 과 동일(주행까지만).
 	 */
 	bool StartScenario(EParkSimDir Dir, int32 InPresetId, int32 InSlotIndex, int32 Seed, EParkSimParkMode Mode,
-		bool bReplay, float ReplayDelaySec, float ReplaySpeedScale, FString& OutError);
+		bool bReplay, float ReplayDelaySec, float ReplaySpeedScale, FString& OutError, int32 InPrefabId = 0);
 
 	/** "front"/"rear"/"random"(및 "전면"/"후면") 문자열 → 모드. 빈 문자열/미인식은 Random. */
 	static EParkSimParkMode ParseParkMode(const FString& Text);

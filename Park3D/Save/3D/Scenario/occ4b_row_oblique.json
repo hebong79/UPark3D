@@ -1,0 +1,51 @@
+{
+	"isUnreal": true,
+	"name": "occ4b_row_oblique",
+	"desc": "시나리오 4 변형 — 열에서 옆으로 비껴 선 카메라(사선). 축 위에서는 구배가 안 나와 비교용으로 만든 것",
+	"seed": 20260813,
+	"scene": {
+		"presetFile": "001_Preset_office.json",
+		"carFile": null,
+		"lightFile": "Sangmyung.json"
+	},
+	"cameras": [
+		{
+			"camId": 1,
+			"pos": { "x": -25.0, "y": -14.0, "z": 6.0 },
+			"aim": { "presetIdx": 1, "slot": 6, "widthSlots": 12 }
+		}
+	],
+	"actors": [
+		{ "role": "row", "at": { "presetIdx": 1, "slot": 1 },  "prefabName": "기아_카니발",   "rotY": 180 },
+		{ "role": "row", "at": { "presetIdx": 1, "slot": 2 },  "prefabName": "현대_캐스퍼",   "rotY": 180 },
+		{ "role": "row", "at": { "presetIdx": 1, "slot": 3 },  "prefabName": "현대_스타렉스", "rotY": 180 },
+		{ "role": "row", "at": { "presetIdx": 1, "slot": 4 },  "prefabName": "기아_모닝",     "rotY": 180 },
+		{ "role": "row", "at": { "presetIdx": 1, "slot": 5 },  "prefabName": "기아_봉고_탑차", "rotY": 180 },
+		{ "role": "row", "at": { "presetIdx": 1, "slot": 6 },  "prefabName": "기아_레이",     "rotY": 180 },
+		{ "role": "row", "at": { "presetIdx": 1, "slot": 7 },  "prefabName": "기아_EV9",      "rotY": 180 },
+		{ "role": "row", "at": { "presetIdx": 1, "slot": 8 },  "prefabName": "현대_캐스퍼",   "rotY": 180 },
+		{ "role": "row", "at": { "presetIdx": 1, "slot": 9 },  "prefabName": "현대_싼타페",   "rotY": 180 },
+		{ "role": "row", "at": { "presetIdx": 1, "slot": 10 }, "prefabName": "기아_모닝",     "rotY": 180 },
+		{ "role": "row", "at": { "presetIdx": 1, "slot": 11 }, "prefabName": "기아_카니발",   "rotY": 180 },
+		{ "role": "row", "at": { "presetIdx": 1, "slot": 12 }, "prefabName": "기아_레이",     "rotY": 180 }
+	],
+	"runs": [],
+	"shots": [
+		{
+			"tag": "sweep",
+			"camId": 1,
+			"format": "png",
+			"sweep": {
+				"presetIdx": 1,
+				"from": 1,
+				"to": 12,
+				"color": "magenta",
+				"save": false
+			}
+		}
+	],
+	"measure": {
+		"type": "sweepCurve",
+		"expect": { "monotonicIncrease": true }
+	}
+}

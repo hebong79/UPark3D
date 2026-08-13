@@ -12,6 +12,36 @@
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 
+namespace RpcAim
+{
+	FVector SlotCenterWorld(const FParkingPreset& P, int32 Slot, float MetersToUU)
+	{
+		FVector Corners[4];
+		AParkingPresetManager::ComputeSlotCorners(P, Slot - 1, MetersToUU, /*FaceHeightZ=*/0.f, Corners);
+		return (Corners[0] + Corners[1] + Corners[2] + Corners[3]) * 0.25f;
+	}
+
+	bool AimPTZ(const FVector& CamLocCm, const FVector& TargetCm, float TargetWidthCm,
+		float MaxZoom, float DefaultHFov,
+		float& OutPan, float& OutTilt, float& OutZoom, float& OutHFovDeg, float& OutDistCm)
+	{
+		const FVector Delta = TargetCm - CamLocCm;
+		const float HorizDist = FVector2D(Delta.X, Delta.Y).Size();
+		if (HorizDist <= KINDA_SMALL_NUMBER)
+		{
+			return false;
+		}
+		OutDistCm = Delta.Size();
+		OutPan = FMath::RadiansToDegrees(FMath::Atan2(Delta.Y, Delta.X));
+		// tilt 는 양수가 하향이다(PanTiltToRotator: Pitch = -Tilt) → 아래로 내려갈수록(-Z) 양수.
+		OutTilt = FMath::RadiansToDegrees(FMath::Atan2(-Delta.Z, HorizDist));
+		// 화각은 슬랜트 거리로 잡는다 — 수평거리로 잡으면 내려다보는 각이 클수록 화면이 좁아진다.
+		OutHFovDeg = 2.f * FMath::RadiansToDegrees(FMath::Atan((TargetWidthCm * 0.5f) / OutDistCm));
+		OutZoom = UCameraControlLibrary::HFovToZoom(OutHFovDeg, MaxZoom, DefaultHFov);
+		return true;
+	}
+}
+
 ACarPlacementManager* FRpcModuleBase::GetCarManager(FRpcError& OutError) const
 {
 	UWorld* W = GetWorldPtr();

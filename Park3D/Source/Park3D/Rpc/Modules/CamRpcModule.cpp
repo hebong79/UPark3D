@@ -7,6 +7,7 @@
 #include "../../CameraControlManager.h"
 #include "../../PTZCameraActor.h"
 #include "../../CameraControlLibrary.h"
+#include "../../ParkingPresetManager.h"
 #include "../CamStreamSubsystem.h"
 #include "../../Park3DDataPaths.h"
 #include "Components/SceneCaptureComponent2D.h"
@@ -262,6 +263,72 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 		// 조작 중인 카메라는 스트림 슬롯을 우선 배정받는다(화면이 안 움직이면 제어가 불가능하다).
 		if (UCamStreamSubsystem* S = GetStreamSubsystem(GetWorldPtr())) { S->NotifyPtzCommand(CamId); }
 		return RpcDto::OkTrue();
+	});
+
+	// 주차면 한 칸을 겨냥하도록 pan/tilt/zoom 을 계산해 적용한다.
+	// 시나리오 파일에서 "pan 58.1 / tilt 21.7 / zoom 4.9" 같은 레이아웃 전용 숫자를 없애기 위한 것 —
+	// "1번 프리셋 6번 면을 화면 폭 3칸으로 본다"는 문장은 주차장이 바뀌어도 그대로 성립한다.
+	// 기하 권위는 AParkingPresetManager::ComputeSlotCorners 다(라인/데칼/차량배치와 같은 사각형).
+	Dispatcher.Register(TEXT("cam.aimSlot"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		ACameraControlManager* Mgr = GetCameraManager(E); if (!Mgr) return nullptr;
+		AParkingPresetManager* PMgr = GetPresetManager(E); if (!PMgr) return nullptr;
+
+		int32 CamId = 0, PresetIdx = 0, Slot = 0;
+		if (!RpcParam::RequireInt(P, TEXT("camId"), CamId, E)) return nullptr;
+		if (!RpcParam::RequireInt(P, TEXT("presetIdx"), PresetIdx, E)) return nullptr;
+		if (!RpcParam::RequireInt(P, TEXT("slot"), Slot, E)) return nullptr;
+		const float WidthSlots = static_cast<float>(RpcParam::GetFloat(P, TEXT("widthSlots"), 3.0));
+
+		APTZCameraActor* Cam = GetCamById(Mgr, CamId, E); if (!Cam) return nullptr;
+		const FParkingPreset* Pr = PMgr->FindPresetByIdx(PresetIdx);
+		if (!Pr)
+		{
+			E.FailDomain(FString::Printf(TEXT("프리셋 없음: presetIdx=%d"), PresetIdx));
+			return nullptr;
+		}
+		if (Slot < 1 || Slot > Pr->FaceCount)
+		{
+			E.FailDomain(FString::Printf(TEXT("슬롯 범위 밖: slot=%d (1~%d)"), Slot, Pr->FaceCount));
+			return nullptr;
+		}
+		if (WidthSlots <= 0.f)
+		{
+			E.FailDomain(TEXT("widthSlots 는 0보다 커야 한다"));
+			return nullptr;
+		}
+
+		const FVector Center = RpcAim::SlotCenterWorld(*Pr, Slot, PMgr->MetersToUU);
+		// 화면 가로에 WidthSlots 칸이 들어오게 한다. 폭은 프리셋의 xSize(m)를 쓴다.
+		const float TargetWidthCm = WidthSlots * Pr->BoxSizeX * PMgr->MetersToUU;
+
+		float Pan = 0.f, Tilt = 0.f, Zoom = 1.f, HFovDeg = 0.f, SlantDist = 0.f;
+		if (!RpcAim::AimPTZ(Cam->GetActorLocation(), Center, TargetWidthCm,
+			Cam->MaxZoom, Cam->DefaultHFov, Pan, Tilt, Zoom, HFovDeg, SlantDist))
+		{
+			E.FailDomain(TEXT("카메라가 슬롯 바로 위에 있다 — pan 을 정할 수 없다"));
+			return nullptr;
+		}
+
+		Cam->SetPanTilt(Pan, Tilt);
+		Cam->SetZoom(Zoom);
+		if (UCamStreamSubsystem* S = GetStreamSubsystem(GetWorldPtr())) { S->NotifyPtzCommand(CamId); }
+
+		UE_LOG(LogTemp, Log,
+			TEXT("[Cam] aimSlot cam=%d preset=%d slot=%d 폭=%.1f칸 → pan=%.2f tilt=%.2f zoom=%.3f (hfov=%.2f°, 거리=%.2fm)"),
+			CamId, PresetIdx, Slot, WidthSlots, Pan, Tilt, Zoom, HFovDeg, SlantDist / PMgr->MetersToUU);
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetNumberField(TEXT("camId"), CamId);
+		O->SetNumberField(TEXT("pan"), Pan);
+		O->SetNumberField(TEXT("tilt"), Tilt);
+		O->SetNumberField(TEXT("zoom"), Zoom);
+		O->SetNumberField(TEXT("hfovDeg"), HFovDeg);
+		O->SetNumberField(TEXT("distM"), SlantDist / PMgr->MetersToUU);
+		O->SetObjectField(TEXT("slotCenter"), RpcDto::Vec3(
+			Center.X / PMgr->MetersToUU, Center.Y / PMgr->MetersToUU, Center.Z / PMgr->MetersToUU));
+		return RpcDto::MakeObject(O);
 	});
 
 	Dispatcher.Register(TEXT("cam.getPTZ"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>

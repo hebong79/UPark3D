@@ -1,0 +1,54 @@
+{
+	"isUnreal": true,
+	"name": "occ3_passing_car",
+	"desc": "시나리오 3 — 통로를 지나가는 차량이 카메라-대상 시선을 횡단하며 만드는 시계열 가림. 경로를 선언해 표본을 뜬다(실주행 아님)",
+	"seed": 20260813,
+	"scene": {
+		"presetFile": "001_Preset_office.json",
+		"carFile": null,
+		"lightFile": "Sangmyung.json"
+	},
+	"cameras": [
+		{
+			"camId": 1,
+			"pos": { "x": -36.3, "y": -13.6, "z": 6.0 },
+			"aim": { "presetIdx": 1, "slot": 6, "widthSlots": 4 }
+		}
+	],
+	"actors": [
+		{
+			"role": "target",
+			"at": { "presetIdx": 1, "slot": 6 },
+			"prefabName": "현대_캐스퍼",
+			"rotY": 180,
+			"color": "magenta"
+		},
+		{
+			"role": "mover",
+			"at": { "world": { "x": -25.4, "y": 24.0, "z": 0 } },
+			"prefabName": "기아_봉고_탑차",
+			"rotY": 90
+		}
+	],
+	"runs": [],
+	"shots": [
+		{
+			"tag": "pass",
+			"camId": 1,
+			"format": "png",
+			"track": {
+				"role": "mover",
+				"from": { "x": -25.4, "y": 24.0 },
+				"to": { "x": -25.4, "y": -4.0 },
+				"steps": 29,
+				"rotY": 90,
+				"save": false
+			}
+		}
+	],
+	"measure": {
+		"type": "colorAB",
+		"targetRole": "target",
+		"expect": { "peakOcclusionMin": 0.50 }
+	}
+}

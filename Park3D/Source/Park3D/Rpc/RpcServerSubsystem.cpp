@@ -190,6 +190,8 @@ void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	MeasureModule = MakeUnique<FMeasureRpcModule>(WorldGetter);
 	ViewModule = MakeUnique<FViewRpcModule>(WorldGetter);
 	SimModule = MakeUnique<FSimRpcModule>(WorldGetter);
+	LightModule = MakeUnique<FLightRpcModule>(WorldGetter);
+	ScenarioModule = MakeUnique<FScenarioRpcModule>(WorldGetter);
 
 	// 차량 카탈로그(DT_CarCatalog) 주입.
 	if (UDataTable* Table = LoadObject<UDataTable>(nullptr, TEXT("/Game/Data/DT_CarCatalog.DT_CarCatalog")))
@@ -197,6 +199,8 @@ void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		const TArray<FCarPresetEntry> Catalog = ACarPlacementManager::CatalogFromTable(Table);
 		CarModule->SetCatalog(Catalog);
 		RandomModule->SetCatalog(Catalog);
+		ScenarioModule->SetCatalog(Catalog); // actors 의 prefabName → prefabId 해석에 필요하다.
+		SimModule->SetCatalog(Catalog);      // sim.start 의 prefabName → prefabId 해석에 필요하다.
 	}
 	else
 	{
@@ -212,6 +216,8 @@ void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	MeasureModule->Register(*Dispatcher);    // 비영속(measure.*)
 	ViewModule->Register(*Dispatcher);       // 비영속(view.*)
 	SimModule->Register(*Dispatcher);        // 비영속(sim.*)
+	LightModule->Register(*Dispatcher);      // 비영속(light.*)
+	ScenarioModule->Register(*Dispatcher);   // 비영속(scenario.*)
 
 	StartServer();
 }

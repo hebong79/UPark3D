@@ -117,6 +117,23 @@ AParkingSimManager* FSimRpcModule::ResolveRun(const TSharedPtr<FJsonObject>& Par
 	return Latest;
 }
 
+namespace
+{
+	/** prefabId 직접 지정이 우선, 없으면 prefabName 을 카탈로그에서 찾는다. 둘 다 없으면 0(무작위). */
+	int32 ResolvePrefabId(const TSharedPtr<FJsonObject>& P, const TArray<FCarPresetEntry>& Catalog)
+	{
+		const int32 Direct = RpcParam::GetInt(P, TEXT("prefabId"), 0);
+		if (Direct > 0) { return Direct; }
+		const FString Name = RpcParam::GetString(P, TEXT("prefabName"));
+		if (Name.IsEmpty()) { return 0; }
+		for (const FCarPresetEntry& C : Catalog)
+		{
+			if (C.PrefabName.Equals(Name, ESearchCase::IgnoreCase)) { return C.Idx; }
+		}
+		return 0;
+	}
+}
+
 void FSimRpcModule::Register(URpcDispatcher& Dispatcher)
 {
 	// 새 주행을 하나 만든다. 이미 도는 주행이 있어도 멈추지 않는다(동시 주행).
@@ -131,7 +148,7 @@ void FSimRpcModule::Register(URpcDispatcher& Dispatcher)
 		const int32 Seed = RpcParam::GetInt(P, TEXT("seed"), 0);
 
 		FString Err;
-		if (!Sim->StartSim(Dir, PresetId, SlotIndex, Seed, ResolveParkMode(P, Dir), Err))
+		if (!Sim->StartSim(Dir, PresetId, SlotIndex, Seed, ResolveParkMode(P, Dir), Err, ResolvePrefabId(P, Catalog)))
 		{
 			Sim->Destroy();   // 시작도 못 한 주행 액터를 남기지 않는다(runId 만 소비된다).
 			E.FailDomain(Err);
@@ -158,7 +175,8 @@ void FSimRpcModule::Register(URpcDispatcher& Dispatcher)
 		const float Speed = static_cast<float>(RpcParam::GetFloat(P, TEXT("replaySpeed"), 1.0));
 
 		FString Err;
-		if (!Sim->StartScenario(Dir, PresetId, SlotIndex, Seed, ResolveParkMode(P, Dir), bReplay, Delay, Speed, Err))
+		if (!Sim->StartScenario(Dir, PresetId, SlotIndex, Seed, ResolveParkMode(P, Dir), bReplay, Delay, Speed, Err,
+			ResolvePrefabId(P, Catalog)))
 		{
 			Sim->Destroy();
 			E.FailDomain(Err);

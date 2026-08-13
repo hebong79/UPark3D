@@ -1,0 +1,43 @@
+{
+	"isUnreal": true,
+	"name": "occ1_side_carnival",
+	"desc": "시나리오 1 — 옆칸 대형차(카니발)가 경차를 측면에서 부분 가림. 목표 30~60%",
+	"seed": 20260813,
+	"scene": {
+		"presetFile": "001_Preset_office.json",
+		"carFile": null,
+		"lightFile": "Sangmyung.json"
+	},
+	"cameras": [
+		{
+			"camId": 1,
+			"pos": { "x": -36.3, "y": -13.6, "z": 13.5 },
+			"aim": { "presetIdx": 1, "slot": 6, "widthSlots": 3 }
+		}
+	],
+	"actors": [
+		{
+			"role": "target",
+			"at": { "presetIdx": 1, "slot": 6 },
+			"prefabName": "현대_캐스퍼",
+			"rotY": 180,
+			"color": "magenta"
+		},
+		{
+			"role": "occluder",
+			"at": { "presetIdx": 1, "slot": 5 },
+			"prefabName": "기아_카니발",
+			"rotY": 180
+		}
+	],
+	"runs": [],
+	"shots": [
+		{ "tag": "N0", "camId": 1, "format": "png", "hideRoles": ["occluder"], "baseline": true },
+		{ "tag": "N1", "camId": 1, "format": "png", "hideRoles": [] }
+	],
+	"measure": {
+		"type": "colorAB",
+		"targetRole": "target",
+		"expect": { "occlusionMin": 0.30, "occlusionMax": 0.60 }
+	}
+}

@@ -202,19 +202,29 @@ void UMainMenuWidget::TogglePanel(TSubclassOf<UUserWidget> WidgetClass)
 	const bool bWasVisible = Panel->IsInViewport();
 
 	// 캐시된 모든 패널을 숨겨 항상 최대 1개만 표시되도록 보장한다.
+	HideAllPanels();
+
+	// 숨겨져 있던 패널이면 표시한다. 이미 표시 중이던 패널을 다시 누른 경우는
+	// 위 루프에서 함께 숨겨졌으므로 재표시하지 않는다(토글 오프 → 패널 0개).
+	if (!bWasVisible)
+	{
+		// 시뮬레이션 HUD 와도 배타적이다 — HUD 의 주인은 게임모드이므로 접어 달라고 요청한다.
+		if (APark3DGameMode* GM = Cast<APark3DGameMode>(UGameplayStatics::GetGameMode(this)))
+		{
+			GM->HideSimPanel();
+		}
+		Panel->AddToViewport(10);
+	}
+}
+
+void UMainMenuWidget::HideAllPanels()
+{
 	for (const TPair<TSubclassOf<UUserWidget>, TObjectPtr<UUserWidget>>& Pair : Panels)
 	{
 		if (Pair.Value && Pair.Value->IsInViewport())
 		{
 			Pair.Value->RemoveFromParent();
 		}
-	}
-
-	// 숨겨져 있던 패널이면 표시한다. 이미 표시 중이던 패널을 다시 누른 경우는
-	// 위 루프에서 함께 숨겨졌으므로 재표시하지 않는다(토글 오프 → 패널 0개).
-	if (!bWasVisible)
-	{
-		Panel->AddToViewport(10);
 	}
 }
 

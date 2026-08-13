@@ -486,6 +486,42 @@ TArray<ACarActor*> ACarPlacementManager::ToggleRandomCars(int32 Count, int32 See
 	return Toggled;
 }
 
+int32 ACarPlacementManager::SetAllCarsHidden(bool bInHidden)
+{
+	int32 Changed = 0;
+	for (ACarActor* Car : Cars)
+	{
+		if (!Car || Car->IsHidden() == bInHidden)
+		{
+			continue;
+		}
+		// 충돌도 함께 끈다 — 숨긴 차량이 클릭 픽/시뮬 회피에 계속 걸리면 "숨겼다"가 거짓말이 된다
+		// (HideRandomCars/ToggleRandomCars 도 같은 짝으로 다룬다).
+		Car->SetActorHiddenInGame(bInHidden);
+		Car->SetActorEnableCollision(!bInHidden);
+		++Changed;
+	}
+	return Changed;
+}
+
+bool ACarPlacementManager::AreAllCarsHidden() const
+{
+	int32 Valid = 0;
+	for (const ACarActor* Car : Cars)
+	{
+		if (!Car)
+		{
+			continue;
+		}
+		++Valid;
+		if (!Car->IsHidden())
+		{
+			return false;
+		}
+	}
+	return Valid > 0;
+}
+
 void ACarPlacementManager::SetRandomColorOfCarList(int32 Seed)
 {
 	FRandomStream Stream = MakeStream(Seed);

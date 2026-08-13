@@ -1,5 +1,5 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
-// CarRpcModule : car.* (21) 핸들러. Unity CCarRpcModule 포팅.
+// CarRpcModule : car.* (22) 핸들러. Unity CCarRpcModule 포팅.
 // 백엔드: ACarPlacementManager + DT_CarCatalog.
 // car.setMetallic 은 UCarColorComponent::SetMetallic(glTF MetallicFactor/RoughnessFactor)에 결선되어 있다.
 

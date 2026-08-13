@@ -111,6 +111,9 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 		if (!RpcParam::RequireInt(P, TEXT("faceCount"), FaceCount, E)) return nullptr;
 
 		FParkingPreset Pr;
+		// 구조체 기본값이 PresetIdx=1 이라 그대로 두면 AddPreset 의 자동 번호(PresetIdx<=0 조건)가
+		// 돌지 않아 만드는 족족 idx=1 이 된다 — 0 으로 낮춰 번호 부여를 매니저에 위임한다.
+		Pr.PresetIdx = 0;
 		Pr.Offset = Offset;
 		Pr.FaceCount = FaceCount;
 		Pr.FaceRotate = RpcParam::GetFloat(P, TEXT("faceRot"), 0.0);
@@ -122,7 +125,9 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 		Pr.BoxSizeZ = RpcParam::GetFloat(P, TEXT("zSize"), 5.0);
 
 		const int32 NewIdx = Mgr->AddPreset(Pr);
-		FParkingPreset* Added = Mgr->FindPresetByIdx(NewIdx);
+		// 방금 추가한 것은 배열의 끝이다. FindPresetByIdx 는 첫 일치를 돌려주므로
+		// idx 가 겹친 목록에서는 남(0번)의 이름을 덮어쓴다.
+		FParkingPreset* Added = Mgr->StoredPresets.Num() > 0 ? &Mgr->StoredPresets.Last() : nullptr;
 		if (Added)
 		{
 			Added->PresetName = RpcParam::GetString(P, TEXT("presetName"), FString::Printf(TEXT("Preset_%03d"), NewIdx));

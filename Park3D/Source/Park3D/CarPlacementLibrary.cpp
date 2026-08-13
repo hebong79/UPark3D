@@ -277,7 +277,8 @@ bool UCarPlacementLibrary::SaveCarDatasToJson(const FString& FilePath, const FCa
 		return false;
 	}
 
-	if (!FFileHelper::SaveStringToFile(Json, *FilePath))
+	// 인코딩을 명시하지 않으면 AutoDetect 가 비-ASCII 한 글자에도 UTF-16 으로 쓴다.
+	if (!FFileHelper::SaveStringToFile(Json, *FilePath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[CarPlacement] 파일 쓰기 실패: %s"), *FilePath);
 		return false;

@@ -52,6 +52,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Menu")
 	void TogglePanel(TSubclassOf<UUserWidget> WidgetClass);
 
+	/** 캐시된 패널을 모두 뷰포트에서 뺀다. 시뮬레이션 HUD 를 열 때 게임모드가 호출한다(배타 표시). */
+	UFUNCTION(BlueprintCallable, Category = "Menu")
+	void HideAllPanels();
+
 	/**
 	 * 패널 인스턴스를 만들고 NativeConstruct 까지 마친 상태로 돌려준다(표시 상태는 바꾸지 않는다).
 	 * 시작 설정 파일 자동 로딩이 "패널을 열고 열기 버튼을 누른" 것과 같은 순서를 갖게 하려는 용도다.

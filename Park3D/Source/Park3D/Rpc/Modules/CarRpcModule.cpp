@@ -7,10 +7,66 @@
 #include "../../CarActor.h"
 #include "../../CarColorComponent.h"
 #include "../../CarPlacementLibrary.h"
+#include "../../CameraControlLibrary.h"
+#include "../../Park3DDataPaths.h"
 #include "Misc/Paths.h"
 
 namespace
 {
+	/** 카메라 프리셋 파일 경로. fullPath 우선, 없으면 Save/3D/CameraPos + camFile. */
+	FString ResolveCamFilePath(const TSharedPtr<FJsonObject>& P)
+	{
+		const FString FullPath = RpcParam::GetString(P, TEXT("camFullPath"));
+		if (!FullPath.IsEmpty())
+		{
+			return FullPath;
+		}
+		FString FileName = RpcParam::GetString(P, TEXT("camFile"), TEXT("CamPos_office"));
+		if (!FileName.EndsWith(TEXT(".json")))
+		{
+			FileName += TEXT(".json");
+		}
+		// 패키지에서는 Save/ 가 ProjectDir() 밖(스테이지 루트)이라 해석을 Park3DDataPaths 에 맡긴다.
+		return Park3DDataPaths::GetDataFilePath(TEXT("CameraPos"), *FileName);
+	}
+
+	/** 카메라 PTZ 프리셋 1개가 지면(z=0)을 겨냥하는 점(미터, UE XY). */
+	struct FCamAimPoint
+	{
+		int32     PresetId = 0;
+		FString   Name;
+		FVector2D Point = FVector2D::ZeroVector;
+	};
+
+	/**
+	 * 카메라 프리셋 목록 → 지면 조준점 목록.
+	 * tilt 는 양수가 하향(PanTiltToRotator: Pitch=-Tilt)이므로 tilt<=0 은 지면과 만나지 않아 제외한다.
+	 * 지면까지 수평거리 = 높이/tan(tilt), 방향은 pan(=UE Yaw, 0°=+X, +방향=+Y).
+	 */
+	void BuildCamAimPoints(const FCameraPosList& Cams, TArray<FCamAimPoint>& Out)
+	{
+		Out.Reset();
+		for (const FCameraPos& Cam : Cams.datas)
+		{
+			for (const FCamDir& Dir : Cam.datas)
+			{
+				const float TiltRad = FMath::DegreesToRadians(Dir.tilt);
+				if (Dir.tilt <= KINDA_SMALL_NUMBER || Dir.pos.z <= KINDA_SMALL_NUMBER)
+				{
+					continue;
+				}
+				const float Ground = Dir.pos.z / FMath::Tan(TiltRad);
+				const float PanRad = FMath::DegreesToRadians(Dir.pan);
+				FCamAimPoint A;
+				A.PresetId = Dir.preset_id;
+				A.Name = Dir.sname;
+				A.Point = FVector2D(Dir.pos.x + Ground * FMath::Cos(PanRad),
+				                    Dir.pos.y + Ground * FMath::Sin(PanRad));
+				Out.Add(A);
+			}
+		}
+	}
+
 	/** fullPath 우선, 없으면 (path 디렉터리 또는 ProjectSaved) + fileName + ".json". */
 	FString ResolveCarPath(const TSharedPtr<FJsonObject>& P)
 	{
@@ -311,6 +367,24 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		return RpcDto::OkTrue();
 	});
 
+	// 전체 차량 표시/숨김. UI 의 "차량 숨기기" 체크박스와 같은 백엔드(SetAllCarsHidden)를 쓴다 —
+	// 여기서 따로 구현하면 두 경로가 갈라진다(리셋랜덤/car.resetRandom 선례와 동일 규약).
+	Dispatcher.Register(TEXT("car.hideAll"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
+		bool bHidden = true;
+		if (!RpcParam::RequireBool(P, TEXT("hidden"), bHidden, E)) return nullptr;
+
+		const int32 Changed = Mgr->SetAllCarsHidden(bHidden);
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetBoolField(TEXT("hidden"), bHidden);
+		O->SetNumberField(TEXT("changedCount"), Changed);   // 이번 호출로 실제 바뀐 대수
+		O->SetNumberField(TEXT("carCount"), Mgr->GetCarCount());
+		return RpcDto::MakeObject(O);
+	});
+
 	Dispatcher.Register(TEXT("car.hideRandom"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
@@ -381,6 +455,73 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetBoolField(TEXT("ok"), true);
 		O->SetNumberField(TEXT("count"), Mgr->GetCarCount());
+		return RpcDto::MakeObject(O);
+	});
+
+	// ---- 카메라 프리셋 기준 presetId 재배정 ----
+	// 각 차량에 "그 차를 겨냥하는 카메라 컨트롤 프리셋 번호"를 매긴다.
+	// 판정은 지면 조준점 최근접이다 — 프리셋 줌이 커서(zoom 6 → 수평화각 약 10°) 화각 포함 판정으로는
+	// 대부분의 차량이 어느 프리셋에도 안 들어가 미배정이 된다.
+	Dispatcher.Register(TEXT("car.assignPreset"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
+
+		// 카메라 프리셋은 파일이 권위다 — CamRpcModule 의 인메모리 목록은 cam.loadPreset 을
+		// 부르기 전까지 비어 있어 기동 직후에는 쓸 수 없다.
+		const FString CamPath = ResolveCamFilePath(P);
+		FCameraPosList Cams;
+		if (!UCameraControlLibrary::LoadFromJson(CamPath, Cams))
+		{
+			E.FailDomain(FString::Printf(TEXT("카메라 프리셋 로드 실패: %s"), *CamPath));
+			return nullptr;
+		}
+		TArray<FCamAimPoint> Aims;
+		BuildCamAimPoints(Cams, Aims);
+		if (Aims.Num() == 0)
+		{
+			E.FailDomain(FString::Printf(TEXT("지면을 겨냥하는 카메라 프리셋이 없다(tilt>0 필요): %s"), *CamPath));
+			return nullptr;
+		}
+
+		int32 Changed = 0;
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		for (ACarActor* Car : Mgr->GetCars())
+		{
+			if (!Car) continue;
+			const FVector2D CarXY(Car->CarData.pos.x, Car->CarData.pos.y);
+
+			int32 BestId = Aims[0].PresetId;
+			FString BestName = Aims[0].Name;
+			float BestDist = TNumericLimits<float>::Max();
+			for (const FCamAimPoint& A : Aims)
+			{
+				const float D = FVector2D::Distance(CarXY, A.Point);
+				if (D < BestDist) { BestDist = D; BestId = A.PresetId; BestName = A.Name; }
+			}
+
+			const int32 Prev = Car->CarData.presetId;
+			Car->CarData.presetId = BestId;
+			if (Prev != BestId) { ++Changed; }
+
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("carNameId"), Car->CarData.id);
+			Row->SetNumberField(TEXT("prevPresetId"), Prev);
+			Row->SetNumberField(TEXT("presetId"), BestId);
+			Row->SetStringField(TEXT("presetName"), BestName);
+			Row->SetNumberField(TEXT("distM"), BestDist);
+			Arr.Add(MakeShared<FJsonValueObject>(Row));
+		}
+
+		UE_LOG(LogTemp, Log, TEXT("[Car] presetId 재배정: 대상 %d대, 변경 %d대, 카메라 프리셋 %d개 ← %s"),
+			Mgr->GetCarCount(), Changed, Aims.Num(), *CamPath);
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetStringField(TEXT("camFile"), FPaths::GetCleanFilename(CamPath));
+		O->SetNumberField(TEXT("camPresetCount"), Aims.Num());
+		O->SetNumberField(TEXT("carCount"), Mgr->GetCarCount());
+		O->SetNumberField(TEXT("changed"), Changed);
+		O->SetArrayField(TEXT("cars"), Arr);
 		return RpcDto::MakeObject(O);
 	});
 }

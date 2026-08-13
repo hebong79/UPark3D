@@ -102,6 +102,20 @@ public:
 	TArray<ACarActor*> ToggleRandomCars(int32 Count, int32 Seed = 0);
 
 	/**
+	 * 전체 차량의 표시 상태를 일괄 설정한다("차량 숨기기" 체크박스 / car.hideAll RPC 공용 진입점).
+	 * 랜덤 숨김과 달리 대상을 고르지 않으므로 되돌리면(bInHidden=false) 반드시 전원이 다시 보인다.
+	 * 데이터(FCarPosDatas)는 건드리지 않는다 — 표시만 바뀌므로 저장 파일에는 영향이 없다.
+	 * 인자명이 bInHidden 인 이유: bHidden 은 AActor 멤버라 UHT 가 섀도잉으로 막는다.
+	 * @return 실제로 상태가 바뀐 차량 수(이미 그 상태였던 차량은 세지 않는다).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Car")
+	int32 SetAllCarsHidden(bool bInHidden);
+
+	/** 차량이 1대 이상이고 전원이 숨김이면 true(체크박스 초기 상태 동기화용). */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Car")
+	bool AreAllCarsHidden() const;
+
+	/**
 	 * 활성 차량 전체를 랜덤 ECarColor 로 도색. Unity SetRandomColorOfCarList 포팅.
 	 * 고른 색은 각 차량의 CarData.color 에도 기록한다 — 저장/재생성(RebuildAll) 후에도 색이 유지되어야
 	 * "리셋랜덤" 결과가 다음 RefreshView 에 지워지지 않는다.

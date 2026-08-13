@@ -40,6 +40,7 @@ public:
 	UPROPERTY(meta = (BindWidget)) UCheckBox* Check_Vertical = nullptr;       // 세로배치
 	UPROPERTY(meta = (BindWidgetOptional)) UCheckBox* Check_PresetGroup = nullptr; // 프리셋 그룹
 	UPROPERTY(meta = (BindWidgetOptional)) UCheckBox* Check_RandomPlacement = nullptr; // 랜덤배치(색상+차량종류)
+	UPROPERTY(meta = (BindWidgetOptional)) UCheckBox* Check_HideCars = nullptr;        // 차량 숨기기(전체)
 
 	// 랜덤 리셋(WBP 에 없으면 InjectRandomModeRow 가 C++ 로 만들어 넣는다).
 	UPROPERTY(meta = (BindWidgetOptional)) UComboBoxString* Combo_RandomMode = nullptr; // 랜덤 모드
@@ -116,6 +117,13 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Car") int32 ResetRandomPlacement();
 
+	/**
+	 * 전체 차량 표시/숨김("차량 숨기기" 체크박스 동작). 체크박스 상태도 함께 맞춘다
+	 * (SetIsChecked 는 OnCheckStateChanged 를 쏘지 않으므로 재귀가 생기지 않는다).
+	 * @return 실제로 상태가 바뀐 차량 수.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Car") int32 SetAllCarsHidden(bool bHidden);
+
 	UFUNCTION(BlueprintCallable, Category = "Car") FString GetDefaultCarFilePath() const;
 	UFUNCTION(BlueprintCallable, Category = "Car") bool SaveToJsonFile(const FString& FilePath);
 	UFUNCTION(BlueprintCallable, Category = "Car") bool LoadFromJsonFile(const FString& FilePath);
@@ -146,6 +154,7 @@ protected:
 	UFUNCTION() void HandleRotateChanged(bool bIsChecked);
 	UFUNCTION() void HandleFrontChanged(bool bIsChecked);
 	UFUNCTION() void HandleBackChanged(bool bIsChecked);
+	UFUNCTION() void HandleHideCarsChanged(bool bIsChecked);
 
 	/** 콤보 항목 위젯 생성(드롭다운/선택값 공용): 중앙 정렬 + Regular 폰트 + 높이 고정. */
 	UFUNCTION() UWidget* HandleGenerateComboItem(FString Item);
@@ -160,6 +169,12 @@ private:
 	 * (BindWidgetOptional 로 이미 바인딩된 상태 → 나중에 디자이너로 옮겨도 코드 변경이 필요 없다).
 	 */
 	void InjectRandomModeRow();
+
+	/**
+	 * "차량 숨기기" 체크박스 한 줄을 C++ 로 만들어 VBox_Root(랜덤 모드 줄 다음)에 끼워 넣는다.
+	 * WBP 에 같은 이름(Check_HideCars)의 위젯이 있으면 아무것도 하지 않는다(InjectRandomModeRow 와 같은 규약).
+	 */
+	void InjectHideCarsRow();
 
 	/** 이동/회전 대상 인덱스 목록. 프리셋 그룹(Check_PresetGroup) 체크 시 선택 차량과 동일 presetId 전원, 아니면 선택 1대. */
 	TArray<int32> GetActiveIndices() const;

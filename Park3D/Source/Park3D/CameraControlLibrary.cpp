@@ -224,7 +224,8 @@ bool UCameraControlLibrary::SaveToJson(const FString& Path, const FCameraPosList
 		return false;
 	}
 
-	if (!FFileHelper::SaveStringToFile(Json, *Path))
+	// 인코딩을 명시하지 않으면 AutoDetect 가 비-ASCII 한 글자에도 UTF-16 으로 쓴다.
+	if (!FFileHelper::SaveStringToFile(Json, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[CameraControl] 파일 쓰기 실패: %s"), *Path);
 		return false;

@@ -48,6 +48,7 @@ void UCarPlacementWidget::NativeOnInitialized()
 	// (MainMenuWidget::InjectLightButton 과 동일 이유). NativeConstruct 는 재-AddToViewport 마다 다시 도는데,
 	// 이 함수는 위젯 인스턴스당 1회라 중복 삽입도 생기지 않는다.
 	InjectRandomModeRow();
+	InjectHideCarsRow();
 }
 
 void UCarPlacementWidget::NativeConstruct()
@@ -120,6 +121,7 @@ void UCarPlacementWidget::NativeConstruct()
 	if (Radio_Rotate) Radio_Rotate->OnCheckStateChanged.AddUniqueDynamic(this, &UCarPlacementWidget::HandleRotateChanged);
 	if (Radio_Front)  Radio_Front->OnCheckStateChanged.AddUniqueDynamic(this, &UCarPlacementWidget::HandleFrontChanged);
 	if (Radio_Back)   Radio_Back->OnCheckStateChanged.AddUniqueDynamic(this, &UCarPlacementWidget::HandleBackChanged);
+	if (Check_HideCars) Check_HideCars->OnCheckStateChanged.AddUniqueDynamic(this, &UCarPlacementWidget::HandleHideCarsChanged);
 
 	SetFileName(CurFileName.IsEmpty() ? TEXT("CarPos_SNum.json") : CurFileName);
 
@@ -127,6 +129,13 @@ void UCarPlacementWidget::NativeConstruct()
 	if (ACarPlacementManager* Mgr = GetCarManager())
 	{
 		Mgr->PreloadCatalogMeshes(GetCatalog());
+
+		// 체크 상태는 저장하지 않고 월드에서 읽는다 — RPC(car.hideAll)로 숨긴 뒤 패널을 열어도
+		// 체크박스가 화면과 어긋나지 않는다(SetIsChecked 는 OnCheckStateChanged 를 쏘지 않는다).
+		if (Check_HideCars)
+		{
+			Check_HideCars->SetIsChecked(Mgr->AreAllCarsHidden());
+		}
 	}
 
 	RebuildCarList();
@@ -238,6 +247,91 @@ void UCarPlacementWidget::InjectRandomModeRow()
 	else
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[CarPlacement] 기준 줄을 찾지 못해 랜덤 모드 줄을 목록 끝에 둡니다."));
+	}
+
+	// 세로 간격을 기준 줄과 맞춘다.
+	if (UVerticalBoxSlot* VS = Cast<UVerticalBoxSlot>(NewSlot))
+	{
+		VS->SetHorizontalAlignment(HAlign_Fill);
+		if (AnchorRow)
+		{
+			if (UVerticalBoxSlot* SrcSlot = Cast<UVerticalBoxSlot>(AnchorRow->Slot))
+			{
+				VS->SetPadding(SrcSlot->GetPadding());
+			}
+		}
+	}
+}
+
+void UCarPlacementWidget::InjectHideCarsRow()
+{
+	if (!WidgetTree || Check_HideCars)
+	{
+		return; // 디자이너(WBP)가 이미 제공 → 바인딩된 것을 그대로 쓴다.
+	}
+
+	UVerticalBox* Root = WidgetTree->FindWidget<UVerticalBox>(TEXT("VBox_Root"));
+	if (!Root)
+	{
+		// 줄을 못 넣어도 기능 자체는 SetAllCarsHidden(BlueprintCallable)/car.hideAll RPC 로 호출 가능하다.
+		UE_LOG(LogTemp, Warning, TEXT("[CarPlacement] VBox_Root 를 찾지 못해 차량 숨기기 줄을 넣지 못했습니다."));
+		return;
+	}
+
+	// --- 체크박스 (스타일은 기존 체크박스에서 복사) ---
+	Check_HideCars = WidgetTree->ConstructWidget<UCheckBox>(UCheckBox::StaticClass(), TEXT("Check_HideCars"));
+	if (Check_Vertical)
+	{
+		Check_HideCars->SetWidgetStyle(Check_Vertical->GetWidgetStyle());
+	}
+
+	// --- 라벨 (폰트/색은 같은 줄 형식의 기존 라벨에서 복사) ---
+	UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Lbl_HideCars"));
+	Label->SetText(FText::FromString(TEXT("차량 숨기기")));
+	if (UTextBlock* SrcLabel = WidgetTree->FindWidget<UTextBlock>(TEXT("Lbl_Vertical")))
+	{
+		Label->SetFont(SrcLabel->GetFont());
+		Label->SetColorAndOpacity(SrcLabel->GetColorAndOpacity());
+	}
+
+	// --- 줄 구성: [체크박스] [라벨] ---
+	UHorizontalBox* Line = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("HB_HideCars"));
+	if (UHorizontalBoxSlot* CheckSlot = Cast<UHorizontalBoxSlot>(Line->AddChild(Check_HideCars)))
+	{
+		CheckSlot->SetVerticalAlignment(VAlign_Center);
+	}
+	if (UHorizontalBoxSlot* LabelSlot = Cast<UHorizontalBoxSlot>(Line->AddChild(Label)))
+	{
+		LabelSlot->SetPadding(FMargin(6.f, 0.f, 0.f, 0.f)); // 체크박스와의 간격.
+		LabelSlot->SetVerticalAlignment(VAlign_Center);
+	}
+
+	// --- 삽입 위치: 세로배치 줄 바로 다음 ---
+	// 앵커가 VBox_Root 의 직계 자식이 아닐 수 있으므로 부모를 거슬러 올라간다(InjectRandomModeRow 와 동일).
+	int32 AnchorIndex = INDEX_NONE;
+	UWidget* AnchorRow = nullptr;
+	if (Check_Vertical)
+	{
+		UWidget* Node = Check_Vertical;
+		while (Node && Node->GetParent() != Root)
+		{
+			Node = Node->GetParent();
+		}
+		if (Node)
+		{
+			AnchorRow = Node;
+			AnchorIndex = Root->GetChildIndex(Node);
+		}
+	}
+
+	UPanelSlot* NewSlot = Root->AddChild(Line);
+	if (AnchorIndex != INDEX_NONE)
+	{
+		Root->ShiftChild(AnchorIndex + 1, Line);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CarPlacement] 기준 줄을 찾지 못해 차량 숨기기 줄을 목록 끝에 둡니다."));
 	}
 
 	// 세로 간격을 기준 줄과 맞춘다.
@@ -484,6 +578,13 @@ void UCarPlacementWidget::RefreshView()
 		Sel = SelectedIndices;
 		if (Sel.Num() == 0 && CarData.datas.IsValidIndex(PrimaryIndex)) Sel.Add(PrimaryIndex);
 		Mgr->RebuildAll(CarData, GetCatalog(), Sel);
+
+		// RebuildAll 은 액터를 새로 스폰하므로 표시 상태가 초기화된다.
+		// 체크박스가 켜져 있는데 차량이 다시 나타나면 체크 상태가 화면과 어긋나므로 여기서 다시 접는다.
+		if (Check_HideCars && Check_HideCars->IsChecked())
+		{
+			Mgr->SetAllCarsHidden(true);
+		}
 	}
 }
 
@@ -712,6 +813,26 @@ int32 UCarPlacementWidget::ResetRandomPlacement()
 	return Visible;
 }
 
+// ===== 전체 표시/숨김 =====
+int32 UCarPlacementWidget::SetAllCarsHidden(bool bHidden)
+{
+	ACarPlacementManager* Mgr = GetCarManager();
+	if (!Mgr)
+	{
+		Notify(TEXT("차량 숨기기 실패 — 차량 매니저 없음"));
+		return 0;
+	}
+
+	const int32 Changed = Mgr->SetAllCarsHidden(bHidden);
+	if (Check_HideCars && Check_HideCars->IsChecked() != bHidden)
+	{
+		Check_HideCars->SetIsChecked(bHidden);
+	}
+	Notify(FString::Printf(TEXT("차량 %s — %d대 (총 %d대)"),
+		bHidden ? TEXT("숨김") : TEXT("표시"), Changed, Mgr->GetCarCount()));
+	return Changed;
+}
+
 void UCarPlacementWidget::AddCarAtWorld(const FVector& WorldLoc)
 {
 	const TArray<FCarPresetEntry> Catalog = GetCatalog();
@@ -919,6 +1040,11 @@ void UCarPlacementWidget::HandleRotateChanged(bool bIsChecked)
 void UCarPlacementWidget::HandleFrontChanged(bool bIsChecked)
 {
 	if (bIsChecked && Radio_Back) Radio_Back->SetIsChecked(false);
+}
+
+void UCarPlacementWidget::HandleHideCarsChanged(bool bIsChecked)
+{
+	SetAllCarsHidden(bIsChecked);
 }
 
 void UCarPlacementWidget::HandleBackChanged(bool bIsChecked)

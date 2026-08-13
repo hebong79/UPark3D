@@ -182,16 +182,23 @@ void FViewRpcModule::Register(URpcDispatcher& Dispatcher)
 				E.FailDomain(TEXT("PlayerCameraManager 없음 — fov 를 적용할 수 없습니다."));
 				return nullptr;
 			}
+			// 화각 잠금은 화면을 통째로 바꾸는데 흔적이 남지 않아, "화면 비율이 이상하다"는 신고가 와도
+			// 누가 언제 걸었는지 추적할 수 없었다(2026-08-13, LockedFOV=138 사고). 그래서 앞뒤 값을 남긴다.
+			const float PrevFov = PC->PlayerCameraManager->GetFOVAngle();
+
 			if (NewFov == 0.0)
 			{
 				// fov=0 은 잠금 해제다. LockedFOV 를 0 으로 되돌려 뷰타깃 기본 화각(DefaultFOV)으로 복귀시킨다.
 				// 이 수단이 없으면 한 번 건 화각을 되돌릴 방법이 없다.
 				PC->PlayerCameraManager->UnlockFOV();
+				UE_LOG(LogTemp, Log, TEXT("[View] 화각 잠금 해제: %.2f° → 기본 %.2f°"),
+					PrevFov, PC->PlayerCameraManager->GetFOVAngle());
 			}
 			else
 			{
 				// SetFOV 는 LockedFOV 를 건다. GetFOVAngle()·ULocalPlayer::GetViewPoint·메인 뷰 캡처가 모두 이 값을 쓴다.
 				PC->PlayerCameraManager->SetFOV(static_cast<float>(NewFov));
+				UE_LOG(LogTemp, Log, TEXT("[View] 화각 잠금: %.2f° → %.2f°(수평)"), PrevFov, static_cast<float>(NewFov));
 			}
 		}
 

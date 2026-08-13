@@ -69,6 +69,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Park3D|Sim")
 	UParkingSimWidget* EnsureSimPanel();
 
+	/** 시뮬레이션 HUD 를 숨긴다. 메뉴 패널을 열 때 메인 메뉴가 호출한다(배타 표시). */
+	UFUNCTION(BlueprintCallable, Category = "Park3D|Sim")
+	void HideSimPanel();
+
 	// ---- 주차 시뮬레이션 ----
 	/** 시뮬레이션 시작 단축키. 기본 F9. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Park3D|Sim")

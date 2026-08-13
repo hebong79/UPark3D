@@ -192,10 +192,25 @@ bool APark3DGameMode::ToggleSimPanel()
 		return false;
 	}
 
+	// HUD 와 메뉴 패널은 배타적이다 — 열려 있던 패널(프리셋메이커/차량배치/카메라/맵크기/조명)을 먼저 접는다.
+	if (UMainMenuWidget* Menu = Cast<UMainMenuWidget>(MenuWidget))
+	{
+		Menu->HideAllPanels();
+	}
+
 	// ZOrder 20 = 카메라 뷰어(5)·컨트롤 패널(10)보다 앞, 메인 메뉴(100)보다 뒤.
 	Panel->AddToViewport(20);
 	UE_LOG(LogTemp, Log, TEXT("[Sim] 주차 시뮬레이션 HUD 를 열었습니다(F9 입차 / F8 출차 / F10 리플레이)."));
 	return true;
+}
+
+void APark3DGameMode::HideSimPanel()
+{
+	if (SimWidget && SimWidget->IsInViewport())
+	{
+		SimWidget->RemoveFromParent();
+		UE_LOG(LogTemp, Log, TEXT("[Sim] 다른 패널이 열려 주차 시뮬레이션 HUD 를 숨겼습니다."));
+	}
 }
 
 void APark3DGameMode::StartParkingSim()

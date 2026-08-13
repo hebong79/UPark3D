@@ -1,0 +1,41 @@
+{
+	"isUnreal": true,
+	"name": "occ5_empty_slot_masked",
+	"desc": "시나리오 5 — 빈 주차면(7번 프리셋 6번 면)을 양옆 대형차가 덮어 오탐 유도. 대상은 차가 아니라 빈 면",
+	"seed": 20260813,
+	"scene": {
+		"presetFile": "001_Preset_office.json",
+		"carFile": null,
+		"lightFile": "Sangmyung.json"
+	},
+	"cameras": [
+		{
+			"camId": 1,
+			"pos": { "x": -36.3, "y": -13.6, "z": 4.0 },
+			"aim": { "presetIdx": 7, "slot": 6, "widthSlots": 3 }
+		}
+	],
+	"actors": [
+		{
+			"role": "occluder",
+			"at": { "presetIdx": 7, "slot": 5 },
+			"prefabName": "현대_스타렉스",
+			"rotY": 180
+		},
+		{
+			"role": "occluder",
+			"at": { "presetIdx": 7, "slot": 7 },
+			"prefabName": "기아_카니발",
+			"rotY": 180
+		}
+	],
+	"runs": [],
+	"shots": [
+		{ "tag": "floor", "camId": 1, "format": "png", "slotPolygon": true, "hideRoles": ["occluder"] }
+	],
+	"measure": {
+		"type": "slotPolygon",
+		"targetSlot": { "presetIdx": 7, "slot": 6 },
+		"expect": { "floorVisibleMax": 0.20 }
+	}
+}

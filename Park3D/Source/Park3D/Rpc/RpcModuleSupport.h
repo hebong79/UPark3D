@@ -53,6 +53,25 @@ protected:
 	TArray<FCarPresetEntry> Catalog;
 };
 
+/**
+ * 주차면 슬롯 겨냥 계산 — cam.aimSlot 과 scenario.* 가 공유한다.
+ * 기하 권위는 AParkingPresetManager::ComputeSlotCorners 다(라인·데칼·차량배치와 같은 사각형).
+ */
+namespace RpcAim
+{
+	/** 슬롯 중심(월드 cm). Slot 은 1부터(FaceIndex 는 0부터). */
+	FVector SlotCenterWorld(const FParkingPreset& P, int32 Slot, float MetersToUU);
+
+	/**
+	 * 카메라가 TargetCm 을 겨냥하는 pan/tilt/zoom.
+	 * pan=UE Yaw(0°=+X), tilt 는 양수가 하향, zoom 은 화면 가로에 TargetWidthCm 이 들어오는 값.
+	 * 카메라가 대상 바로 위(수평거리 0)면 pan 을 정할 수 없어 false.
+	 */
+	bool AimPTZ(const FVector& CamLocCm, const FVector& TargetCm, float TargetWidthCm,
+		float MaxZoom, float DefaultHFov,
+		float& OutPan, float& OutTilt, float& OutZoom, float& OutHFovDeg, float& OutDistCm);
+}
+
 namespace RpcDto
 {
 	/** ACarActor → CarDto JSON. Unity CarDto 필드 대응(pos 는 내부 Unreal 미터 규약). */

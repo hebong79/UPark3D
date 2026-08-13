@@ -1,0 +1,43 @@
+{
+	"isUnreal": true,
+	"name": "occ2_aisle_boxtruck",
+	"desc": "시나리오 2 — 저설치 카메라(3m)와 대상 사이 통로에 선 봉고 탑차가 전면 가림. 목표 80~100%",
+	"seed": 20260813,
+	"scene": {
+		"presetFile": "001_Preset_office.json",
+		"carFile": null,
+		"lightFile": "Sangmyung.json"
+	},
+	"cameras": [
+		{
+			"camId": 1,
+			"pos": { "x": -36.3, "y": -13.6, "z": 3.0 },
+			"aim": { "presetIdx": 1, "slot": 6, "widthSlots": 3 }
+		}
+	],
+	"actors": [
+		{
+			"role": "target",
+			"at": { "presetIdx": 1, "slot": 6 },
+			"prefabName": "현대_캐스퍼",
+			"rotY": 180,
+			"color": "magenta"
+		},
+		{
+			"role": "occluder",
+			"at": { "world": { "x": -26.0, "y": 2.9, "z": 0 } },
+			"prefabName": "기아_봉고_탑차",
+			"rotY": 90
+		}
+	],
+	"runs": [],
+	"shots": [
+		{ "tag": "N0", "camId": 1, "format": "png", "hideRoles": ["occluder"], "baseline": true },
+		{ "tag": "N1", "camId": 1, "format": "png", "hideRoles": [] }
+	],
+	"measure": {
+		"type": "colorAB",
+		"targetRole": "target",
+		"expect": { "occlusionMin": 0.80, "occlusionMax": 1.00 }
+	}
+}

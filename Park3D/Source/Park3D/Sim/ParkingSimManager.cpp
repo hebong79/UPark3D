@@ -427,7 +427,8 @@ FVector2D AParkingSimManager::ChooseOpenDir(const FParkSimSlot& Target, const TA
 
 // ===== 시작/중단 =====
 
-bool AParkingSimManager::StartSim(EParkSimDir InDir, int32 InPresetId, int32 InSlotIndex, int32 Seed, EParkSimParkMode Mode, FString& OutError)
+bool AParkingSimManager::StartSim(EParkSimDir InDir, int32 InPresetId, int32 InSlotIndex, int32 Seed, EParkSimParkMode Mode,
+	FString& OutError, int32 InPrefabId)
 {
 	// 이전 시나리오 예약을 먼저 지운다 — 실패로 끝나도 남은 예약이 다음 주행에 끼어들면 안 된다.
 	bScenarioActive = false;
@@ -664,7 +665,12 @@ bool AParkingSimManager::StartSim(EParkSimDir InDir, int32 InPresetId, int32 InS
 			NewCar.id = UCarPlacementLibrary::MakeCarId(++IdIndex);
 		}
 	}
-	NewCar.prefabId = Catalog.Num() > 0 ? Catalog[Stream.RandRange(0, Catalog.Num() - 1)].Idx : 1;
+	// 차종 지정이 있으면 그대로 쓴다(가림 연출은 가리개 크기가 결과를 좌우한다).
+	// 지정이 없거나 카탈로그에 없는 값이면 기존대로 무작위 — 같은 Seed 스트림을 유지한다.
+	const int32 RandomPrefabId = Catalog.Num() > 0 ? Catalog[Stream.RandRange(0, Catalog.Num() - 1)].Idx : 1;
+	const bool bPrefabValid = InPrefabId > 0
+		&& Catalog.ContainsByPredicate([InPrefabId](const FCarPresetEntry& C) { return C.Idx == InPrefabId; });
+	NewCar.prefabId = bPrefabValid ? InPrefabId : RandomPrefabId;
 	NewCar.prefabName = UCarPlacementLibrary::PrefabNameFromId(Catalog, NewCar.prefabId);
 	NewCar.presetId = Target.PresetId;
 	NewCar.slotId = Target.SlotIndex;
@@ -710,9 +716,9 @@ bool AParkingSimManager::StartSim(EParkSimDir InDir, int32 InPresetId, int32 InS
 }
 
 bool AParkingSimManager::StartScenario(EParkSimDir InDir, int32 InPresetId, int32 InSlotIndex, int32 Seed, EParkSimParkMode Mode,
-	bool bReplay, float ReplayDelaySec, float ReplaySpeedScale, FString& OutError)
+	bool bReplay, float ReplayDelaySec, float ReplaySpeedScale, FString& OutError, int32 InPrefabId)
 {
-	if (!StartSim(InDir, InPresetId, InSlotIndex, Seed, Mode, OutError))
+	if (!StartSim(InDir, InPresetId, InSlotIndex, Seed, Mode, OutError, InPrefabId))
 	{
 		return false;
 	}

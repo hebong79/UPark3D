@@ -9,6 +9,7 @@
 #include "../../CarPlacementLibrary.h"
 #include "../../CameraControlLibrary.h"
 #include "../../Park3DDataPaths.h"
+#include "Engine/StaticMesh.h"
 #include "Misc/Paths.h"
 
 namespace
@@ -91,6 +92,16 @@ namespace
 	ECarColor RandomCarColor()
 	{
 		return static_cast<ECarColor>(FMath::RandRange(0, static_cast<int32>(ECarColor::Purple)));
+	}
+
+	/** 카탈로그에서 prefabName → prefabId. 못 찾으면 0. */
+	int32 PrefabIdFromCatalogName(const TArray<FCarPresetEntry>& Catalog, const FString& Name)
+	{
+		for (const FCarPresetEntry& C : Catalog)
+		{
+			if (C.PrefabName.Equals(Name, ESearchCase::IgnoreCase)) { return C.Idx; }
+		}
+		return 0;
 	}
 }
 
@@ -192,6 +203,100 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetArrayField(TEXT("cars"), Arr);
 		return RpcDto::MakeObject(O);
+	});
+
+	// 차종 카탈로그 + 메시 실측 치수. 가림 연출은 가리개 크기가 결과를 좌우하는데
+	// 지금까지 치수를 데이터로 알 수 없어 모든 가림률 예측이 추정이었다.
+	// 메시 로컬 바운딩박스를 그대로 쓴다 — ACarActor 는 MeshComp 를 루트로 두고 스케일을 건드리지 않는다.
+	Dispatcher.Register(TEXT("car.catalog"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		const bool bWithSize = RpcParam::GetBool(P, TEXT("withSize"), true);
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		for (const FCarPresetEntry& Entry : Catalog)
+		{
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetNumberField(TEXT("prefabId"), Entry.Idx);
+			Row->SetStringField(TEXT("prefabName"), Entry.PrefabName);
+			Row->SetNumberField(TEXT("type"), static_cast<int32>(Entry.Type));
+			Row->SetStringField(TEXT("typeName"), UCarPlacementLibrary::GetCarTypeName(Entry.Type));
+
+			if (bWithSize)
+			{
+				// 소프트 참조라 로드해야 바운즈를 읽을 수 있다(최초 1회는 디스크 로드가 걸린다).
+				if (UStaticMesh* Mesh = Entry.Mesh.LoadSynchronous())
+				{
+					const FBox Box = Mesh->GetBoundingBox();
+					const FVector Size = Box.GetSize();
+					// 메시 로컬 축은 X=전폭, Y=전장이다(실측 확인: 캐스퍼 X 1.87 / Y 3.64 — 실차 1.595×3.595).
+					// X 가 실폭보다 큰 것은 사이드미러가 바운즈에 포함되기 때문이다.
+					Row->SetNumberField(TEXT("lengthM"), Size.Y / 100.0);
+					Row->SetNumberField(TEXT("widthM"), Size.X / 100.0);
+					Row->SetNumberField(TEXT("heightM"), Size.Z / 100.0);
+					Row->SetObjectField(TEXT("boundsMinM"), RpcDto::Vec3(Box.Min.X / 100.0, Box.Min.Y / 100.0, Box.Min.Z / 100.0));
+					Row->SetObjectField(TEXT("boundsMaxM"), RpcDto::Vec3(Box.Max.X / 100.0, Box.Max.Y / 100.0, Box.Max.Z / 100.0));
+				}
+				else
+				{
+					// 메시를 못 읽으면 조용히 0 을 넣지 않고 사실을 알린다.
+					Row->SetBoolField(TEXT("meshLoaded"), false);
+				}
+			}
+			Arr.Add(MakeShared<FJsonValueObject>(Row));
+		}
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetNumberField(TEXT("count"), Arr.Num());
+		O->SetArrayField(TEXT("cars"), Arr);
+		return RpcDto::MakeObject(O);
+	});
+
+	// 차량 1대의 데이터 필드 수정(차량 배치 패널의 "수정" 버튼이 하는 일).
+	// 전달한 키만 바꾼다. presetId/slotId 는 RPC 로 손댈 방법이 지금까지 없었다.
+	Dispatcher.Register(TEXT("car.update"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
+		FString Id;
+		if (!RpcParam::RequireString(P, TEXT("carNameId"), Id, E)) return nullptr;
+		ACarActor* Car = Mgr->FindByNameId(Id);
+		if (!Car) { E.FailDomain(FString::Printf(TEXT("차량 없음: %s"), *Id)); return nullptr; }
+
+		FCarPos& D = Car->CarData;
+		bool bNeedRespawn = false;
+		if (RpcParam::Has(P, TEXT("presetId"))) { D.presetId = RpcParam::GetInt(P, TEXT("presetId"), D.presetId); }
+		if (RpcParam::Has(P, TEXT("slotId")))   { D.slotId = RpcParam::GetInt(P, TEXT("slotId"), D.slotId); }
+		if (RpcParam::Has(P, TEXT("isFront")))  { D.isFront = RpcParam::GetBool(P, TEXT("isFront"), D.isFront); }
+		if (RpcParam::Has(P, TEXT("rotY")))     { D.rotY = RpcParam::GetFloat(P, TEXT("rotY"), D.rotY); }
+		if (RpcParam::Has(P, TEXT("prefabName")))
+		{
+			const FString NewName = RpcParam::GetString(P, TEXT("prefabName"));
+			const int32 NewId = PrefabIdFromCatalogName(Catalog, NewName);
+			if (NewId <= 0)
+			{
+				E.FailDomain(FString::Printf(TEXT("카탈로그에 없는 차종: %s"), *NewName));
+				return nullptr;
+			}
+			D.prefabId = NewId;
+			D.prefabName = NewName;
+			bNeedRespawn = true; // 메시 교체는 스폰 경로를 다시 타야 한다.
+		}
+		if (RpcParam::Has(P, TEXT("pos")))
+		{
+			FVector Pos;
+			if (!RpcParam::RequirePosXZ(P, TEXT("pos"), Pos, E)) return nullptr;
+			D.pos = { static_cast<float>(Pos.X), static_cast<float>(Pos.Y), static_cast<float>(Pos.Z) };
+		}
+
+		if (bNeedRespawn)
+		{
+			const FCarPos Snapshot = D;
+			Mgr->RemoveCarById(Id);
+			Car = Mgr->SpawnCarFromPos(Snapshot, Catalog);
+			if (!Car) { E.FailDomain(TEXT("차종 교체 후 재생성 실패")); return nullptr; }
+		}
+		else
+		{
+			Car->ApplyTransformFromData(Mgr->MetersToUU);
+		}
+		return RpcDto::CarToDtoValue(Car);
 	});
 
 	Dispatcher.Register(TEXT("car.get"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>

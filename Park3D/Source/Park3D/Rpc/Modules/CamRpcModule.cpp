@@ -516,6 +516,44 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 		return Result;
 	});
 
+	// 카메라 프리셋 1건 삭제(카메라 컨트롤 패널의 프리셋 "삭제"에 해당).
+	// 메모리에서 지우고 파일에 반영한다 — 저장하지 않으면 다음 loadPreset 에서 되살아난다.
+	Dispatcher.Register(TEXT("cam.deletePreset"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		int32 CamId = 0;
+		if (!RpcParam::RequireInt(P, TEXT("camId"), CamId, E)) return nullptr;
+		const int32 PresetId = RpcParam::GetInt(P, TEXT("presetId"), 1);
+		if (!PresetMemory.datas.IsValidIndex(CamId - 1))
+		{
+			E.FailDomain(FString::Printf(TEXT("메모리에 카메라 없음: camId=%d — 먼저 cam.loadPreset 을 호출하세요"), CamId));
+			return nullptr;
+		}
+		TArray<FCamDir>& Dirs = PresetMemory.datas[CamId - 1].datas;
+		const int32 Removed = Dirs.RemoveAll([PresetId](const FCamDir& D) { return D.preset_id == PresetId; });
+		if (Removed == 0)
+		{
+			E.FailDomain(FString::Printf(TEXT("프리셋 없음: camId=%d presetId=%d"), CamId, PresetId));
+			return nullptr;
+		}
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetNumberField(TEXT("removed"), Removed);
+		O->SetNumberField(TEXT("remaining"), Dirs.Num());
+
+		if (RpcParam::GetBool(P, TEXT("save"), true))
+		{
+			const FString Path = ResolveCamPresetPath(P);
+			if (!UCameraControlLibrary::SaveToJson(Path, PresetMemory))
+			{
+				E.FailDomain(FString::Printf(TEXT("카메라 프리셋 저장 실패: %s"), *Path));
+				return nullptr;
+			}
+			O->SetStringField(TEXT("fileName"), FPaths::GetCleanFilename(Path));
+		}
+		return RpcDto::MakeObject(O);
+	});
+
 	Dispatcher.Register(TEXT("cam.applyPreset"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		ACameraControlManager* Mgr = GetCameraManager(E); if (!Mgr) return nullptr;

@@ -1053,6 +1053,79 @@ void FScenarioRpcModule::Register(URpcDispatcher& Dispatcher)
 		return RpcDto::MakeObject(O);
 	});
 
+	Dispatcher.Register(TEXT("scenario.delete"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		const FString Path = ResolveScenarioPath(P);
+		if (!IFileManager::Get().FileExists(*Path))
+		{
+			E.FailDomain(FString::Printf(TEXT("시나리오 없음: %s"), *Path));
+			return nullptr;
+		}
+		if (!IFileManager::Get().Delete(*Path))
+		{
+			E.FailDomain(FString::Printf(TEXT("시나리오 삭제 실패: %s"), *Path));
+			return nullptr;
+		}
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetStringField(TEXT("path"), Path);
+		return RpcDto::MakeObject(O);
+	});
+
+	// 촬영 산출물 관리 — PNG 1장이 약 1.4 MB 라 대량 생산 뒤에는 정리가 필요하다.
+	Dispatcher.Register(TEXT("shot.list"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		const FString Dir = FPaths::GetPath(Park3DDataPaths::GetDataFilePath(TEXT("Shot"), TEXT("x.png")));
+		const FString Prefix = RpcParam::GetString(P, TEXT("name"));
+
+		TArray<FString> Files;
+		IFileManager::Get().FindFiles(Files, *(Dir / TEXT("*.*")), true, false);
+
+		int64 TotalBytes = 0;
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		for (const FString& F : Files)
+		{
+			if (!Prefix.IsEmpty() && !F.StartsWith(Prefix)) { continue; }
+			const int64 Size = IFileManager::Get().FileSize(*(Dir / F));
+			TotalBytes += FMath::Max<int64>(Size, 0);
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("file"), F);
+			Row->SetNumberField(TEXT("bytes"), static_cast<double>(Size));
+			Arr.Add(MakeShared<FJsonValueObject>(Row));
+		}
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetStringField(TEXT("dir"), Dir);
+		O->SetNumberField(TEXT("count"), Arr.Num());
+		O->SetNumberField(TEXT("totalBytes"), static_cast<double>(TotalBytes));
+		O->SetArrayField(TEXT("shots"), Arr);
+		return RpcDto::MakeObject(O);
+	});
+
+	Dispatcher.Register(TEXT("shot.clear"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		const FString Dir = FPaths::GetPath(Park3DDataPaths::GetDataFilePath(TEXT("Shot"), TEXT("x.png")));
+		const FString Prefix = RpcParam::GetString(P, TEXT("name"));
+		// 이름 접두어 없이 전체를 지우는 것은 되돌릴 수 없다 — 명시적으로 all:true 를 요구한다.
+		if (Prefix.IsEmpty() && !RpcParam::GetBool(P, TEXT("all"), false))
+		{
+			E.FailDomain(TEXT("전체 삭제는 all:true 가 필요하다(또는 name 으로 범위를 좁힐 것)"));
+			return nullptr;
+		}
+
+		TArray<FString> Files;
+		IFileManager::Get().FindFiles(Files, *(Dir / TEXT("*.*")), true, false);
+		int32 Deleted = 0;
+		for (const FString& F : Files)
+		{
+			if (!Prefix.IsEmpty() && !F.StartsWith(Prefix)) { continue; }
+			if (IFileManager::Get().Delete(*(Dir / F))) { ++Deleted; }
+		}
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetNumberField(TEXT("deleted"), Deleted);
+		return RpcDto::MakeObject(O);
+	});
+
 	Dispatcher.Register(TEXT("scenario.get"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		const FString Path = ResolveScenarioPath(P);
@@ -1107,6 +1180,79 @@ void FScenarioRpcModule::Register(URpcDispatcher& Dispatcher)
 			O->SetStringField(TEXT("note"),
 				FString::Printf(TEXT("runs %d건은 아직 실행되지 않는다(주행 지원은 다음 단계)."), RunCount));
 		}
+		return RpcDto::MakeObject(O);
+	});
+
+	// 여러 시나리오를 한 호출로 연속 실행한다(학습 데이터 대량 생산의 마지막 조각).
+	// 실패한 건은 건너뛰고 계속 간다 — N건 중 하나가 깨졌다고 전체를 버리면 대량 생산이 안 된다.
+	Dispatcher.Register(TEXT("scenario.batch"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		TArray<FString> Names;
+		const TArray<TSharedPtr<FJsonValue>>* NameArr = nullptr;
+		if (P.IsValid() && P->TryGetArrayField(TEXT("names"), NameArr))
+		{
+			for (const TSharedPtr<FJsonValue>& V : *NameArr) { Names.Add(V->AsString()); }
+		}
+		if (Names.Num() == 0)
+		{
+			E.FailDomain(TEXT("names[] 가 필요하다"));
+			return nullptr;
+		}
+		const int32 Repeat = FMath::Clamp(RpcParam::GetInt(P, TEXT("repeat"), 1), 1, 100);
+
+		int32 Ok = 0, Failed = 0;
+		TArray<TSharedPtr<FJsonValue>> Rows;
+		for (int32 R = 0; R < Repeat; ++R)
+		{
+			for (const FString& Name : Names)
+			{
+				const FString Path = Park3DDataPaths::GetDataFilePath(ScenarioSubDir, *(Name + TEXT(".json")));
+
+				TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+				Row->SetStringField(TEXT("name"), Name);
+				Row->SetNumberField(TEXT("repeat"), R);
+
+				FRpcError Local;
+				TSharedPtr<FJsonObject> LoadRes = LoadScenario(Path, Local);
+				if (!LoadRes.IsValid())
+				{
+					Row->SetBoolField(TEXT("ok"), false);
+					Row->SetStringField(TEXT("error"), Local.Message);
+					Rows.Add(MakeShared<FJsonValueObject>(Row));
+					++Failed;
+					continue;
+				}
+
+				TSharedPtr<FJsonObject> Doc;
+				const TArray<TSharedPtr<FJsonValue>>* Shots = nullptr;
+				if (ReadJsonObject(Path, Doc) && Doc->TryGetArrayField(TEXT("shots"), Shots) && Shots->Num() > 0)
+				{
+					TSharedPtr<FJsonObject> ShotRes = ShootScenario(Path, Local);
+					if (!ShotRes.IsValid())
+					{
+						Row->SetBoolField(TEXT("ok"), false);
+						Row->SetStringField(TEXT("error"), Local.Message);
+						Rows.Add(MakeShared<FJsonValueObject>(Row));
+						++Failed;
+						continue;
+					}
+					Row->SetObjectField(TEXT("shoot"), ShotRes);
+				}
+				Row->SetBoolField(TEXT("ok"), true);
+				Rows.Add(MakeShared<FJsonValueObject>(Row));
+				++Ok;
+			}
+		}
+
+		UE_LOG(LogTemp, Log, TEXT("[Scenario] batch — 시나리오 %d종 × %d회 → 성공 %d, 실패 %d"),
+			Names.Num(), Repeat, Ok, Failed);
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetNumberField(TEXT("total"), Ok + Failed);
+		O->SetNumberField(TEXT("succeeded"), Ok);
+		O->SetNumberField(TEXT("failed"), Failed);
+		O->SetArrayField(TEXT("results"), Rows);
 		return RpcDto::MakeObject(O);
 	});
 

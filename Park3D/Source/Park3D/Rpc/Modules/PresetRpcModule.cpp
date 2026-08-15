@@ -57,6 +57,27 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 		return MakeShared<FJsonValueArray>(Arr);
 	});
 
+	// 프리셋 메이커 패널의 표시 설정(라인 두께·데칼 두께·데칼/3D 전환)을 RPC 로.
+	// 지금까지 preset.rebuildAll{useDecal} 하나뿐이라 두께·3D 전환은 UI 로만 가능했다.
+	Dispatcher.Register(TEXT("preset.setView"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		AParkingPresetManager* Mgr = GetPresetManager(E); if (!Mgr) return nullptr;
+
+		if (RpcParam::Has(P, TEXT("useDecal")))       { Mgr->bUseDecalView = RpcParam::GetBool(P, TEXT("useDecal"), Mgr->bUseDecalView); }
+		if (RpcParam::Has(P, TEXT("show3D")))         { Mgr->bShow3DView = RpcParam::GetBool(P, TEXT("show3D"), Mgr->bShow3DView); }
+		if (RpcParam::Has(P, TEXT("lineThickness")))  { Mgr->LineThickness = RpcParam::GetFloat(P, TEXT("lineThickness"), Mgr->LineThickness); }
+		if (RpcParam::Has(P, TEXT("decalThickness"))) { Mgr->DecalLineThicknessCm = RpcParam::GetFloat(P, TEXT("decalThickness"), Mgr->DecalLineThicknessCm); }
+		Mgr->RefreshView();
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetBoolField(TEXT("useDecal"), Mgr->bUseDecalView);
+		O->SetBoolField(TEXT("show3D"), Mgr->bShow3DView);
+		O->SetNumberField(TEXT("lineThickness"), Mgr->LineThickness);
+		O->SetNumberField(TEXT("decalThickness"), Mgr->DecalLineThicknessCm);
+		return RpcDto::MakeObject(O);
+	});
+
 	Dispatcher.Register(TEXT("preset.get"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		AParkingPresetManager* Mgr = GetPresetManager(E); if (!Mgr) return nullptr;

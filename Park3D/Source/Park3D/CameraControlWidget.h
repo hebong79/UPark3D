@@ -215,7 +215,7 @@ protected:
 	// ---- 피킹/폴대 ----
 	UFUNCTION() void HandlePicking();
 	UFUNCTION() void HandleShowPole();
-	/** MainMenu → CameraControl 흐름에서 독립 카메라 측정 대화상자를 연다. */
+	/** 독립 카메라 측정 대화상자를 켜고 끈다(열려 있으면 닫는다). '거리 측정' 버튼이 부르는 것이 이것이다. */
 	UFUNCTION(BlueprintCallable, Category = "Camera|Distance") void ToggleDistanceDialog();
 	UFUNCTION() void HandleTargetLine();
 	UFUNCTION() void HandleTargetPoint();
@@ -286,8 +286,21 @@ private:
 	void BuildPtzPad();
 	/** 누르는 동안 이동을 시작한다(이미 다른 방향이면 교체). */
 	void BeginPtzMove(EPtzMove Move);
-	/** 패드가 고정 높이 ScrollBox 밖으로 잘리지 않도록 패널(RootBorder) 높이를 패드만큼 키운다. */
-	void GrowPanelForPtzPad();
+	/**
+	 * 패널(RootBorder) 높이를 본문 실제 높이에 맞춘다. 본문은 고정 높이 ScrollBox 안이라
+	 * 내용이 늘거나 줄어도 패널이 따라가지 않으면 잘리거나 빈 공간이 남는다.
+	 * 레이아웃이 끝나야 본문 높이를 알 수 있어 틱에서 1회 성공할 때까지 시도한다.
+	 */
+	void FitPanelToContent();
+	/**
+	 * Pan/Tilt/Zoom 슬라이더 묶음(라벨·Min/Cur/Max 줄·슬라이더)을 화면에서 접는다 — PTZ 패드가 그 일을 한다.
+	 * 위젯 자체는 살려 둔다: Cur 필드가 여전히 값의 원본이고 프리셋 저장/복원이 그것을 읽는다.
+	 * 반환값은 접힌 자리(= PTZ 패드를 끼울 VBox_Root 인덱스), 못 찾으면 INDEX_NONE.
+	 */
+	int32 CollapseControlGroup(UWidget* FieldsMember, USlider* Slider);
+	void CollapsePtzSliderGroups();
+	/** 6개 슬라이더 손잡이를 큰 원으로 바꾼다(기본 8x14 막대는 작아서 잡기 어렵다). 1회만 적용. */
+	void ApplySliderThumbStyle();
 	/** 패드의 P/T/Z 표시를 현재 컨트롤 값으로 갱신한다. Cur 값이 바뀌는 모든 경로가 여기를 지난다. */
 	void UpdatePtzReadout();
 	/** 매 틱 ActivePtzMove 방향으로 step(초당) 만큼 값을 옮긴다. 버튼에서 손을 떼면 스스로 멈춘다. */
@@ -301,6 +314,16 @@ private:
 	/** 하단 동적 버튼을 VBox_Root 끝에 붙이고 위·아래 여백을 적용한다. 패딩 적용 지점은 여기 하나다. */
 	void AddDynamicButtonToRoot(UButton* Button);
 	UFUNCTION() void HandleOpenDistanceDialog();
+	/** 대화상자를 만들어 뷰포트에 넣어 둔다(접힌 채로). 늦게 넣으면 크기가 잡히지 않으므로 패널 구성 시 1회. */
+	void EnsureDistanceDialog();
+	/** 대화상자가 지금 화면에 보이는지(뷰포트에 있고 접혀 있지 않은지). */
+	bool IsDistanceDialogVisible() const;
+	/** 대화상자를 펼친다(이미 보이면 아무것도 하지 않는다). 상태 복원 경로가 쓰는 열기 전용 진입점. */
+	void ShowDistanceDialog();
+	/** 대화상자를 접는다(뷰포트에서 빼지 않는다 — 다시 넣으면 크기가 잡히지 않는다). */
+	void HideDistanceDialog();
+	/** '거리 측정 열기/닫기' 버튼 라벨을 실제 표시 상태에 맞춘다(창의 X 로 닫은 경우까지 반영). */
+	void RefreshDistanceButtonLabel();
 	void BuildDistancePanel();
 	void UpdateDistancePanel();
 	void DrawDistanceVisuals() const;
@@ -323,6 +346,20 @@ private:
 	// 콤보 재구성 중 OnSelectionChanged 재진입 방지 플래그.
 	bool bComboRefreshing = false;
 	bool bDistanceAutoOpenAttemptedThisViewportSession = false;
+	/**
+	 * 거리 측정 창을 사용자가 띄워 둔 상태인지. 시작 시에는 false 라 창이 뜨지 않고,
+	 * '거리 측정 열기' 로 연 뒤에는 패널을 닫았다 다시 열어도 그 상태를 따라온다.
+	 * 갱신은 패널이 닫힐 때(NativeDestruct) 실제 표시 여부로 한다 — X 로 닫은 것도 그대로 기억된다.
+	 */
+	bool bDistanceDialogRequested = false;
+	/** 라벨 갱신을 상태가 바뀐 틱에만 하기 위한 직전 표시 여부. */
+	bool bDistanceDialogVisibleLastTick = false;
+	/** 슬라이더 손잡이 스타일을 이미 적용했는지(같은 작업을 패널을 열 때마다 반복하지 않는다). */
+	bool bSliderThumbStyled = false;
+	/** 패널 높이를 본문에 맞추는 작업을 끝냈는지. */
+	bool bPanelFitted = false;
+	/** PTZ 패드를 끼울 VBox_Root 인덱스(접은 Pan 묶음 자리). INDEX_NONE 이면 맨 끝에 붙인다. */
+	int32 PtzPadInsertIndex = INDEX_NONE;
 
 	/** Unity CPCamDistDlg 타겟라인 상태. Done 뒤에는 표시를 유지하고 PickMode는 해제한다. */
 	enum class ETargetLineState : uint8 { None, WaitStart, WaitEnd, Done };

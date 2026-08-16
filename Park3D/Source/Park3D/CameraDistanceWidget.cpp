@@ -22,12 +22,36 @@
 #include "InputCoreTypes.h"
 
 void UCameraDistanceWidget::SetCameraManager(ACameraControlManager* InManager) { CameraManager = InManager; }
-void UCameraDistanceWidget::SetParentDialogRect(const FVector2D& P,const FVector2D& S) { if(bUserMovedDialog||S.X<=1.f||S.Y<=1.f)return; ParentScreenPosition=P; ParentScreenSize=S; ApplyDialogPosition(); }
+void UCameraDistanceWidget::SetParentDialogRect(const FVector2D& P,const FVector2D& S)
+{
+	// 여기서 되돌아가면 ApplyDialogPosition 이 안 돌아 창이 투명(RenderOpacity 0)인 채로 남는다
+	// — 화면에는 아무것도 없고 로그도 없어 "안 열렸다"로 보인다. 그래서 되돌아간 이유를 1회 남긴다.
+	if (bUserMovedDialog || S.X <= 1.f || S.Y <= 1.f)
+	{
+		if (!bLoggedParentRectSkip)
+		{
+			bLoggedParentRectSkip = true;
+			UE_LOG(LogTemp, Warning, TEXT("[CameraDistance] 부모 사각형 무시: 사용자이동=%d 크기=%.1fx%.1f → 창이 투명하게 남습니다"),
+				bUserMovedDialog ? 1 : 0, S.X, S.Y);
+		}
+		return;
+	}
+	ParentScreenPosition=P; ParentScreenSize=S; ApplyDialogPosition();
+}
+
+TSharedRef<SWidget> UCameraDistanceWidget::RebuildWidget()
+{
+	// 위젯 트리는 Slate 를 만들기 "전에" 채워야 한다.
+	// NativeConstruct 는 Slate 가 만들어진 뒤에 불리므로, 거기서 WidgetTree->RootWidget 을 채우면
+	// 이미 빈 트리로 만들어진 Slate 에는 반영되지 않는다(창이 뷰포트에 있는데 geometry 가 0x0 인 원인).
+	BuildDialog();
+	return Super::RebuildWidget();
+}
 
 void UCameraDistanceWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
-	BuildDialog();
+	BuildDialog(); // 안전망(이미 만들어졌으면 즉시 반환).
 }
 
 void UCameraDistanceWidget::BuildDialog()
@@ -111,9 +135,18 @@ void UCameraDistanceWidget::BuildDialog()
 
 void UCameraDistanceWidget::ApplyDialogPosition()
 {
-	if(!WidgetTree || !WidgetTree->RootWidget || !GetOwningPlayer()) return;
-	UCanvasPanel* C=Cast<UCanvasPanel>(WidgetTree->RootWidget); if(!C||C->GetChildrenCount()==0) return;
-	UCanvasPanelSlot* S=Cast<UCanvasPanelSlot>(C->GetChildAt(0)->Slot); if(!S) return;
+	// 이 함수가 끝까지 가지 못하면 창은 RenderOpacity 0 인 채 남아 "안 열렸다"로 보인다 → 갈래를 1회 남긴다.
+	auto LogOnce = [this](const FString& Msg)
+	{
+		if (!bLoggedPlacement)
+		{
+			bLoggedPlacement = true;
+			UE_LOG(LogTemp, Warning, TEXT("[CameraDistance] %s"), *Msg);
+		}
+	};
+	if(!WidgetTree || !WidgetTree->RootWidget || !GetOwningPlayer()) { LogOnce(TEXT("배치 중단: 위젯트리/루트/오너 없음")); return; }
+	UCanvasPanel* C=Cast<UCanvasPanel>(WidgetTree->RootWidget); if(!C||C->GetChildrenCount()==0) { LogOnce(TEXT("배치 중단: 캔버스 루트 비어 있음")); return; }
+	UCanvasPanelSlot* S=Cast<UCanvasPanelSlot>(C->GetChildAt(0)->Slot); if(!S) { LogOnce(TEXT("배치 중단: 캔버스 슬롯 아님")); return; }
 
 	// 절대좌표(스크린 px) → 캔버스 로컬좌표(DPI 미적용) 변환. DPI≠1에서 컨트롤 패널과 어긋나던 원인.
 	float DPI = UWidgetLayoutLibrary::GetViewportScale(this); if (DPI <= 0.f) DPI = 1.f;
@@ -132,6 +165,9 @@ void UCameraDistanceWidget::ApplyDialogPosition()
 	DialogPosition.X = FMath::Clamp(ParentLocalPos.X, 0.f, FMath::Max(0.f, LocalVpW - DialogWidth));
 	DialogPosition.Y = FMath::Clamp(ParentLocalBottom + 8.f, 0.f, FMath::Max(0.f, LocalVpH - DialogH));
 	S->SetPosition(DialogPosition); SetRenderOpacity(1.f);
+	LogOnce(FString::Printf(TEXT("배치 완료: DPI=%.2f 부모=%.0fx%.0f@(%.0f,%.0f) 뷰포트로컬=%.0fx%.0f 창=%.0fx%.0f → (%.0f,%.0f)"),
+		DPI, ParentScreenSize.X, ParentScreenSize.Y, ParentScreenPosition.X, ParentScreenPosition.Y,
+		LocalVpW, LocalVpH, DialogWidth, DialogH, DialogPosition.X, DialogPosition.Y));
 }
 
 FReply UCameraDistanceWidget::NativeOnMouseButtonDown(const FGeometry& G,const FPointerEvent& E){if(E.GetEffectingButton()==EKeys::LeftMouseButton){bDraggingDialog=true;bUserMovedDialog=true;DragStartScreen=E.GetScreenSpacePosition();DragStartPosition=DialogPosition;return FReply::Handled().CaptureMouse(TakeWidget());}return Super::NativeOnMouseButtonDown(G,E);}
@@ -160,12 +196,28 @@ void UCameraDistanceWidget::HandleTargetPoint()
 void UCameraDistanceWidget::HandleClose()
 {
 	if (ACameraControlManager* Mgr = CameraManager.Get()) if (Mgr->PickMode == EPickMode::TargetLine || Mgr->PickMode == EPickMode::TargetPoint) Mgr->ReleasePick();
-	RemoveFromParent();
+	// 뷰포트에서 빼면 다시 넣을 때 geometry 가 0x0 으로 남아 화면에 안 나온다(CLAUDE.md 2026-08-11 카메라 뷰어와 같은 함정).
+	// 접기만 하면 부모(카메라 컨트롤)가 다음 틱에 버튼 라벨을 '거리 측정 열기' 로 되돌린다.
+	SetVisibility(ESlateVisibility::Collapsed);
 }
 
 void UCameraDistanceWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
+	// 창이 실제로 자리를 잡았는지 1회 남긴다. 크기가 0 이면 그려지지 않는다는 뜻이고,
+	// 그 원인은 대개 "화면 최초 레이아웃 뒤에 AddToViewport" 다(EnsureDistanceDialog 주석 참조).
+	if (!bLoggedSelfGeometry && RootSizeBox)
+	{
+		const FVector2D BoxSize = RootSizeBox->GetCachedGeometry().GetAbsoluteSize();
+		if (BoxSize.X > 0.f)
+		{
+			bLoggedSelfGeometry = true;
+			UE_LOG(LogTemp, Log, TEXT("[CameraDistance] 창 배치됨: %.0fx%.0f@(%.0f,%.0f)"),
+				BoxSize.X, BoxSize.Y,
+				RootSizeBox->GetCachedGeometry().GetAbsolutePosition().X,
+				RootSizeBox->GetCachedGeometry().GetAbsolutePosition().Y);
+		}
+	}
 	ACameraControlManager* Mgr = CameraManager.Get(); APlayerController* PC = GetOwningPlayer();
 	if (Mgr && PC && (PC->IsInputKeyDown(EKeys::LeftControl) || PC->IsInputKeyDown(EKeys::RightControl)) && PC->WasInputKeyJustPressed(EKeys::LeftMouseButton))
 	{

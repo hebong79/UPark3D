@@ -30,6 +30,23 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Car|Config")
 	static bool LoadOrder(TArray<FString>& OutNames);
 
+	/** JSON 문자열 → 차량 메시 폴더("meshDir"). 키가 없거나 비면 false(Out 미변경). */
+	static bool ParseMeshDir(const FString& Json, FString& OutDir);
+
+	/** 파일에서 메시 폴더를 읽는다. 파일 없음/키 없음이면 false. */
+	static bool LoadMeshDir(FString& OutDir);
+
+	/** 시작 시 1회 로드해 캐시하는 메시 폴더(GetCachedOrder 와 같은 관례). */
+	static const FString& GetCachedMeshDir();
+
+	/**
+	 * cars 이름과 meshDir 로 카탈로그를 직접 구성한다 — DT_CarCatalog 가 없을 때의 폴백.
+	 * 메시 경로 규칙은 "<meshDir>/<이름>.<이름>"(언리얼 에셋은 패키지명과 오브젝트명이 같다).
+	 * meshDir 이나 cars 가 없으면 빈 배열을 돌려준다.
+	 * Type 은 이 파일이 갖고 있지 않으므로 기본값(Medium)이다 — 분류는 UI 표시에만 쓰인다.
+	 */
+	static TArray<FCarPresetEntry> BuildCatalogFromConfig();
+
 	/**
 	 * 카탈로그를 Order 순서로 재배열하고 Idx 를 1부터 다시 매긴다.
 	 * - Order 에 있는 이름부터 그 순서대로 앞에 놓는다.

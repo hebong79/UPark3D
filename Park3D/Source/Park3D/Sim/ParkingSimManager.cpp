@@ -246,13 +246,12 @@ const TArray<FCarPresetEntry>& AParkingSimManager::EnsureCatalog()
 	if (!bCatalogLoaded)
 	{
 		bCatalogLoaded = true;
-		if (UDataTable* Table = LoadObject<UDataTable>(nullptr, TEXT("/Game/Data/DT_CarCatalog.DT_CarCatalog")))
+		// DT_CarCatalog 가 없으면 CatalogFromTable 이 car_catalog.json 으로 폴백한다(nullptr 허용).
+		UDataTable* Table = LoadObject<UDataTable>(nullptr, TEXT("/Game/Data/DT_CarCatalog.DT_CarCatalog"));
+		CachedCatalog = ACarPlacementManager::CatalogFromTable(Table);
+		if (CachedCatalog.Num() == 0)
 		{
-			CachedCatalog = ACarPlacementManager::CatalogFromTable(Table);
-		}
-		else
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[Sim] DT_CarCatalog 로드 실패 — 폴백 메시로 진행합니다."));
+			UE_LOG(LogTemp, Warning, TEXT("[Sim] 차량 카탈로그가 비었습니다 — 폴백 메시로 진행합니다."));
 		}
 	}
 	return CachedCatalog;

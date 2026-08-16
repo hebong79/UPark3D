@@ -104,12 +104,13 @@ ACarActor::ACarActor()
 		PlateText->SetRelativeRotation(FRotator(0.f, 90.f, 0.f));
 	}
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> FrontPlateFinder(TEXT("/Game/Cars/번호판/일반차_번호판_F"));
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> BackPlateFinder(TEXT("/Game/Cars/번호판/일반차_번호판"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> FrontPlateFinder(TEXT("/Game/Actors/Car/Plates/Meshs/SM_Plate_F"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> BackPlateFinder(TEXT("/Game/Actors/Car/Plates/Meshs/SM_Plate_B"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> PlateDetailCubeFinder(TEXT("/Engine/BasicShapes/Cube"));
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> WhitePlateBaseMatFinder(TEXT("/Engine/BasicShapes/BasicShapeMaterial"));
-	static ConstructorHelpers::FObjectFinder<UFont> PlateFontFinder(TEXT("/Game/Cars/번호판/Font/수성돋움체_Font"));
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> PlateTextMatFinder(TEXT("/Game/Cars/번호판/Font/DefaultTextMaterialTranslucent1"));
+	static ConstructorHelpers::FObjectFinder<UFont> PlateFontFinder(TEXT("/Game/Actors/Car/Plates/Font/수성돋움체"));
+	// 프로젝트 사본이던 DefaultTextMaterialTranslucent1 이 사라져 엔진 원본을 쓴다(내용 동일).
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> PlateTextMatFinder(TEXT("/Engine/EngineMaterials/DefaultTextMaterialTranslucent"));
 	if (FrontPlateFinder.Succeeded()) FrontPlateComp->SetStaticMesh(FrontPlateFinder.Object);
 	if (BackPlateFinder.Succeeded()) BackPlateComp->SetStaticMesh(BackPlateFinder.Object);
 	// 기존 Content UV/material(M_Plate+M_Num)의 white body, rounded bezel, blue KOR field를 그대로 사용한다.

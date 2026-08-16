@@ -23,6 +23,14 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Map|Floor")
 	TObjectPtr<UStaticMeshComponent> FloorMesh;
 
+	/**
+	 * 원경 지면(배경). 바닥 평면은 유한한데 SkyAtmosphere 는 지평선 "위"만 그리므로 그 사이가
+	 * 비어 검은 띠로 남는다. 바닥과 같은 머티리얼의 큰 평면을 조금 아래 깔아 지평선까지 메운다.
+	 * 맵 크기와 무관하게 고정 크기다(SetFloorSize 의 영향을 받지 않는다).
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Map|Floor")
+	TObjectPtr<UStaticMeshComponent> BackdropMesh;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map|Floor")
 	float MetersToUU = 100.f;
 

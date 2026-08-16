@@ -74,5 +74,16 @@ if not exist "%ARCHIVE%\Windows\Park3D.exe" (
     exit /b 1
 )
 
+rem Reference data (Save\3D, Save\Config) is not cooked - it is plain JSON read at
+rem runtime. Park3DDataPaths::GetSaveRootDir looks for <Stage>\Save when
+rem ProjectDir()\Save is absent, so stage it next to the exe. Without this the
+rem package starts but has no car catalog, no presets, no cameras.
+rem Sim is excluded: replay frames are produced per run, not input data.
+robocopy "%~dp0Park3D\Save" "%ARCHIVE%\Windows\Save" /MIR /XD Sim /NFL /NDL /NJH /NJS /NP > nul
+if errorlevel 8 (
+    echo [FAILED] Could not stage Save data to "%ARCHIVE%\Windows\Save"
+    exit /b 1
+)
+
 echo [OK] "%ARCHIVE%\Windows\Park3D.exe"
 exit /b 0

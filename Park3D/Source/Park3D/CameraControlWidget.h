@@ -288,6 +288,8 @@ private:
 	void BeginPtzMove(EPtzMove Move);
 	/** 패드가 고정 높이 ScrollBox 밖으로 잘리지 않도록 패널(RootBorder) 높이를 패드만큼 키운다. */
 	void GrowPanelForPtzPad();
+	/** 패드의 P/T/Z 표시를 현재 컨트롤 값으로 갱신한다. Cur 값이 바뀌는 모든 경로가 여기를 지난다. */
+	void UpdatePtzReadout();
 	/** 매 틱 ActivePtzMove 방향으로 step(초당) 만큼 값을 옮긴다. 버튼에서 손을 떼면 스스로 멈춘다. */
 	void TickPtzMove(float DeltaSeconds);
 	/** step 필드 값(초당 이동량: pan/tilt 는 도, zoom 은 배율). 비었거나 0 이하면 2 로 본다. */
@@ -351,6 +353,10 @@ private:
 	TWeakObjectPtr<UEditableTextBox> Field_PtzStep;
 	TWeakObjectPtr<UButton> PtzButtons[PtzMoveCount]; // 인덱스 = (int32)EPtzMove - 1
 	EPtzMove ActivePtzMove = EPtzMove::None;
+	// 패드 상단 P/T/Z 현재값 표시.
+	TWeakObjectPtr<UTextBlock> Txt_PtzPan;
+	TWeakObjectPtr<UTextBlock> Txt_PtzTilt;
+	TWeakObjectPtr<UTextBlock> Txt_PtzZoom;
 
 	// 패널 드래그 상태
 	bool bDraggingPanel = false;

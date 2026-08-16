@@ -22,6 +22,8 @@
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/SizeBox.h"
 #include "Components/SizeBoxSlot.h"
+#include "Components/GridPanel.h"
+#include "Components/GridSlot.h"
 #include "Blueprint/WidgetTree.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Kismet/GameplayStatics.h"
@@ -224,6 +226,7 @@ void UCameraControlWidget::NativeConstruct()
 	RefreshViewerBrush();
 	BuildDistanceLauncher();
 	BuildGetPtzButton();
+	BuildPtzPad();
 	// CameraControl이 열리면 독립 측정 대화상자도 자동 표시한다. X로 닫았던 경우에도 재표시된다.
 	if (!DistanceDialogInstance || !DistanceDialogInstance->IsInViewport())
 	{
@@ -248,6 +251,7 @@ void UCameraControlWidget::NativeDestruct()
 void UCameraControlWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
+	TickPtzMove(InDeltaTime);
 	// 첫 viewport session에서 NativeConstruct 타이밍으로 생성이 누락돼도, 실제 표시 tick에서 정확히 1회 재시도한다.
 	if (IsInViewport() && !bDistanceAutoOpenAttemptedThisViewportSession)
 	{
@@ -1095,6 +1099,198 @@ void UCameraControlWidget::HandleGetPtz()
 	Notify(FString::Printf(TEXT("카메라 %d PTZ 가져오기: P=%.3f T=%.3f Z=%.3f%s"),
 		CurCamIndex + 1, Pan, Tilt, Zoom,
 		bClamped ? TEXT(" — Min/Max 범위로 클램프됨") : TEXT("")));
+}
+
+// ===== PTZ 패드 (누르는 동안 연속 이동) =====
+void UCameraControlWidget::BuildPtzPad()
+{
+	// 이미 만든 패드가 있으면(패널 재-AddToViewport 로 NativeConstruct 재실행) 다시 만들지 않는다.
+	if (!VBox_Root || Field_PtzStep.IsValid())
+	{
+		if (!VBox_Root)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[CameraControl] VBox_Root가 없어 PTZ 패드를 만들 수 없습니다."));
+		}
+		return;
+	}
+
+	// 버튼 = 기호 라벨 + 고정 크기 SizeBox. 버튼 기본 패딩이 라벨을 밀어내 SizeBox 를 넘기므로 0 으로 낮춘다.
+	auto MakePadButton = [this](const FString& Symbol, float Width, float Height, int32 FontSize, UButton*& OutButton) -> USizeBox*
+	{
+		OutButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
+		UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		Label->SetText(FText::FromString(Symbol));
+		Label->SetJustification(ETextJustify::Center);
+		Label->SetColorAndOpacity(FSlateColor(FLinearColor::Black));
+		FSlateFontInfo Font = Label->GetFont();
+		Font.Size = FontSize;
+		Label->SetFont(Font);
+		OutButton->SetContent(Label);
+
+		FButtonStyle Style = OutButton->GetStyle();
+		Style.NormalPadding = FMargin(0.f);
+		Style.PressedPadding = FMargin(0.f);
+		OutButton->SetStyle(Style);
+
+		USizeBox* Box = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+		Box->SetWidthOverride(Width);
+		Box->SetHeightOverride(Height);
+		if (USizeBoxSlot* SBSlot = Cast<USizeBoxSlot>(Box->AddChild(OutButton)))
+		{
+			SBSlot->SetHorizontalAlignment(HAlign_Fill);
+			SBSlot->SetVerticalAlignment(VAlign_Fill);
+		}
+		return Box;
+	};
+
+	UVerticalBox* Body = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+
+	UTextBlock* Title = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+	Title->SetText(FText::FromString(TEXT("PTZ 제어 (누르는 동안 이동)")));
+	Title->SetColorAndOpacity(FSlateColor(FLinearColor::Black));
+	FSlateFontInfo TitleFont = Title->GetFont();
+	TitleFont.Size = 11;
+	Title->SetFont(TitleFont);
+	Body->AddChildToVerticalBox(Title);
+
+	UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+	Body->AddChildToVerticalBox(Row);
+
+	// 방향 패드 3x3 — (0,1)▲ / (1,0)◀ (1,1)중지 (1,2)▶ / (2,1)▼
+	constexpr float DirW = 36.f, DirH = 24.f;
+	UGridPanel* Pad = WidgetTree->ConstructWidget<UGridPanel>(UGridPanel::StaticClass());
+	UButton* BtnUp = nullptr, *BtnLeft = nullptr, *BtnStop = nullptr, *BtnRight = nullptr, *BtnDown = nullptr;
+	auto AddToPad = [Pad](USizeBox* Cell, int32 InRow, int32 InColumn)
+	{
+		if (UGridSlot* GSlot = Pad->AddChildToGrid(Cell, InRow, InColumn))
+		{
+			GSlot->SetPadding(FMargin(1.f));
+		}
+	};
+	AddToPad(MakePadButton(TEXT("▲"), DirW, DirH, 12, BtnUp),    0, 1);
+	AddToPad(MakePadButton(TEXT("◀"), DirW, DirH, 12, BtnLeft),  1, 0);
+	AddToPad(MakePadButton(TEXT("중지"), DirW, DirH, 10, BtnStop), 1, 1);
+	AddToPad(MakePadButton(TEXT("▶"), DirW, DirH, 12, BtnRight), 1, 2);
+	AddToPad(MakePadButton(TEXT("▼"), DirW, DirH, 12, BtnDown),  2, 1);
+	Row->AddChildToHorizontalBox(Pad);
+
+	// 줌 열 — 기호(＋/－)만, 방향 버튼보다 작게. 그 아래 step 필드.
+	constexpr float ZoomW = 24.f, ZoomH = 18.f;
+	UVerticalBox* ZoomCol = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+	UButton* BtnZoomIn = nullptr, *BtnZoomOut = nullptr;
+	ZoomCol->AddChildToVerticalBox(MakePadButton(TEXT("+"), ZoomW, ZoomH, 11, BtnZoomIn));
+	ZoomCol->AddChildToVerticalBox(MakePadButton(TEXT("−"), ZoomW, ZoomH, 11, BtnZoomOut));
+
+	UHorizontalBox* StepRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+	UTextBlock* StepLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+	StepLabel->SetText(FText::FromString(TEXT("step")));
+	StepLabel->SetColorAndOpacity(FSlateColor(FLinearColor::Black));
+	FSlateFontInfo StepFont = StepLabel->GetFont();
+	StepFont.Size = 10;
+	StepLabel->SetFont(StepFont);
+	if (UHorizontalBoxSlot* HBSlot = StepRow->AddChildToHorizontalBox(StepLabel))
+	{
+		HBSlot->SetVerticalAlignment(VAlign_Center);
+		HBSlot->SetPadding(FMargin(0.f, 0.f, 3.f, 0.f));
+	}
+	UEditableTextBox* StepBox = WidgetTree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass());
+	StepBox->SetText(FText::FromString(TEXT("2")));
+	StepBox->SetForegroundColor(FLinearColor::Black); // 다른 입력 필드와 같은 규약(NativeConstruct 1-b).
+	USizeBox* StepSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+	StepSize->SetWidthOverride(46.f);
+	StepSize->SetHeightOverride(22.f);
+	StepSize->AddChild(StepBox);
+	StepRow->AddChildToHorizontalBox(StepSize);
+	ZoomCol->AddChildToVerticalBox(StepRow);
+
+	if (UHorizontalBoxSlot* HBSlot = Row->AddChildToHorizontalBox(ZoomCol))
+	{
+		HBSlot->SetPadding(FMargin(8.f, 0.f, 0.f, 0.f));
+		HBSlot->SetVerticalAlignment(VAlign_Center);
+	}
+
+	// 누를 때 시작 / 뗄 때 정지. 가운데 '중지'는 같은 정지 핸들러를 누를 때 호출한다.
+	BtnUp->OnPressed.AddUniqueDynamic(this, &UCameraControlWidget::HandlePtzPressTiltUp);
+	BtnDown->OnPressed.AddUniqueDynamic(this, &UCameraControlWidget::HandlePtzPressTiltDown);
+	BtnLeft->OnPressed.AddUniqueDynamic(this, &UCameraControlWidget::HandlePtzPressPanLeft);
+	BtnRight->OnPressed.AddUniqueDynamic(this, &UCameraControlWidget::HandlePtzPressPanRight);
+	BtnZoomIn->OnPressed.AddUniqueDynamic(this, &UCameraControlWidget::HandlePtzPressZoomIn);
+	BtnZoomOut->OnPressed.AddUniqueDynamic(this, &UCameraControlWidget::HandlePtzPressZoomOut);
+	BtnStop->OnPressed.AddUniqueDynamic(this, &UCameraControlWidget::HandlePtzStop);
+	for (UButton* Btn : { BtnUp, BtnDown, BtnLeft, BtnRight, BtnZoomIn, BtnZoomOut })
+	{
+		Btn->OnReleased.AddUniqueDynamic(this, &UCameraControlWidget::HandlePtzStop);
+	}
+
+	PtzButtons[(int32)EPtzMove::TiltUp - 1]   = BtnUp;
+	PtzButtons[(int32)EPtzMove::TiltDown - 1] = BtnDown;
+	PtzButtons[(int32)EPtzMove::PanLeft - 1]  = BtnLeft;
+	PtzButtons[(int32)EPtzMove::PanRight - 1] = BtnRight;
+	PtzButtons[(int32)EPtzMove::ZoomIn - 1]   = BtnZoomIn;
+	PtzButtons[(int32)EPtzMove::ZoomOut - 1]  = BtnZoomOut;
+	Field_PtzStep = StepBox;
+
+	if (UVerticalBoxSlot* VBSlot = VBox_Root->AddChildToVerticalBox(Body))
+	{
+		VBSlot->SetPadding(FMargin(0.f, DynamicButtonOuterPadding, 0.f, DynamicButtonOuterPadding));
+	}
+}
+
+void UCameraControlWidget::HandlePtzPressTiltUp()   { BeginPtzMove(EPtzMove::TiltUp); }
+void UCameraControlWidget::HandlePtzPressTiltDown() { BeginPtzMove(EPtzMove::TiltDown); }
+void UCameraControlWidget::HandlePtzPressPanLeft()  { BeginPtzMove(EPtzMove::PanLeft); }
+void UCameraControlWidget::HandlePtzPressPanRight() { BeginPtzMove(EPtzMove::PanRight); }
+void UCameraControlWidget::HandlePtzPressZoomIn()   { BeginPtzMove(EPtzMove::ZoomIn); }
+void UCameraControlWidget::HandlePtzPressZoomOut()  { BeginPtzMove(EPtzMove::ZoomOut); }
+void UCameraControlWidget::HandlePtzStop()          { ActivePtzMove = EPtzMove::None; }
+
+void UCameraControlWidget::BeginPtzMove(EPtzMove Move)
+{
+	ActivePtzMove = Move;
+}
+
+float UCameraControlWidget::GetPtzStep() const
+{
+	const float Step = Field_PtzStep.IsValid() ? FCString::Atof(*Field_PtzStep->GetText().ToString()) : 0.f;
+	return Step > 0.f ? Step : 2.f;
+}
+
+void UCameraControlWidget::StepControl(ECamCtrl Kind, float Delta)
+{
+	const float Lo = FMath::Min(GetControlMin(Kind), GetControlMax(Kind));
+	const float Hi = FMath::Max(GetControlMin(Kind), GetControlMax(Kind));
+	const float Value = FMath::Clamp(GetControlCur(Kind) + Delta, Lo, Hi);
+	SetControlCurText(Kind, Value);
+	SetControlSlider(Kind, Value);
+	ApplyControlToCamera(Kind);
+}
+
+void UCameraControlWidget::TickPtzMove(float DeltaSeconds)
+{
+	if (ActivePtzMove == EPtzMove::None)
+	{
+		return;
+	}
+	// 버튼 밖에서 손을 떼면 OnReleased 가 오지 않을 수 있으므로 눌림 상태를 직접 확인해 멈춘다.
+	UButton* Btn = PtzButtons[(int32)ActivePtzMove - 1].Get();
+	if (!Btn || !Btn->IsPressed())
+	{
+		ActivePtzMove = EPtzMove::None;
+		return;
+	}
+
+	const float Delta = GetPtzStep() * DeltaSeconds; // step = 초당 이동량
+	switch (ActivePtzMove)
+	{
+	// tilt 는 아래를 볼수록 커진다(PanTiltToRotator: Pitch = -Tilt) → ▲ = 감소.
+	case EPtzMove::TiltUp:   StepControl(ECamCtrl::Tilt, -Delta); break;
+	case EPtzMove::TiltDown: StepControl(ECamCtrl::Tilt, +Delta); break;
+	case EPtzMove::PanLeft:  StepControl(ECamCtrl::Pan,  -Delta); break;
+	case EPtzMove::PanRight: StepControl(ECamCtrl::Pan,  +Delta); break;
+	case EPtzMove::ZoomIn:   StepControl(ECamCtrl::Zoom, +Delta); break;
+	case EPtzMove::ZoomOut:  StepControl(ECamCtrl::Zoom, -Delta); break;
+	default: break;
+	}
 }
 
 void UCameraControlWidget::HandleOpenDistanceDialog()

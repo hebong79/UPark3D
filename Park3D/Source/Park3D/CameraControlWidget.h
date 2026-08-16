@@ -223,10 +223,25 @@ protected:
 	/** 선택 카메라 액터의 현재 Pan/Tilt/Zoom 을 읽어 UI Pan/Tilt/Zoom 필드·슬라이더에 채운다. */
 	UFUNCTION() void HandleGetPtz();
 
+	// ---- PTZ 패드(누르는 동안 연속 이동) ----
+	// 버튼마다 방향 인자를 못 받으므로(OnPressed 는 void()) 방향별 얇은 UFUNCTION 으로 나눈다(§12-J 와 동일).
+	UFUNCTION() void HandlePtzPressTiltUp();
+	UFUNCTION() void HandlePtzPressTiltDown();
+	UFUNCTION() void HandlePtzPressPanLeft();
+	UFUNCTION() void HandlePtzPressPanRight();
+	UFUNCTION() void HandlePtzPressZoomIn();
+	UFUNCTION() void HandlePtzPressZoomOut();
+	/** '중지' 버튼과 모든 방향 버튼의 OnReleased 가 함께 쓰는 정지 핸들러. */
+	UFUNCTION() void HandlePtzStop();
+
 	// 콤보 항목 스타일(CarPlacement 동일 패턴)
 	UFUNCTION() UWidget* HandleGenerateComboItem(FString Item);
 
 private:
+	/** PTZ 패드에서 누르고 있는 방향. None = 정지. 배열 인덱스로도 쓰므로 순서를 바꾸지 말 것. */
+	enum class EPtzMove : uint8 { None = 0, TiltUp, TiltDown, PanLeft, PanRight, ZoomIn, ZoomOut };
+	static constexpr int32 PtzMoveCount = 6;
+
 	// ---- 컨트롤 배열 접근/변환 ----
 	FSliderCtrl* FindControl(ECamCtrl Kind);
 	float GetControlMin(ECamCtrl Kind);
@@ -267,6 +282,16 @@ private:
 	void BuildDistanceLauncher();
 	/** 'PTZ 가져오기' 버튼을 VBox_Root 끝에 만든다(WBP 자산 변경 없이, Btn_OpenDistance 와 동일 방식). */
 	void BuildGetPtzButton();
+	/** 방향 패드(▲◀중지▶▼) + 줌(＋/－) + step 필드를 VBox_Root 끝에 만든다(WBP 자산 변경 없이). */
+	void BuildPtzPad();
+	/** 누르는 동안 이동을 시작한다(이미 다른 방향이면 교체). */
+	void BeginPtzMove(EPtzMove Move);
+	/** 매 틱 ActivePtzMove 방향으로 step(초당) 만큼 값을 옮긴다. 버튼에서 손을 떼면 스스로 멈춘다. */
+	void TickPtzMove(float DeltaSeconds);
+	/** step 필드 값(초당 이동량: pan/tilt 는 도, zoom 은 배율). 비었거나 0 이하면 2 로 본다. */
+	float GetPtzStep() const;
+	/** 컨트롤 현재값에 Delta 를 더하고 Min/Max 로 클램프한 뒤 필드·슬라이더·카메라에 반영한다. */
+	void StepControl(ECamCtrl Kind, float Delta);
 	/** 하단 동적 버튼용 라벨 생성(가운데 정렬·검정·DynamicButtonFontSize). 폰트 크기 적용 지점은 여기 하나다. */
 	UTextBlock* MakeDynamicButtonLabel(const FString& InText);
 	/** 하단 동적 버튼을 VBox_Root 끝에 붙이고 위·아래 여백을 적용한다. 패딩 적용 지점은 여기 하나다. */
@@ -316,6 +341,14 @@ private:
 	UPROPERTY(Transient) UButton* Btn_OpenDistance = nullptr;
 	UPROPERTY(Transient) UButton* Btn_GetPtz = nullptr;
 	UPROPERTY(Transient) UCameraDistanceWidget* DistanceDialogInstance = nullptr;
+
+	// PTZ 패드 위젯 참조. 여기만 UPROPERTY 가 아니라 약참조인 이유:
+	// 이미 쿠킹된 WBP_CameraControl 의 C++ 베이스에 UPROPERTY 를 추가하면 패키지가
+	// Bad export index 로 즉사해 콘텐츠 재쿠킹이 필요해진다(CLAUDE.md 2026-08-12).
+	// 실제 소유(GC 참조)는 WidgetTree 와 부모 패널 슬롯이 하므로 여기서는 보기만 하면 된다.
+	TWeakObjectPtr<UEditableTextBox> Field_PtzStep;
+	TWeakObjectPtr<UButton> PtzButtons[PtzMoveCount]; // 인덱스 = (int32)EPtzMove - 1
+	EPtzMove ActivePtzMove = EPtzMove::None;
 
 	// 패널 드래그 상태
 	bool bDraggingPanel = false;

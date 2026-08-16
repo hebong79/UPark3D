@@ -29,6 +29,10 @@ Park3D/*.sdf
 # Content(.uasset/.umap)는 수 GB 바이너리 → git 제외. 에셋 이력은 SVN에서 관리.
 Park3D/Content/
 
+# 사용하지 않는 콘텐츠를 분리해 둔 폴더(2026-08-16). UE 는 Content 만 스캔하므로 여기 있으면 로드되지 않는다.
+# 되돌리기: python Park3D/_UnusedContent/restore_unused.py
+Park3D/_UnusedContent/
+
 # ===== Visual Studio / OS 로컬 파일 =====
 .vs/
 *.VC.db

@@ -22,6 +22,8 @@ public:
 	void SetParentDialogRect(const FVector2D& InScreenPosition, const FVector2D& InScreenSize);
 
 protected:
+	/** 위젯 트리를 Slate 생성 전에 채운다(C++ 전용 위젯의 트리 구성 자리). */
+	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeConstruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
@@ -47,6 +49,12 @@ private:
 	float DialogWidth = 360.f;   // 부모(카메라 컨트롤) 폭에 맞춰 로컬 단위로 갱신된다.
 	bool bDraggingDialog = false;
 	bool bUserMovedDialog = false;
+	/** SetParentDialogRect 가 되돌아간 사유를 로그로 1회만 남기기 위한 표식(매 틱 도배 방지). */
+	bool bLoggedParentRectSkip = false;
+	/** ApplyDialogPosition 의 결과(또는 중단 사유)를 1회만 남기기 위한 표식. */
+	bool bLoggedPlacement = false;
+	/** Slate 가 실제로 잡아 준 자리를 1회만 남기기 위한 표식. */
+	bool bLoggedSelfGeometry = false;
 	FVector2D DragStartScreen = FVector2D::ZeroVector, DragStartPosition = FVector2D::ZeroVector;
 	UPROPERTY(Transient) USizeBox* RootSizeBox = nullptr;   // 폭 고정·높이 자동 컨테이너.
 	UPROPERTY(Transient) UButton* Btn_Line = nullptr;

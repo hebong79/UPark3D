@@ -26,6 +26,7 @@
 #include "Components/GridSlot.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Blueprint/WidgetTree.h"
+#include "Blueprint/WidgetLayoutLibrary.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/PlayerController.h"
@@ -58,7 +59,11 @@ namespace
 
 	// PTZ 패드가 차지하는 세로 크기(제목 + 방향 3행 + 슬롯 패딩). 패널 높이를 이만큼 키워 스크롤 밖으로
 	// 밀리지 않게 한다 — 본문(VBox_Root)이 고정 높이 ScrollBox 안이라 그냥 붙이면 잘려 보이지 않는다.
-	static constexpr float GPtzPadHeight = 126.f;
+	// 패널 테두리·스크롤 여백 몫(본문 높이에 더해 패널 높이를 정한다).
+	static constexpr float GPanelChromeHeight = 16.f;
+
+	// 슬라이더 손잡이 지름. 기본 손잡이(8x14)의 가로·세로 2배 = 28 을 정원으로 쓴다.
+	static constexpr float GSliderThumbDiameter = 28.f;
 
 	// 에디트박스 표시는 소수 3자리로 고정한다. 필드 텍스트가 값의 원본(GetControlXxx 이 Atof 로 되읽음)이므로
 	// 여기서 자르면 카메라에 적용되는 값도 3자리로 제한된다. SanitizeFloat 는 float 오차가 그대로 보였다.
@@ -231,22 +236,29 @@ void UCameraControlWidget::NativeConstruct()
 	RefreshViewerBrush();
 	BuildDistanceLauncher();
 	BuildGetPtzButton();
+	CollapsePtzSliderGroups(); // 패드가 들어갈 자리를 먼저 비운다(인덱스도 여기서 정해진다).
 	BuildPtzPad();
-	// CameraControl이 열리면 독립 측정 대화상자도 자동 표시한다. X로 닫았던 경우에도 재표시된다.
-	if (!DistanceDialogInstance || !DistanceDialogInstance->IsInViewport())
+	ApplySliderThumbStyle();
+	// 창은 여기서 뷰포트에 넣어 두되 접어 둔다(늦게 넣으면 크기가 잡히지 않는다 — EnsureDistanceDialog 주석).
+	// 시작 시에는 접힌 상태 그대로이고, 사용자가 열어 둔 채 패널만 닫았다 다시 연 경우에만 펼친다.
+	EnsureDistanceDialog();
+	if (bDistanceDialogRequested)
 	{
-		ToggleDistanceDialog();
+		ShowDistanceDialog();
 	}
+	RefreshDistanceButtonLabel();
 
 	SetFileName(CurFileName.IsEmpty() ? TEXT("CameraPos_SNum.json") : CurFileName);
 }
 
 void UCameraControlWidget::NativeDestruct()
 {
-	// MainMenu의 CameraControl 토글 off와 같은 수명: 거리창도 함께 숨긴다(인스턴스는 재사용).
-	if (DistanceDialogInstance && DistanceDialogInstance->IsInViewport())
+	// MainMenu의 CameraControl 토글 off와 같은 수명: 거리창도 함께 접는다(뷰포트에서는 빼지 않는다).
+	// 접기 직전의 표시 여부가 곧 사용자의 의사다 — 다음에 패널을 열 때 그대로 복원한다.
+	bDistanceDialogRequested = IsDistanceDialogVisible();
+	if (bDistanceDialogRequested)
 	{
-		DistanceDialogInstance->RemoveFromParent();
+		DistanceDialogInstance->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	// 뷰어는 APark3DGameMode 가 소유하는 상시 위젯이므로 패널이 닫혀도 제거하지 않는다.
 	// (이전에는 여기서 RemoveFromParent 하여 컨트롤 패널을 닫으면 카메라 뷰가 사라졌다.)
@@ -257,14 +269,21 @@ void UCameraControlWidget::NativeTick(const FGeometry& MyGeometry, float InDelta
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 	TickPtzMove(InDeltaTime);
-	// 첫 viewport session에서 NativeConstruct 타이밍으로 생성이 누락돼도, 실제 표시 tick에서 정확히 1회 재시도한다.
-	if (IsInViewport() && !bDistanceAutoOpenAttemptedThisViewportSession)
+	FitPanelToContent(); // 레이아웃이 끝난 뒤 1회 성공한다.
+	// 열어 둔 상태를 복원하는 경우에 한해, NativeConstruct 타이밍으로 생성이 누락돼도 표시 tick에서 1회 재시도한다.
+	if (bDistanceDialogRequested && IsInViewport() && !bDistanceAutoOpenAttemptedThisViewportSession)
 	{
-		ToggleDistanceDialog();
-		bDistanceAutoOpenAttemptedThisViewportSession = DistanceDialogInstance && DistanceDialogInstance->IsInViewport();
+		ShowDistanceDialog();
+		bDistanceAutoOpenAttemptedThisViewportSession = IsDistanceDialogVisible();
+	}
+	// 창의 X 로 닫은 경우도 버튼 라벨과 복원 의사에 반영한다(상태가 바뀐 틱에만).
+	if (IsDistanceDialogVisible() != bDistanceDialogVisibleLastTick)
+	{
+		bDistanceDialogRequested = IsDistanceDialogVisible();
+		RefreshDistanceButtonLabel();
 	}
 	// NativeConstruct 직후에는 CachedGeometry가 0일 수 있다. 다음 Slate layout tick에서 실제 AABB로 한 번 이상 동기화한다.
-	if (DistanceDialogInstance && DistanceDialogInstance->IsInViewport())
+	if (IsDistanceDialogVisible())
 	{
 		// CameraControl 전체 geometry가 아니라 실제 보이는 외곽 RootBorder의 bottom을 사용한다.
 		const FGeometry& VisualGeometry = RootBorder ? RootBorder->GetCachedGeometry() : MyGeometry;
@@ -1300,11 +1319,14 @@ void UCameraControlWidget::BuildPtzPad()
 	PtzButtons[(int32)EPtzMove::ZoomOut - 1]  = BtnZoomOut;
 	Field_PtzStep = StepBox;
 
-	if (UVerticalBoxSlot* VBSlot = VBox_Root->AddChildToVerticalBox(Body))
+	// 접은 Pan/Tilt/Zoom 묶음 자리에 끼운다(못 찾았으면 종전대로 맨 끝).
+	UPanelSlot* PadSlot = (PtzPadInsertIndex != INDEX_NONE)
+		? VBox_Root->InsertChildAt(PtzPadInsertIndex, Body)
+		: VBox_Root->AddChild(Body);
+	if (UVerticalBoxSlot* VBSlot = Cast<UVerticalBoxSlot>(PadSlot))
 	{
 		VBSlot->SetPadding(FMargin(0.f, DynamicButtonOuterPadding, 0.f, DynamicButtonOuterPadding));
 	}
-	GrowPanelForPtzPad();
 	UpdatePtzReadout();
 }
 
@@ -1322,34 +1344,141 @@ void UCameraControlWidget::UpdatePtzReadout()
 	Show(Txt_PtzZoom, GetControlCur(ECamCtrl::Zoom));
 }
 
-void UCameraControlWidget::GrowPanelForPtzPad()
+void UCameraControlWidget::FitPanelToContent()
 {
-	// 본문은 RootBorder 안의 ScrollBox(Scroll_Root)에 들어 있고, RootBorder 는 캔버스에서 높이가 고정이다.
-	// → 끝에 붙인 패드는 스크롤을 내려야만 보인다. 패널 자체를 패드 높이만큼 키워 스크롤 없이 보이게 한다.
-	if (!RootBorder)
+	// 본문(VBox_Root)은 RootBorder 안의 ScrollBox 에 들어 있고 RootBorder 높이는 캔버스에서 고정이다.
+	// → 내용이 바뀌면(패드 추가, 슬라이더 묶음 접기, 손잡이 확대) 패널이 따라가야 잘리거나 비지 않는다.
+	if (bPanelFitted || !RootBorder || !VBox_Root)
 	{
-		Notify(TEXT("PTZ 패드: RootBorder 가 없어 패널 높이를 키우지 못했습니다(스크롤해야 보입니다)"));
 		return;
+	}
+	const float ContentHeight = VBox_Root->GetDesiredSize().Y;
+	if (ContentHeight <= 1.f)
+	{
+		return; // 아직 레이아웃 전 — 다음 틱에 다시.
 	}
 	UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(RootBorder->Slot);
 	if (!CanvasSlot)
 	{
-		Notify(TEXT("PTZ 패드: RootBorder 가 캔버스 슬롯이 아니어서 높이를 키우지 못했습니다"));
+		bPanelFitted = true; // 캔버스 슬롯이 아니면 손댈 것이 없다.
 		return;
 	}
-	if (CanvasSlot->GetAutoSize())
+	if (CanvasSlot->GetAutoSize() || !FMath::IsNearlyEqual(CanvasSlot->GetAnchors().Minimum.Y, CanvasSlot->GetAnchors().Maximum.Y))
 	{
-		return; // 자동 크기 — 내용에 맞춰 이미 늘어난다.
+		bPanelFitted = true; // 자동 크기이거나 세로로 늘어나는 앵커 — 높이는 이미 내용/뷰포트가 정한다.
+		return;
 	}
-	const FAnchors Anchors = CanvasSlot->GetAnchors();
-	if (!FMath::IsNearlyEqual(Anchors.Minimum.Y, Anchors.Maximum.Y))
+
+	// 화면 밖으로 넘치면 스크롤이 받아야 하므로, 뷰포트 안으로 제한한다.
+	float MaxHeight = ContentHeight + GPanelChromeHeight;
+	if (const APlayerController* PC = GetOwningPlayer())
 	{
-		return; // 세로로 늘어나는 앵커 — 높이는 뷰포트가 정하므로 건드리지 않는다.
+		int32 VpX = 0, VpY = 0;
+		PC->GetViewportSize(VpX, VpY);
+		float DPI = UWidgetLayoutLibrary::GetViewportScale(this);
+		if (DPI <= 0.f)
+		{
+			DPI = 1.f;
+		}
+		MaxHeight = FMath::Min(MaxHeight, (float)VpY / DPI - CanvasSlot->GetPosition().Y - 8.f);
 	}
 
 	const FVector2D PanelSize = CanvasSlot->GetSize();
-	CanvasSlot->SetSize(FVector2D(PanelSize.X, PanelSize.Y + GPtzPadHeight));
-	Notify(FString::Printf(TEXT("PTZ 패드 추가 — 패널 높이 %.0f → %.0f"), PanelSize.Y, PanelSize.Y + GPtzPadHeight));
+	CanvasSlot->SetSize(FVector2D(PanelSize.X, MaxHeight));
+	bPanelFitted = true;
+	Notify(FString::Printf(TEXT("패널 높이 %.0f → %.0f (본문 %.0f)"), PanelSize.Y, MaxHeight, ContentHeight));
+}
+
+int32 UCameraControlWidget::CollapseControlGroup(UWidget* FieldsMember, USlider* Slider)
+{
+	if (!VBox_Root)
+	{
+		return INDEX_NONE;
+	}
+	int32 First = INDEX_NONE;
+	// 위젯에서 VBox_Root 의 직계 자식까지 거슬러 올라가 그 자식을 접는다(묶음 단위로 사라지게).
+	auto CollapseAncestor = [this, &First](UWidget* Widget)
+	{
+		UWidget* Child = Widget;
+		while (Child && Child->GetParent() != VBox_Root)
+		{
+			Child = Child->GetParent();
+		}
+		if (!Child)
+		{
+			return;
+		}
+		Child->SetVisibility(ESlateVisibility::Collapsed);
+		const int32 Index = VBox_Root->GetChildIndex(Child);
+		if (First == INDEX_NONE || (Index != INDEX_NONE && Index < First))
+		{
+			First = Index;
+		}
+	};
+	CollapseAncestor(FieldsMember);
+	CollapseAncestor(Slider);
+
+	// 묶음 제목("Camera Pan" 등)은 필드 줄 바로 앞의 TextBlock 이다.
+	if (First > 0)
+	{
+		if (UTextBlock* Label = Cast<UTextBlock>(VBox_Root->GetChildAt(First - 1)))
+		{
+			Label->SetVisibility(ESlateVisibility::Collapsed);
+			--First;
+		}
+	}
+	return First;
+}
+
+void UCameraControlWidget::CollapsePtzSliderGroups()
+{
+	// Pan/Tilt/Zoom 은 PTZ 패드로 조작한다 → 슬라이더 묶음은 화면에서 접고 그 자리를 패드에 넘긴다.
+	// 위젯은 살아 있으므로 값(Cur)·범위(Min/Max)·프리셋 저장/복원 경로는 그대로 동작한다.
+	const int32 PanIndex  = CollapseControlGroup(Field_Pan_Cur,  Slider_Pan);
+	const int32 TiltIndex = CollapseControlGroup(Field_Tilt_Cur, Slider_Tilt);
+	const int32 ZoomIndex = CollapseControlGroup(Field_Zoom_Cur, Slider_Zoom);
+
+	PtzPadInsertIndex = INDEX_NONE;
+	for (const int32 Index : { PanIndex, TiltIndex, ZoomIndex })
+	{
+		if (Index != INDEX_NONE && (PtzPadInsertIndex == INDEX_NONE || Index < PtzPadInsertIndex))
+		{
+			PtzPadInsertIndex = Index;
+		}
+	}
+}
+
+void UCameraControlWidget::ApplySliderThumbStyle()
+{
+	// 슬라이더 기본 손잡이는 8x14 얇은 막대라 눈에 잘 안 띄고 잡기도 어렵다 → 지름 28(가로·세로 2배)의 원으로.
+	// RoundedBox + HalfHeightRadius 는 정사각형에서 정원이 된다.
+	if (bSliderThumbStyled)
+	{
+		return; // 패널을 다시 열 때 패널 높이가 또 늘어나지 않게 1회만.
+	}
+	bSliderThumbStyled = true;
+	// 접힌 Pan/Tilt/Zoom 슬라이더까지 함께 칠하지만, 보이지 않으니 결과에는 영향이 없다.
+
+	FSlateBrush Thumb;
+	Thumb.DrawAs = ESlateBrushDrawType::RoundedBox;
+	Thumb.OutlineSettings.RoundingType = ESlateBrushRoundingType::HalfHeightRadius;
+	Thumb.ImageSize = FVector2D(GSliderThumbDiameter, GSliderThumbDiameter);
+	Thumb.TintColor = FSlateColor(FLinearColor(0.26f, 0.26f, 0.26f, 1.f));
+	FSlateBrush HoveredThumb = Thumb;
+	HoveredThumb.TintColor = FSlateColor(FLinearColor(0.09f, 0.09f, 0.09f, 1.f)); // 잡는 중인지 보이게 더 진하게.
+
+	for (const FSliderCtrl& C : Controls)
+	{
+		if (!C.Slider)
+		{
+			continue;
+		}
+		FSliderStyle Style = C.Slider->GetWidgetStyle();
+		Style.SetNormalThumbImage(Thumb);
+		Style.SetHoveredThumbImage(HoveredThumb);
+		Style.SetDisabledThumbImage(Thumb);
+		C.Slider->SetWidgetStyle(Style);
+	}
 }
 
 void UCameraControlWidget::HandlePtzPressTiltUp()   { BeginPtzMove(EPtzMove::TiltUp); }
@@ -1416,22 +1545,78 @@ void UCameraControlWidget::HandleOpenDistanceDialog()
 
 void UCameraControlWidget::ToggleDistanceDialog()
 {
-	if (DistanceDialogInstance && DistanceDialogInstance->IsInViewport())
+	// 버튼 1개로 열고 닫는다. 상태 복원 경로는 ShowDistanceDialog 를 직접 부른다(여기로 오면 닫혀 버린다).
+	if (IsDistanceDialogVisible())
 	{
-		// CameraControl이 열린 동안 자동 창을 버튼으로 닫지 않는다. X는 거리창만 닫고,
-		// 이 버튼은 닫힌 창을 다시 여는 보조 진입점이다.
-		return;
+		HideDistanceDialog();
 	}
+	else
+	{
+		ShowDistanceDialog();
+	}
+}
+
+void UCameraControlWidget::EnsureDistanceDialog()
+{
+	// 뷰포트 추가는 '패널이 처음 구성될 때' 한 번만 한다.
+	// 화면 최초 레이아웃 뒤에 AddToViewport 하면 로그상 추가는 되는데 geometry 가 0x0 으로 남아
+	// 화면에 아무것도 그려지지 않는다(카메라 뷰어에서 겪은 것과 같은 함정, CLAUDE.md 2026-08-11).
+	// 그래서 여기서 넣어 두고 접어 두었다가, 열고 닫기는 가시성으로만 한다.
 	if (!DistanceDialogInstance)
 	{
 		DistanceDialogInstance = CreateWidget<UCameraDistanceWidget>(GetOwningPlayer(), UCameraDistanceWidget::StaticClass());
 	}
-	if (DistanceDialogInstance)
+	if (!DistanceDialogInstance)
 	{
-		DistanceDialogInstance->SetCameraManager(GetCameraManager());
-		DistanceDialogInstance->AddToViewport(20); // CameraControl(10)과 MainMenu(100) 사이의 독립 대화상자.
-		DistanceDialogInstance->SetRenderOpacity(0.f); // 최초 prepass 전 (0,0) geometry 노출 방지.
+		return;
 	}
+	DistanceDialogInstance->SetCameraManager(GetCameraManager());
+	if (!DistanceDialogInstance->IsInViewport())
+	{
+		DistanceDialogInstance->AddToViewport(20); // CameraControl(10)과 MainMenu(100) 사이의 독립 대화상자.
+		DistanceDialogInstance->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
+bool UCameraControlWidget::IsDistanceDialogVisible() const
+{
+	return DistanceDialogInstance
+		&& DistanceDialogInstance->IsInViewport()
+		&& DistanceDialogInstance->GetVisibility() != ESlateVisibility::Collapsed;
+}
+
+void UCameraControlWidget::ShowDistanceDialog()
+{
+	EnsureDistanceDialog();
+	if (!DistanceDialogInstance)
+	{
+		return;
+	}
+	bDistanceDialogRequested = true; // 명시적으로 연 것 = 사용자의 의사.
+	if (!IsDistanceDialogVisible())
+	{
+		DistanceDialogInstance->SetVisibility(ESlateVisibility::SelfHitTestInvisible); // UUserWidget 기본값.
+		Notify(TEXT("거리 측정 창 열기"));
+	}
+	RefreshDistanceButtonLabel();
+}
+
+void UCameraControlWidget::HideDistanceDialog()
+{
+	bDistanceDialogRequested = false;
+	if (IsDistanceDialogVisible())
+	{
+		// RemoveFromParent 로 빼면 다음에 다시 넣을 때 크기가 잡히지 않는다 → 접기만 한다.
+		DistanceDialogInstance->SetVisibility(ESlateVisibility::Collapsed);
+		Notify(TEXT("거리 측정 창 닫기"));
+	}
+	RefreshDistanceButtonLabel();
+}
+
+void UCameraControlWidget::RefreshDistanceButtonLabel()
+{
+	bDistanceDialogVisibleLastTick = IsDistanceDialogVisible();
+	SetDistanceButtonLabel(Btn_OpenDistance, bDistanceDialogVisibleLastTick ? TEXT("거리 측정 닫기") : TEXT("거리 측정 열기"));
 }
 
 void UCameraControlWidget::BuildDistancePanel()

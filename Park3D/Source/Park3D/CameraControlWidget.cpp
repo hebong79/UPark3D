@@ -58,7 +58,7 @@ namespace
 
 	// PTZ 패드가 차지하는 세로 크기(제목 + 방향 3행 + 슬롯 패딩). 패널 높이를 이만큼 키워 스크롤 밖으로
 	// 밀리지 않게 한다 — 본문(VBox_Root)이 고정 높이 ScrollBox 안이라 그냥 붙이면 잘려 보이지 않는다.
-	static constexpr float GPtzPadHeight = 100.f;
+	static constexpr float GPtzPadHeight = 126.f;
 
 	// 에디트박스 표시는 소수 3자리로 고정한다. 필드 텍스트가 값의 원본(GetControlXxx 이 Atof 로 되읽음)이므로
 	// 여기서 자르면 카메라에 적용되는 값도 3자리로 제한된다. SanitizeFloat 는 float 오차가 그대로 보였다.
@@ -406,6 +406,8 @@ void UCameraControlWidget::SetControlCurText(ECamCtrl Kind, float Value)
 			C->Cur->SetText(NumText(Value)); // 프로그램적 SetText는 OnTextCommitted 미발생(재진입 없음).
 		}
 	}
+	// Cur 값이 바뀌는 경로(슬라이더·필드 입력·프리셋 로드·PTZ 가져오기·패드)는 모두 여기를 지난다.
+	UpdatePtzReadout();
 }
 
 void UCameraControlWidget::SetControlSlider(ECamCtrl Kind, float Value)
@@ -1158,6 +1160,53 @@ void UCameraControlWidget::BuildPtzPad()
 	Title->SetFont(TitleFont);
 	Body->AddChildToVerticalBox(Title);
 
+	// P/T/Z 현재값 — 패드에서 바로 읽도록 위쪽 Pan/Tilt/Zoom 필드 값을 그대로 비춘다(값의 원본은 그 필드다).
+	UHorizontalBox* ReadRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+	auto AddReadout = [this, ReadRow](const FString& Tag, const FLinearColor& TagColor, TWeakObjectPtr<UTextBlock>& OutValue)
+	{
+		UTextBlock* TagText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		TagText->SetText(FText::FromString(Tag));
+		TagText->SetColorAndOpacity(FSlateColor(TagColor));
+		FSlateFontInfo TagFont = TagText->GetFont();
+		TagFont.Size = 11;
+		TagText->SetFont(TagFont);
+		if (UHorizontalBoxSlot* TagSlot = ReadRow->AddChildToHorizontalBox(TagText))
+		{
+			TagSlot->SetVerticalAlignment(VAlign_Center);
+			TagSlot->SetPadding(FMargin(0.f, 0.f, 3.f, 0.f));
+		}
+
+		UTextBlock* ValueText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		ValueText->SetText(FText::FromString(TEXT("0.00")));
+		ValueText->SetJustification(ETextJustify::Center);
+		ValueText->SetColorAndOpacity(FSlateColor(FLinearColor::Black));
+		FSlateFontInfo ValueFont = ValueText->GetFont();
+		ValueFont.Size = 11;
+		ValueText->SetFont(ValueFont);
+
+		UBorder* ValueBox = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+		ValueBox->SetBrushColor(FLinearColor(0.97f, 0.97f, 0.97f, 1.f));
+		ValueBox->SetPadding(FMargin(4.f, 1.f));
+		ValueBox->SetContent(ValueText);
+
+		USizeBox* ValueSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+		ValueSize->SetWidthOverride(56.f);
+		ValueSize->AddChild(ValueBox);
+		if (UHorizontalBoxSlot* ValueSlot = ReadRow->AddChildToHorizontalBox(ValueSize))
+		{
+			ValueSlot->SetVerticalAlignment(VAlign_Center);
+			ValueSlot->SetPadding(FMargin(0.f, 0.f, 8.f, 0.f));
+		}
+		OutValue = ValueText;
+	};
+	AddReadout(TEXT("P"), FLinearColor(0.09f, 0.30f, 0.75f, 1.f), Txt_PtzPan);
+	AddReadout(TEXT("T"), FLinearColor(0.10f, 0.45f, 0.15f, 1.f), Txt_PtzTilt);
+	AddReadout(TEXT("Z"), FLinearColor(0.00f, 0.40f, 0.48f, 1.f), Txt_PtzZoom);
+	if (UVerticalBoxSlot* ReadSlot = Body->AddChildToVerticalBox(ReadRow))
+	{
+		ReadSlot->SetPadding(FMargin(0.f, 1.f, 0.f, 2.f));
+	}
+
 	UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
 	Body->AddChildToVerticalBox(Row);
 
@@ -1256,6 +1305,21 @@ void UCameraControlWidget::BuildPtzPad()
 		VBSlot->SetPadding(FMargin(0.f, DynamicButtonOuterPadding, 0.f, DynamicButtonOuterPadding));
 	}
 	GrowPanelForPtzPad();
+	UpdatePtzReadout();
+}
+
+void UCameraControlWidget::UpdatePtzReadout()
+{
+	auto Show = [](const TWeakObjectPtr<UTextBlock>& Text, float Value)
+	{
+		if (Text.IsValid())
+		{
+			Text->SetText(FText::FromString(FString::Printf(TEXT("%.2f"), Value)));
+		}
+	};
+	Show(Txt_PtzPan,  GetControlCur(ECamCtrl::Pan));
+	Show(Txt_PtzTilt, GetControlCur(ECamCtrl::Tilt));
+	Show(Txt_PtzZoom, GetControlCur(ECamCtrl::Zoom));
 }
 
 void UCameraControlWidget::GrowPanelForPtzPad()

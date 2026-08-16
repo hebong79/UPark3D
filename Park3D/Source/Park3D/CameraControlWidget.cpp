@@ -65,6 +65,10 @@ namespace
 	// 슬라이더 손잡이 지름. 기본 손잡이(8x14)의 가로·세로 2배 = 28 을 정원으로 쓴다.
 	static constexpr float GSliderThumbDiameter = 28.f;
 
+	// PTZ 패드 조작부(방향·줌 버튼, step 입력) 확대 배율. 크기와 글자 크기에 함께 곱한다.
+	static constexpr float GPtzPadScale = 1.5f;
+	static int32 ScaledFont(int32 Size) { return FMath::RoundToInt(Size * GPtzPadScale); }
+
 	// 에디트박스 표시는 소수 3자리로 고정한다. 필드 텍스트가 값의 원본(GetControlXxx 이 Atof 로 되읽음)이므로
 	// 여기서 자르면 카메라에 적용되는 값도 3자리로 제한된다. SanitizeFloat 는 float 오차가 그대로 보였다.
 	static FText NumText(float V) { return FText::FromString(FString::Printf(TEXT("%.3f"), V)); }
@@ -1230,7 +1234,7 @@ void UCameraControlWidget::BuildPtzPad()
 	Body->AddChildToVerticalBox(Row);
 
 	// 방향 패드 3x3 — (0,1)▲ / (1,0)◀ (1,1)중지 (1,2)▶ / (2,1)▼
-	constexpr float DirW = 36.f, DirH = 24.f;
+	constexpr float DirW = 36.f * GPtzPadScale, DirH = 24.f * GPtzPadScale;
 	UGridPanel* Pad = WidgetTree->ConstructWidget<UGridPanel>(UGridPanel::StaticClass());
 	UButton* BtnUp = nullptr, *BtnLeft = nullptr, *BtnStop = nullptr, *BtnRight = nullptr, *BtnDown = nullptr;
 	auto AddToPad = [Pad](USizeBox* Cell, int32 InRow, int32 InColumn)
@@ -1240,15 +1244,15 @@ void UCameraControlWidget::BuildPtzPad()
 			GSlot->SetPadding(FMargin(1.f));
 		}
 	};
-	AddToPad(MakePadButton(TEXT("▲"), DirW, DirH, 12, BtnUp),    0, 1);
-	AddToPad(MakePadButton(TEXT("◀"), DirW, DirH, 12, BtnLeft),  1, 0);
-	AddToPad(MakePadButton(TEXT("중지"), DirW, DirH, 10, BtnStop), 1, 1);
-	AddToPad(MakePadButton(TEXT("▶"), DirW, DirH, 12, BtnRight), 1, 2);
-	AddToPad(MakePadButton(TEXT("▼"), DirW, DirH, 12, BtnDown),  2, 1);
+	AddToPad(MakePadButton(TEXT("▲"), DirW, DirH, ScaledFont(12), BtnUp),    0, 1);
+	AddToPad(MakePadButton(TEXT("◀"), DirW, DirH, ScaledFont(12), BtnLeft),  1, 0);
+	AddToPad(MakePadButton(TEXT("중지"), DirW, DirH, ScaledFont(10), BtnStop), 1, 1);
+	AddToPad(MakePadButton(TEXT("▶"), DirW, DirH, ScaledFont(12), BtnRight), 1, 2);
+	AddToPad(MakePadButton(TEXT("▼"), DirW, DirH, ScaledFont(12), BtnDown),  2, 1);
 	Row->AddChildToHorizontalBox(Pad);
 
 	// 줌 열 — 기호(＋/－)만, 방향 버튼보다 작게. 그 아래 step 필드.
-	constexpr float ZoomW = 24.f, ZoomH = 18.f;
+	constexpr float ZoomW = 24.f * GPtzPadScale, ZoomH = 18.f * GPtzPadScale;
 	UVerticalBox* ZoomCol = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
 	UButton* BtnZoomIn = nullptr, *BtnZoomOut = nullptr;
 	// VerticalBox 슬롯 기본 정렬이 Fill 이라 그냥 넣으면 SizeBox 의 24px 를 무시하고 열 너비로 늘어난다.
@@ -1260,15 +1264,15 @@ void UCameraControlWidget::BuildPtzPad()
 			ZSlot->SetPadding(FMargin(0.f, 1.f, 0.f, 1.f));
 		}
 	};
-	AddToZoomCol(MakePadButton(TEXT("+"), ZoomW, ZoomH, 11, BtnZoomIn));
-	AddToZoomCol(MakePadButton(TEXT("−"), ZoomW, ZoomH, 11, BtnZoomOut));
+	AddToZoomCol(MakePadButton(TEXT("+"), ZoomW, ZoomH, ScaledFont(11), BtnZoomIn));
+	AddToZoomCol(MakePadButton(TEXT("−"), ZoomW, ZoomH, ScaledFont(11), BtnZoomOut));
 
 	UHorizontalBox* StepRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
 	UTextBlock* StepLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 	StepLabel->SetText(FText::FromString(TEXT("step")));
 	StepLabel->SetColorAndOpacity(FSlateColor(FLinearColor::Black));
 	FSlateFontInfo StepFont = StepLabel->GetFont();
-	StepFont.Size = 10;
+	StepFont.Size = ScaledFont(10);
 	StepLabel->SetFont(StepFont);
 	if (UHorizontalBoxSlot* HBSlot = StepRow->AddChildToHorizontalBox(StepLabel))
 	{
@@ -1280,11 +1284,11 @@ void UCameraControlWidget::BuildPtzPad()
 	StepBox->SetForegroundColor(FLinearColor::Black); // 다른 입력 필드와 같은 규약(NativeConstruct 1-b).
 	// 폰트를 줄이지 않으면 기본 크기(24)에 스타일 패딩이 얹혀 아래 획이 잘린다.
 	FEditableTextBoxStyle StepStyle = StepBox->GetWidgetStyle();
-	StepStyle.TextStyle.Font.Size = 11;
+	StepStyle.TextStyle.Font.Size = ScaledFont(11);
 	StepBox->SetWidgetStyle(StepStyle);
 	USizeBox* StepSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
-	StepSize->SetWidthOverride(46.f);
-	StepSize->SetHeightOverride(26.f);
+	StepSize->SetWidthOverride(46.f * GPtzPadScale);
+	StepSize->SetHeightOverride(26.f * GPtzPadScale);
 	StepSize->AddChild(StepBox);
 	if (UHorizontalBoxSlot* HBSlot = StepRow->AddChildToHorizontalBox(StepSize))
 	{

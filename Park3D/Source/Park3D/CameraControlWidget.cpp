@@ -24,6 +24,7 @@
 #include "Components/SizeBoxSlot.h"
 #include "Components/GridPanel.h"
 #include "Components/GridSlot.h"
+#include "Components/CanvasPanelSlot.h"
 #include "Blueprint/WidgetTree.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Kismet/GameplayStatics.h"
@@ -54,6 +55,10 @@ namespace
 		{ ECamCtrl::Tilt,   -90.f,  90.f,  0.f },
 		{ ECamCtrl::Zoom,     1.f,  36.f,  1.f },
 	};
+
+	// PTZ 패드가 차지하는 세로 크기(제목 + 방향 3행 + 슬롯 패딩). 패널 높이를 이만큼 키워 스크롤 밖으로
+	// 밀리지 않게 한다 — 본문(VBox_Root)이 고정 높이 ScrollBox 안이라 그냥 붙이면 잘려 보이지 않는다.
+	static constexpr float GPtzPadHeight = 100.f;
 
 	// 에디트박스 표시는 소수 3자리로 고정한다. 필드 텍스트가 값의 원본(GetControlXxx 이 Atof 로 되읽음)이므로
 	// 여기서 자르면 카메라에 적용되는 값도 3자리로 제한된다. SanitizeFloat 는 float 오차가 그대로 보였다.
@@ -1178,8 +1183,17 @@ void UCameraControlWidget::BuildPtzPad()
 	constexpr float ZoomW = 24.f, ZoomH = 18.f;
 	UVerticalBox* ZoomCol = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
 	UButton* BtnZoomIn = nullptr, *BtnZoomOut = nullptr;
-	ZoomCol->AddChildToVerticalBox(MakePadButton(TEXT("+"), ZoomW, ZoomH, 11, BtnZoomIn));
-	ZoomCol->AddChildToVerticalBox(MakePadButton(TEXT("−"), ZoomW, ZoomH, 11, BtnZoomOut));
+	// VerticalBox 슬롯 기본 정렬이 Fill 이라 그냥 넣으면 SizeBox 의 24px 를 무시하고 열 너비로 늘어난다.
+	auto AddToZoomCol = [ZoomCol](UWidget* Child)
+	{
+		if (UVerticalBoxSlot* ZSlot = ZoomCol->AddChildToVerticalBox(Child))
+		{
+			ZSlot->SetHorizontalAlignment(HAlign_Left);
+			ZSlot->SetPadding(FMargin(0.f, 1.f, 0.f, 1.f));
+		}
+	};
+	AddToZoomCol(MakePadButton(TEXT("+"), ZoomW, ZoomH, 11, BtnZoomIn));
+	AddToZoomCol(MakePadButton(TEXT("−"), ZoomW, ZoomH, 11, BtnZoomOut));
 
 	UHorizontalBox* StepRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
 	UTextBlock* StepLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
@@ -1196,12 +1210,19 @@ void UCameraControlWidget::BuildPtzPad()
 	UEditableTextBox* StepBox = WidgetTree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass());
 	StepBox->SetText(FText::FromString(TEXT("2")));
 	StepBox->SetForegroundColor(FLinearColor::Black); // 다른 입력 필드와 같은 규약(NativeConstruct 1-b).
+	// 폰트를 줄이지 않으면 기본 크기(24)에 스타일 패딩이 얹혀 아래 획이 잘린다.
+	FEditableTextBoxStyle StepStyle = StepBox->GetWidgetStyle();
+	StepStyle.TextStyle.Font.Size = 11;
+	StepBox->SetWidgetStyle(StepStyle);
 	USizeBox* StepSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
 	StepSize->SetWidthOverride(46.f);
-	StepSize->SetHeightOverride(22.f);
+	StepSize->SetHeightOverride(26.f);
 	StepSize->AddChild(StepBox);
-	StepRow->AddChildToHorizontalBox(StepSize);
-	ZoomCol->AddChildToVerticalBox(StepRow);
+	if (UHorizontalBoxSlot* HBSlot = StepRow->AddChildToHorizontalBox(StepSize))
+	{
+		HBSlot->SetVerticalAlignment(VAlign_Center);
+	}
+	AddToZoomCol(StepRow);
 
 	if (UHorizontalBoxSlot* HBSlot = Row->AddChildToHorizontalBox(ZoomCol))
 	{
@@ -1234,6 +1255,37 @@ void UCameraControlWidget::BuildPtzPad()
 	{
 		VBSlot->SetPadding(FMargin(0.f, DynamicButtonOuterPadding, 0.f, DynamicButtonOuterPadding));
 	}
+	GrowPanelForPtzPad();
+}
+
+void UCameraControlWidget::GrowPanelForPtzPad()
+{
+	// 본문은 RootBorder 안의 ScrollBox(Scroll_Root)에 들어 있고, RootBorder 는 캔버스에서 높이가 고정이다.
+	// → 끝에 붙인 패드는 스크롤을 내려야만 보인다. 패널 자체를 패드 높이만큼 키워 스크롤 없이 보이게 한다.
+	if (!RootBorder)
+	{
+		Notify(TEXT("PTZ 패드: RootBorder 가 없어 패널 높이를 키우지 못했습니다(스크롤해야 보입니다)"));
+		return;
+	}
+	UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(RootBorder->Slot);
+	if (!CanvasSlot)
+	{
+		Notify(TEXT("PTZ 패드: RootBorder 가 캔버스 슬롯이 아니어서 높이를 키우지 못했습니다"));
+		return;
+	}
+	if (CanvasSlot->GetAutoSize())
+	{
+		return; // 자동 크기 — 내용에 맞춰 이미 늘어난다.
+	}
+	const FAnchors Anchors = CanvasSlot->GetAnchors();
+	if (!FMath::IsNearlyEqual(Anchors.Minimum.Y, Anchors.Maximum.Y))
+	{
+		return; // 세로로 늘어나는 앵커 — 높이는 뷰포트가 정하므로 건드리지 않는다.
+	}
+
+	const FVector2D PanelSize = CanvasSlot->GetSize();
+	CanvasSlot->SetSize(FVector2D(PanelSize.X, PanelSize.Y + GPtzPadHeight));
+	Notify(FString::Printf(TEXT("PTZ 패드 추가 — 패널 높이 %.0f → %.0f"), PanelSize.Y, PanelSize.Y + GPtzPadHeight));
 }
 
 void UCameraControlWidget::HandlePtzPressTiltUp()   { BeginPtzMove(EPtzMove::TiltUp); }

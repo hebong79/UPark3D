@@ -286,6 +286,8 @@ private:
 	void BuildPtzPad();
 	/** 누르는 동안 이동을 시작한다(이미 다른 방향이면 교체). */
 	void BeginPtzMove(EPtzMove Move);
+	/** 패드가 고정 높이 ScrollBox 밖으로 잘리지 않도록 패널(RootBorder) 높이를 패드만큼 키운다. */
+	void GrowPanelForPtzPad();
 	/** 매 틱 ActivePtzMove 방향으로 step(초당) 만큼 값을 옮긴다. 버튼에서 손을 떼면 스스로 멈춘다. */
 	void TickPtzMove(float DeltaSeconds);
 	/** step 필드 값(초당 이동량: pan/tilt 는 도, zoom 은 배율). 비었거나 0 이하면 2 로 본다. */

@@ -13,6 +13,10 @@ namespace
 	// 캐시된 순서와 로드 여부. 파일이 없어도(빈 배열) 재시도하지 않도록 플래그를 따로 둔다.
 	TArray<FString> GCachedOrder;
 	bool GOrderLoaded = false;
+
+	// 메시 폴더도 같은 관례로 캐시한다.
+	FString GCachedMeshDir;
+	bool GMeshDirLoaded = false;
 }
 
 FString UCarCatalogConfigLibrary::GetFilePath()
@@ -62,6 +66,89 @@ bool UCarCatalogConfigLibrary::LoadOrder(TArray<FString>& OutNames)
 		return false;
 	}
 	return ParseOrder(Json, OutNames);
+}
+
+bool UCarCatalogConfigLibrary::ParseMeshDir(const FString& Json, FString& OutDir)
+{
+	TSharedPtr<FJsonObject> Root;
+	const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
+	if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+	{
+		return false;
+	}
+
+	FString Dir;
+	if (!Root->TryGetStringField(TEXT("meshDir"), Dir))
+	{
+		return false;
+	}
+
+	Dir = Dir.TrimStartAndEnd();
+	// 끝의 '/' 는 경로 조립에서 중복되므로 떼어 둔다.
+	while (Dir.EndsWith(TEXT("/")))
+	{
+		Dir.LeftChopInline(1);
+	}
+	if (Dir.IsEmpty())
+	{
+		return false;
+	}
+
+	OutDir = MoveTemp(Dir);
+	return true;
+}
+
+bool UCarCatalogConfigLibrary::LoadMeshDir(FString& OutDir)
+{
+	FString Json;
+	if (!FFileHelper::LoadFileToString(Json, *GetFilePath()))
+	{
+		return false;
+	}
+	return ParseMeshDir(Json, OutDir);
+}
+
+const FString& UCarCatalogConfigLibrary::GetCachedMeshDir()
+{
+	if (!GMeshDirLoaded)
+	{
+		GMeshDirLoaded = true;
+		if (!LoadMeshDir(GCachedMeshDir))
+		{
+			GCachedMeshDir.Reset();
+		}
+	}
+	return GCachedMeshDir;
+}
+
+TArray<FCarPresetEntry> UCarCatalogConfigLibrary::BuildCatalogFromConfig()
+{
+	TArray<FCarPresetEntry> Out;
+
+	const FString& Dir = GetCachedMeshDir();
+	const TArray<FString>& Names = GetCachedOrder();
+	if (Dir.IsEmpty() || Names.Num() == 0)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[CarCatalog] DT_CarCatalog 도 %s 의 meshDir/cars 도 없어 카탈로그를 만들 수 없습니다: %s"),
+			GetFileName(), *GetFilePath());
+		return Out;
+	}
+
+	Out.Reserve(Names.Num());
+	for (int32 i = 0; i < Names.Num(); ++i)
+	{
+		FCarPresetEntry E;
+		E.Idx = i + 1;
+		E.PrefabName = Names[i];
+		E.Mesh = TSoftObjectPtr<UStaticMesh>(
+			FSoftObjectPath(FString::Printf(TEXT("%s/%s.%s"), *Dir, *Names[i], *Names[i])));
+		Out.Add(MoveTemp(E));
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[CarCatalog] DT_CarCatalog 없이 %s 로 %d종 구성 (meshDir=%s)"),
+		GetFileName(), Out.Num(), *Dir);
+	return Out;
 }
 
 void UCarCatalogConfigLibrary::ApplyOrder(const TArray<FString>& Order, TArray<FCarPresetEntry>& InOut)
@@ -137,4 +224,6 @@ void UCarCatalogConfigLibrary::InvalidateCache()
 {
 	GCachedOrder.Reset();
 	GOrderLoaded = false;
+	GCachedMeshDir.Reset();
+	GMeshDirLoaded = false;
 }

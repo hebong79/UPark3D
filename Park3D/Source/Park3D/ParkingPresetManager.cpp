@@ -18,28 +18,27 @@ AParkingPresetManager::AParkingPresetManager()
 	// 데칼 머티리얼 기본값을 확인된 경로에서 하드로드 시도. 실패해도 크래시 금지(Succeeded 체크).
 	// 실패 시 null 유지 → 런타임에 해당 데칼 스킵 + 경고. 에디터에서 재지정 가능(EditAnywhere).
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> LineFinder(
-		TEXT("/Game/M/Decal_Line_Road_White_02/MI_Decal_Line_Road_White_02.MI_Decal_Line_Road_White_02"));
+		TEXT("/Game/M/Decal/MI_ParkingLine.MI_ParkingLine"));
 	if (LineFinder.Succeeded())
 	{
 		LineDecalMaterial = LineFinder.Object;
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[ParkingManager] 라인 데칼 머티리얼 로드 실패(MI_Decal_Line_Road_White_02) — 에디터에서 지정 필요."));
+		UE_LOG(LogTemp, Warning, TEXT("[ParkingManager] 라인 데칼 머티리얼 로드 실패(MI_ParkingLine) — 에디터에서 지정 필요."));
 	}
 
-	// fill 데칼 기본값: 신규 마스터 머티리얼 M_ParkingSelectFill(Deferred Decal, Translucent,
-	// FillColor=(0,0.6,1)/Opacity=0.3). 기존 /Game/M/Decal/바닥_이미지/MI_파란색은 부모 실종으로
-	// placeholder 렌더되어 교체함(라인 머티리얼·다른 경로 무변경).
+	// fill 데칼 기본값: 라인과 같은 마스터(M_ParkingDecal, Deferred Decal · Translucent)의 인스턴스로
+	// Color=(0,0.6,1)/Opacity=0.3. 라인과 마스터를 공유해야 두 데칼의 렌더 규칙이 갈리지 않는다.
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> FillFinder(
-		TEXT("/Game/M/Decal/M_ParkingSelectFill.M_ParkingSelectFill"));
+		TEXT("/Game/M/Decal/MI_ParkingSelectFill.MI_ParkingSelectFill"));
 	if (FillFinder.Succeeded())
 	{
 		SelectFillDecalMaterial = FillFinder.Object;
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[ParkingManager] fill 데칼 머티리얼 로드 실패(M_ParkingSelectFill) — 에디터에서 지정 필요."));
+		UE_LOG(LogTemp, Warning, TEXT("[ParkingManager] fill 데칼 머티리얼 로드 실패(MI_ParkingSelectFill) — 에디터에서 지정 필요."));
 	}
 }
 

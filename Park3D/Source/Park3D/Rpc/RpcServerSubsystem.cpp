@@ -193,10 +193,12 @@ void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	LightModule = MakeUnique<FLightRpcModule>(WorldGetter);
 	ScenarioModule = MakeUnique<FScenarioRpcModule>(WorldGetter);
 
-	// 차량 카탈로그(DT_CarCatalog) 주입.
-	if (UDataTable* Table = LoadObject<UDataTable>(nullptr, TEXT("/Game/Data/DT_CarCatalog.DT_CarCatalog")))
+	// 차량 카탈로그 주입. DT_CarCatalog 가 없으면 CatalogFromTable 이 car_catalog.json 으로 폴백하므로
+	// 로드 실패(nullptr)를 그대로 넘긴다.
+	UDataTable* CatalogTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/Data/DT_CarCatalog.DT_CarCatalog"));
+	const TArray<FCarPresetEntry> Catalog = ACarPlacementManager::CatalogFromTable(CatalogTable);
+	if (Catalog.Num() > 0)
 	{
-		const TArray<FCarPresetEntry> Catalog = ACarPlacementManager::CatalogFromTable(Table);
 		CarModule->SetCatalog(Catalog);
 		RandomModule->SetCatalog(Catalog);
 		ScenarioModule->SetCatalog(Catalog); // actors 의 prefabName → prefabId 해석에 필요하다.
@@ -204,7 +206,7 @@ void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[RPC] DT_CarCatalog 로드 실패 — 차량 생성/재배치 시 폴백 메시 사용."));
+		UE_LOG(LogTemp, Warning, TEXT("[RPC] 차량 카탈로그가 비었습니다 — 차량 생성/재배치 시 폴백 메시 사용."));
 	}
 
 	RegisterSystemMethods();                 // 영속(system.*)

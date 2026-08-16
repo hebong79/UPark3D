@@ -1,6 +1,8 @@
 {
     "comment": "차량 프리팹 인덱스. 배열 순서가 prefabId(1부터)다. 순서를 바꾸면 저장된 CarPos_*.json 의 차종 해석이 바뀐다.",
     "comment2": "이름은 DT_CarCatalog 의 PrefabName 과 정확히 일치해야 한다. 여기 없는 차종은 이 목록 뒤에 원래 순서로 이어 붙는다.",
+    "comment3": "meshDir 은 DT_CarCatalog 가 없을 때의 폴백 — 메시를 <meshDir>/<이름>.<이름> 으로 찾는다. 이름이 곧 에셋 파일명이어야 한다.",
+    "meshDir": "/Game/Actors/Car/Meshs",
     "cars": [
         "BMW_1시리즈",
         "기아_EV6",
@@ -10,7 +12,7 @@
         "기아_모닝",
         "기아_봉고",
         "기아_봉고_탑차",
-        "기아_소울",
+        "기아_쏘울",
         "기아_쏘렌토",
         "기아_카니발",
         "르노삼성_SM7",

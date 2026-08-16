@@ -35,16 +35,23 @@ const FCarPresetEntry* ACarPlacementManager::FindEntryByPrefabId(const TArray<FC
 TArray<FCarPresetEntry> ACarPlacementManager::CatalogFromTable(UDataTable* Table)
 {
 	TArray<FCarPresetEntry> Out;
-	if (!Table)
+	if (Table)
 	{
-		return Out;
-	}
-	for (const TPair<FName, uint8*>& Row : Table->GetRowMap())
-	{
-		if (const FCarPresetEntry* E = reinterpret_cast<const FCarPresetEntry*>(Row.Value))
+		for (const TPair<FName, uint8*>& Row : Table->GetRowMap())
 		{
-			Out.Add(*E);
+			if (const FCarPresetEntry* E = reinterpret_cast<const FCarPresetEntry*>(Row.Value))
+			{
+				Out.Add(*E);
+			}
 		}
+	}
+
+	// DT_CarCatalog 가 없거나 비면(콘텐츠 교체 등) car_catalog.json 의 cars/meshDir 로 직접 구성한다.
+	// 그 결과는 이미 파일 순서 그대로이므로 ApplyOrder 를 다시 태우지 않는다.
+	// UI·RPC·시뮬이 모두 이 함수를 거치므로 여기서 메워야 세 경로가 같은 카탈로그를 본다.
+	if (Out.Num() == 0)
+	{
+		return UCarCatalogConfigLibrary::BuildCatalogFromConfig();
 	}
 
 	// prefabId 순서는 Save/Config/car_catalog.json 이 결정한다(파일이 없으면 DataTable 순서 유지).

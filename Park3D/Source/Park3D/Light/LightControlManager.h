@@ -13,6 +13,7 @@
 class ADirectionalLight;
 class ASkyLight;
 class APostProcessVolume;
+class ASkyAtmosphere;
 
 UCLASS()
 class PARK3D_API ALightControlManager : public AActor
@@ -42,6 +43,13 @@ private:
 	ASkyLight* FindSky() const;
 	/** 화면 전체에 걸리는 unbound 볼륨을 우선 고른다(노출은 전역이어야 한다). */
 	APostProcessVolume* FindExposureVolume() const;
+
+	/**
+	 * 조명 4종(태양·하늘빛·하늘·노출볼륨) 중 레벨에 없는 것만 스폰한다.
+	 * 레벨이 조명을 이미 갖고 있으면 아무것도 만들지 않고 그것을 그대로 쓴다.
+	 * 부트 맵이 비어 있어도(액터 0개) 화면이 검게 나오지 않게 하는 안전망이다.
+	 */
+	void EnsureLightingActors();
 
 	UPROPERTY()
 	FLightSettings LastApplied;

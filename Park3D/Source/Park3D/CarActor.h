@@ -111,5 +111,17 @@ private:
 	/** 차량 메시 local bounds를 기준으로 앞/뒤 plate 부착 위치/가시성을 갱신한다. */
 	void UpdatePlatePresentation();
 
+	/**
+	 * 번호판 메시의 실제 축에 맞춰 판을 돌리고 글자를 면 바깥에 놓는다.
+	 * 축을 코드에 박으면 콘텐츠(판 메시)가 바뀌는 순간 글자가 모서리로 서서 사라진다 —
+	 * 실제로 2026-08-16 콘텐츠 교체 때 그렇게 됐다(로그에는 vis=1 인데 화면에는 없다).
+	 */
+	void AlignPlateAndText(UStaticMeshComponent* Plate, UTextRenderComponent* Text, bool bFront);
+
+	/** 글자를 판 표면에서 얼마나 띄울지(cm). z-fighting 만 피하면 되므로 작게. */
+	static constexpr float PlateTextSurfaceGap = 0.3f;
+	/** 좌측 파란 KOR 영역을 피해 글자를 오른쪽으로 미는 양(cm, 판의 긴 축 방향). */
+	static constexpr float PlateTextSideShift = 4.f;
+
 	bool bSelected = false;
 };

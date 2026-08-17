@@ -83,6 +83,12 @@ private:
 
 	void RegisterSystemMethods();
 	void StartServer();
+	/**
+	 * 실제로 쓰는 포트에 대한 [HTTPServer.Listeners] 바인드 override 를 런타임에 등록한다.
+	 * ini 에 포트를 박아 두면 config 의 rpc_port 를 바꿀 때 목록이 빗나가 조용히 루프백으로 떨어진다.
+	 * ini 에 같은 포트 항목이 이미 있으면 그쪽을 존중하고 아무것도 하지 않는다.
+	 */
+	void EnsureListenerBindOverride();
 	void StopServer();
 
 	UPROPERTY(Transient)

@@ -75,6 +75,22 @@ struct FPark3DAppConfig
 	{
 		return CamPortMin >= 2 && CamPortMax >= CamPortMin && CamPortMax <= 65535;
 	}
+
+	/**
+	 * 메인 뷰 MJPEG 포트. 0 = 미지정(ini 의 MainPort 를 쓴다).
+	 * 한 PC 에서 시뮬레이터를 두 대 띄울 때 두 번째 인스턴스가 이 포트를 비켜 가야 한다 —
+	 * ini 는 패키지에 쿠킹돼 인스턴스별로 바꿀 수 없으므로 config 로 덮을 길을 연다(rpc_port 와 같은 규약).
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = "Config")
+	int32 MainPort = 0;
+
+	/**
+	 * RPC 리스너 바인드 주소. "any" = 모든 인터페이스, "localhost" = 루프백 전용. 빈 문자열 = 기본값("any").
+	 * 이 값이 곧 [HTTPServer.Listeners] 의 포트별 override 로 런타임에 등록된다 —
+	 * ini 에 포트를 박아 두면 rpc_port 를 바꿀 때마다 목록이 빗나가 조용히 루프백으로 떨어지기 때문이다.
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = "Config")
+	FString RpcBindAddress;
 };
 
 UCLASS()

@@ -8,6 +8,7 @@
 #include "Modules/RandomRpcModule.h"
 #include "../CarPlacementManager.h"
 #include "../Config/Park3DAppConfig.h"
+#include "CamStreamSubsystem.h"   // system.health 의 포트 지도(메인 뷰·카메라 대역)를 여기서 읽는다.
 
 #include "HttpServerModule.h"
 #include "IHttpRouter.h"
@@ -105,19 +106,20 @@ void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	Super::Initialize(Collection);
 
 	// 리슨 포트 결정 우선순위:
-	//   커맨드라인 -RpcPort= > Save/Config/config_pmaker.json rpc_port > DefaultGame.ini [RpcServer] Port > 기본 13510.
-	// 자동화·MCP 브리지가 -RpcPort= 로 띄우는 기존 동작이 설정 파일에 덮이지 않도록 커맨드라인을 최우선으로 둔다.
+	//   커맨드라인 -RpcPort= > Save/Config/config_pmaker.json 의 rpc_port > 소스 기본값(13510).
+	//
+	// ini 는 일부러 보지 않는다. 패키지에는 DefaultGame.ini 가 존재하지 않고(빌드 시 바이너리 설정으로 구워진다)
+	// 거기 적힌 포트는 재패키지 없이는 바꿀 수 없다 — "ini 에 13510 이라 적혀 있는데 왜 13520 으로 뜨지?" 라는
+	// 혼란만 남는다. 포트가 사는 곳은 config_pmaker.json 하나다(카메라·메인 뷰 포트와 같은 규약).
+	// 커맨드라인은 자동화용 일회성 예외로 남긴다.
+	FString PortSource(TEXT("소스 기본값"));
 	{
-		int32 ConfigPort = 0;
-		if (GConfig && GConfig->GetInt(TEXT("RpcServer"), TEXT("Port"), ConfigPort, GGameIni) && ConfigPort > 0 && ConfigPort <= 65535)
-		{
-			Port = ConfigPort;
-		}
-		// 앱 설정 파일. 범위 검증은 파서가 하고(범위 밖 → 0), 여기서는 지정 여부만 본다.
+		// 범위 검증은 파서가 하고(범위 밖 → 0), 여기서는 지정 여부만 본다.
 		FPark3DAppConfig AppConfig;
 		if (UPark3DAppConfigLibrary::Load(AppConfig) && AppConfig.RpcPort > 0)
 		{
 			Port = AppConfig.RpcPort;
+			PortSource = TEXT("config_pmaker.json rpc_port");
 		}
 		// 스위치의 "존재"와 "값"을 분리한다: -RpcPort=0 은 무시가 아니라 명시적 비활성화다.
 		// (바인드를 외부로 여는 구성에서 자동화가 LAN 에 리스닝 소켓을 여는 사고를 막는다.)
@@ -131,13 +133,15 @@ void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 			else if (CmdPort > 0 && CmdPort <= 65535)
 			{
 				Port = CmdPort;
+				PortSource = TEXT("커맨드라인 -RpcPort=");
 			}
 			else
 			{
 				UE_LOG(LogTemp, Warning, TEXT("[RPC] -RpcPort=%d 는 유효 범위(1~65535) 밖 — 무시하고 %d 사용."), CmdPort, Port);
 			}
 		}
-		UE_LOG(LogTemp, Log, TEXT("[RPC] 리슨 포트 결정: %d%s"), Port,
+		// 출처를 함께 남긴다 — 포트가 예상과 다를 때 어느 파일을 열어야 하는지가 이 한 줄로 끝난다.
+		UE_LOG(LogTemp, Log, TEXT("[RPC] 리슨 포트 결정: %d (출처: %s)%s"), Port, *PortSource,
 			bServerDisabled ? TEXT(" (-RpcPort=0 → 서버 미기동)") : TEXT(""));
 	}
 
@@ -246,13 +250,32 @@ void URpcServerSubsystem::RegisterSystemMethods()
 		return MakeShared<FJsonValueObject>(P.IsValid() ? P : MakeShared<FJsonObject>());
 	});
 
-	// system.health — {ok:true, port}.
+	// system.health — {ok:true, port, ports:{...}}.
+	//
+	// ports 는 이 인스턴스가 여는 포트 전부다. 클라이언트가 영상 포트를 추측하지 않게 하기 위한 것이다 —
+	// 한 PC 에 시뮬레이터를 두 대 띄우면 대역이 갈라지는데(13611+ / 13711+), "13600 + camId" 같은
+	// 추측이 박혀 있으면 다른 카메라를 보게 된다. 제어 URL 하나만 알면 나머지는 여기서 얻는다.
 	const int32 CapturedPort = Port;
 	Dispatcher->RegisterPersistent(TEXT("system.health"), [CapturedPort](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetBoolField(TEXT("ok"), true);
 		O->SetNumberField(TEXT("port"), CapturedPort);
+
+		TSharedPtr<FJsonObject> Ports = MakeShared<FJsonObject>();
+		Ports->SetNumberField(TEXT("rpc"), CapturedPort);
+		// 스트림 포트는 스트림 서브시스템이 권위다(config 로 바뀔 수 있다). 서브시스템이 없으면 그 필드는 뺀다.
+		if (const UWorld* World = GEngine ? GEngine->GetCurrentPlayWorld() : nullptr)
+		{
+			if (const UCamStreamSubsystem* Stream = World->GetSubsystem<UCamStreamSubsystem>())
+			{
+				Ports->SetNumberField(TEXT("mainView"), Stream->GetMainPort());
+				Ports->SetNumberField(TEXT("camMin"), Stream->GetCamPortMin());
+				Ports->SetNumberField(TEXT("camMax"), Stream->GetCamPortMax());
+				Ports->SetStringField(TEXT("camFormula"), TEXT("camMin + (camId - 1)"));
+			}
+		}
+		O->SetObjectField(TEXT("ports"), Ports);
 		return MakeShared<FJsonValueObject>(O);
 	});
 
@@ -271,6 +294,49 @@ void URpcServerSubsystem::RegisterSystemMethods()
 	});
 }
 
+void URpcServerSubsystem::EnsureListenerBindOverride()
+{
+	// 바인드 주소는 [HTTPServer.Listeners] 의 **포트별** override 로 정해진다. 그래서 ini 에 포트를 박아 두면
+	// config 의 rpc_port 를 바꾸는 순간 목록이 빗나가 조용히 루프백으로 떨어진다(2026-08-17 실제 사고).
+	// → 실제로 쓰는 포트에 대한 override 를 여기서 만들어 넣는다. ini 는 이제 포트를 몰라도 된다.
+	if (!GConfig)
+	{
+		return;
+	}
+
+	FPark3DAppConfig AppConfig;
+	UPark3DAppConfigLibrary::Load(AppConfig);
+	FString Bind = AppConfig.RpcBindAddress.TrimStartAndEnd();
+	if (Bind.IsEmpty())
+	{
+		Bind = TEXT("any"); // 기본은 외부 개방. 루프백 전용으로 쓰려면 config 에 "rpc_bind": "localhost".
+	}
+
+	static const TCHAR* Section = TEXT("HTTPServer.Listeners");
+	TArray<FString> Overrides;
+	GConfig->GetArray(Section, TEXT("ListenerOverrides"), Overrides, GEngineIni);
+
+	// 이미 이 포트에 대한 항목이 있으면 그쪽 의도를 존중한다(ini 로 직접 지정한 경우).
+	const FString PortToken = FString::Printf(TEXT("Port=%d"), Port);
+	for (const FString& Entry : Overrides)
+	{
+		int32 EntryPort = 0;
+		if (FParse::Value(*Entry, TEXT("Port="), EntryPort) && EntryPort == Port)
+		{
+			UE_LOG(LogTemp, Log, TEXT("[RPC] 바인드 override 는 ini 지정을 사용합니다: %s"), *Entry);
+			return;
+		}
+	}
+
+	Overrides.Add(FString::Printf(TEXT("(Port=%d,BindAddress=%s)"), Port, *Bind));
+	GConfig->SetArray(Section, TEXT("ListenerOverrides"), Overrides, GEngineIni);
+	// 엔진은 이 목록을 캐시하고 "설정 섹션이 바뀌었다"는 신호에만 다시 읽는다 → 그 신호를 직접 준다.
+	FCoreDelegates::TSOnConfigSectionsChanged().Broadcast(GEngineIni, { FString(Section) });
+
+	UE_LOG(LogTemp, Log, TEXT("[RPC] 바인드 override 등록: Port=%d BindAddress=%s (출처: %s)"),
+		Port, *Bind, AppConfig.RpcBindAddress.IsEmpty() ? TEXT("기본값") : TEXT("config_pmaker.json rpc_bind"));
+}
+
 void URpcServerSubsystem::StartServer()
 {
 	// -RpcPort=0 → 리스닝 소켓을 아예 만들지 않는다(라우터도 잡지 않는다).
@@ -279,6 +345,8 @@ void URpcServerSubsystem::StartServer()
 		UE_LOG(LogTemp, Log, TEXT("[RPC] -RpcPort=0 지정 — JSON-RPC 서버를 시작하지 않습니다."));
 		return;
 	}
+
+	EnsureListenerBindOverride();
 
 	FHttpServerModule& Http = FHttpServerModule::Get();
 	Router = Http.GetHttpRouter(static_cast<uint32>(Port));

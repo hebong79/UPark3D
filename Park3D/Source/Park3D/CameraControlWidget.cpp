@@ -1331,34 +1331,41 @@ void UCameraControlWidget::BuildPtzPad()
 	AddToZoomCol(MakePadButton(TEXT("+"), ZoomW, ZoomH, ScaledFont(11), BtnZoomIn));
 	AddToZoomCol(MakePadButton(TEXT("−"), ZoomW, ZoomH, ScaledFont(11), BtnZoomOut));
 
-	UHorizontalBox* StepRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
-	UTextBlock* StepLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
-	StepLabel->SetText(FText::FromString(TEXT("step")));
-	StepLabel->SetColorAndOpacity(FSlateColor(FLinearColor::Black));
-	FSlateFontInfo StepFont = StepLabel->GetFont();
-	StepFont.Size = ScaledFont(10);
-	StepLabel->SetFont(StepFont);
-	if (UHorizontalBoxSlot* HBSlot = StepRow->AddChildToHorizontalBox(StepLabel))
+	// step 은 두 줄이다 — Pan/Tilt(도/초)와 Zoom(배율/초)은 단위가 달라 값을 따로 둔다.
+	auto MakeStepRow = [&](const TCHAR* Label, const TCHAR* Default) -> UEditableTextBox*
 	{
-		HBSlot->SetVerticalAlignment(VAlign_Center);
-		HBSlot->SetPadding(FMargin(0.f, 0.f, 3.f, 0.f));
-	}
-	UEditableTextBox* StepBox = WidgetTree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass());
-	StepBox->SetText(FText::FromString(TEXT("2")));
-	StepBox->SetForegroundColor(FLinearColor::Black); // 다른 입력 필드와 같은 규약(NativeConstruct 1-b).
-	// 폰트를 줄이지 않으면 기본 크기(24)에 스타일 패딩이 얹혀 아래 획이 잘린다.
-	FEditableTextBoxStyle StepStyle = StepBox->GetWidgetStyle();
-	StepStyle.TextStyle.Font.Size = ScaledFont(11);
-	StepBox->SetWidgetStyle(StepStyle);
-	USizeBox* StepSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
-	StepSize->SetWidthOverride(46.f * GPtzPadScale);
-	StepSize->SetHeightOverride(26.f * GPtzPadScale);
-	StepSize->AddChild(StepBox);
-	if (UHorizontalBoxSlot* HBSlot = StepRow->AddChildToHorizontalBox(StepSize))
-	{
-		HBSlot->SetVerticalAlignment(VAlign_Center);
-	}
-	AddToZoomCol(StepRow);
+		UHorizontalBox* StepRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+		UTextBlock* StepLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		StepLabel->SetText(FText::FromString(Label));
+		StepLabel->SetColorAndOpacity(FSlateColor(FLinearColor::Black));
+		FSlateFontInfo StepFont = StepLabel->GetFont();
+		StepFont.Size = ScaledFont(10);
+		StepLabel->SetFont(StepFont);
+		if (UHorizontalBoxSlot* HBSlot = StepRow->AddChildToHorizontalBox(StepLabel))
+		{
+			HBSlot->SetVerticalAlignment(VAlign_Center);
+			HBSlot->SetPadding(FMargin(0.f, 0.f, 3.f, 0.f));
+		}
+		UEditableTextBox* Box = WidgetTree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass());
+		Box->SetText(FText::FromString(Default));
+		Box->SetForegroundColor(FLinearColor::Black); // 다른 입력 필드와 같은 규약(NativeConstruct 1-b).
+		// 폰트를 줄이지 않으면 기본 크기(24)에 스타일 패딩이 얹혀 아래 획이 잘린다.
+		FEditableTextBoxStyle StepStyle = Box->GetWidgetStyle();
+		StepStyle.TextStyle.Font.Size = ScaledFont(11);
+		Box->SetWidgetStyle(StepStyle);
+		USizeBox* StepSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+		StepSize->SetWidthOverride(46.f * GPtzPadScale);
+		StepSize->SetHeightOverride(26.f * GPtzPadScale);
+		StepSize->AddChild(Box);
+		if (UHorizontalBoxSlot* HBSlot = StepRow->AddChildToHorizontalBox(StepSize))
+		{
+			HBSlot->SetVerticalAlignment(VAlign_Center);
+		}
+		AddToZoomCol(StepRow);
+		return Box;
+	};
+	UEditableTextBox* StepBox = MakeStepRow(TEXT("P/T"), TEXT("2"));
+	UEditableTextBox* StepBoxZoom = MakeStepRow(TEXT("Zoom"), TEXT("0.5"));
 
 	if (UHorizontalBoxSlot* HBSlot = Row->AddChildToHorizontalBox(ZoomCol))
 	{
@@ -1386,6 +1393,7 @@ void UCameraControlWidget::BuildPtzPad()
 	PtzButtons[(int32)EPtzMove::ZoomIn - 1]   = BtnZoomIn;
 	PtzButtons[(int32)EPtzMove::ZoomOut - 1]  = BtnZoomOut;
 	Field_PtzStep = StepBox;
+	Field_PtzStepZoom = StepBoxZoom;
 
 	// 접은 Pan/Tilt/Zoom 묶음 자리에 끼운다(못 찾았으면 종전대로 맨 끝).
 	UPanelSlot* PadSlot = (PtzPadInsertIndex != INDEX_NONE)
@@ -1568,6 +1576,14 @@ float UCameraControlWidget::GetPtzStep() const
 	return Step > 0.f ? Step : 2.f;
 }
 
+float UCameraControlWidget::GetPtzStepZoom() const
+{
+	const float Step = Field_PtzStepZoom.IsValid()
+		? FCString::Atof(*Field_PtzStepZoom->GetText().ToString()) : 0.f;
+	// 줌은 1~36 배율이라 Pan/Tilt 기본값(2/초)을 쓰면 한 번 눌러도 끝까지 튄다.
+	return Step > 0.f ? Step : 0.5f;
+}
+
 void UCameraControlWidget::StepControl(ECamCtrl Kind, float Delta)
 {
 	const float Lo = FMath::Min(GetControlMin(Kind), GetControlMax(Kind));
@@ -1592,7 +1608,9 @@ void UCameraControlWidget::TickPtzMove(float DeltaSeconds)
 		return;
 	}
 
-	const float Delta = GetPtzStep() * DeltaSeconds; // step = 초당 이동량
+	// step = 초당 이동량. Pan/Tilt(도)와 Zoom(배율)은 단위가 달라 각자의 값을 쓴다.
+	const float Delta = GetPtzStep() * DeltaSeconds;
+	const float DeltaZoom = GetPtzStepZoom() * DeltaSeconds;
 	switch (ActivePtzMove)
 	{
 	// tilt 는 아래를 볼수록 커진다(PanTiltToRotator: Pitch = -Tilt) → ▲ = 감소.
@@ -1600,8 +1618,8 @@ void UCameraControlWidget::TickPtzMove(float DeltaSeconds)
 	case EPtzMove::TiltDown: StepControl(ECamCtrl::Tilt, +Delta); break;
 	case EPtzMove::PanLeft:  StepControl(ECamCtrl::Pan,  -Delta); break;
 	case EPtzMove::PanRight: StepControl(ECamCtrl::Pan,  +Delta); break;
-	case EPtzMove::ZoomIn:   StepControl(ECamCtrl::Zoom, +Delta); break;
-	case EPtzMove::ZoomOut:  StepControl(ECamCtrl::Zoom, -Delta); break;
+	case EPtzMove::ZoomIn:   StepControl(ECamCtrl::Zoom, +DeltaZoom); break;
+	case EPtzMove::ZoomOut:  StepControl(ECamCtrl::Zoom, -DeltaZoom); break;
 	default: break;
 	}
 }

@@ -18,6 +18,7 @@
 #include "Modules/ViewRpcModule.h"
 #include "Modules/SimRpcModule.h"
 #include "Modules/LightRpcModule.h"
+#include "Modules/EnvRpcModule.h"
 #include "Modules/ScenarioRpcModule.h"
 #include "MjpegStreamManager.h"
 #include "RpcServerSubsystem.generated.h"
@@ -104,6 +105,7 @@ private:
 	TUniquePtr<FSimRpcModule> SimModule;
 	TUniquePtr<FLightRpcModule> LightModule;
 	TUniquePtr<FScenarioRpcModule> ScenarioModule;
+	TUniquePtr<FEnvRpcModule> EnvModule;
 
 	TSharedPtr<IHttpRouter> Router;
 	TArray<FHttpRouteHandle> RouteHandles;

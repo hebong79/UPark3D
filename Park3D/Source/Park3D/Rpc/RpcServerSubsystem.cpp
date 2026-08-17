@@ -196,6 +196,7 @@ void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	SimModule = MakeUnique<FSimRpcModule>(WorldGetter);
 	LightModule = MakeUnique<FLightRpcModule>(WorldGetter);
 	ScenarioModule = MakeUnique<FScenarioRpcModule>(WorldGetter);
+	EnvModule = MakeUnique<FEnvRpcModule>(WorldGetter);
 
 	// 차량 카탈로그 주입. DT_CarCatalog 가 없으면 CatalogFromTable 이 car_catalog.json 으로 폴백하므로
 	// 로드 실패(nullptr)를 그대로 넘긴다.
@@ -224,6 +225,7 @@ void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	SimModule->Register(*Dispatcher);        // 비영속(sim.*)
 	LightModule->Register(*Dispatcher);      // 비영속(light.*)
 	ScenarioModule->Register(*Dispatcher);   // 비영속(scenario.*)
+	EnvModule->Register(*Dispatcher);        // 비영속(env.*) — 레벨 배치 액터 조회/숨김
 
 	StartServer();
 }

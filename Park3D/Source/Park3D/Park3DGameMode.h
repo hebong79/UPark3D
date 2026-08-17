@@ -121,6 +121,13 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
+	/**
+	 * config 의 `level` 이 지금 레벨과 다르면 그 레벨로 이동한다. 이동을 걸었으면 true —
+	 * 호출부는 즉시 반환해야 한다(초기화는 새 레벨의 GameMode 가 다시 한다).
+	 * 부팅맵(ini)은 가벼운 기본 레벨로 두고, 실제로 볼 레벨은 config 가 정한다는 규약이다.
+	 */
+	bool TravelToConfigLevel();
+
 private:
 	/** 메뉴 위젯을 생성(최초 1회)하고 뷰포트에 표시한다. */
 	void ShowMenu();

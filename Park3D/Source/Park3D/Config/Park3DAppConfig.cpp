@@ -72,7 +72,15 @@ bool UPark3DAppConfigLibrary::FromJson(const FString& Json, FPark3DAppConfig& Ou
 		Parsed.CamPortMax = static_cast<int32>(MaxNum);
 	}
 
+	// 메인 뷰 포트. rpc_port 와 같은 규약으로 범위 밖은 미지정 처리한다(ini 값이 살아남는다).
+	if (Root->TryGetNumberField(TEXT("main_port"), Num))
+	{
+		const int32 MainValue = static_cast<int32>(Num);
+		Parsed.MainPort = (MainValue > 0 && MainValue <= 65535) ? MainValue : 0;
+	}
+
 	FString Str;
+	if (Root->TryGetStringField(TEXT("rpc_bind"), Str))       { Parsed.RpcBindAddress = Str.TrimStartAndEnd(); }
 	if (Root->TryGetStringField(TEXT("preset_file"), Str))    { Parsed.PresetFile = Str.TrimStartAndEnd(); }
 	if (Root->TryGetStringField(TEXT("carpos_file"), Str))    { Parsed.CarPosFile = Str.TrimStartAndEnd(); }
 	if (Root->TryGetStringField(TEXT("camerapos_file"), Str)) { Parsed.CameraPosFile = Str.TrimStartAndEnd(); }

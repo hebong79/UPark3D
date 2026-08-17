@@ -271,6 +271,49 @@ void URpcServerSubsystem::RegisterSystemMethods()
 	});
 }
 
+void URpcServerSubsystem::EnsureListenerBindOverride()
+{
+	// 바인드 주소는 [HTTPServer.Listeners] 의 **포트별** override 로 정해진다. 그래서 ini 에 포트를 박아 두면
+	// config 의 rpc_port 를 바꾸는 순간 목록이 빗나가 조용히 루프백으로 떨어진다(2026-08-17 실제 사고).
+	// → 실제로 쓰는 포트에 대한 override 를 여기서 만들어 넣는다. ini 는 이제 포트를 몰라도 된다.
+	if (!GConfig)
+	{
+		return;
+	}
+
+	FPark3DAppConfig AppConfig;
+	UPark3DAppConfigLibrary::Load(AppConfig);
+	FString Bind = AppConfig.RpcBindAddress.TrimStartAndEnd();
+	if (Bind.IsEmpty())
+	{
+		Bind = TEXT("any"); // 기본은 외부 개방. 루프백 전용으로 쓰려면 config 에 "rpc_bind": "localhost".
+	}
+
+	static const TCHAR* Section = TEXT("HTTPServer.Listeners");
+	TArray<FString> Overrides;
+	GConfig->GetArray(Section, TEXT("ListenerOverrides"), Overrides, GEngineIni);
+
+	// 이미 이 포트에 대한 항목이 있으면 그쪽 의도를 존중한다(ini 로 직접 지정한 경우).
+	const FString PortToken = FString::Printf(TEXT("Port=%d"), Port);
+	for (const FString& Entry : Overrides)
+	{
+		int32 EntryPort = 0;
+		if (FParse::Value(*Entry, TEXT("Port="), EntryPort) && EntryPort == Port)
+		{
+			UE_LOG(LogTemp, Log, TEXT("[RPC] 바인드 override 는 ini 지정을 사용합니다: %s"), *Entry);
+			return;
+		}
+	}
+
+	Overrides.Add(FString::Printf(TEXT("(Port=%d,BindAddress=%s)"), Port, *Bind));
+	GConfig->SetArray(Section, TEXT("ListenerOverrides"), Overrides, GEngineIni);
+	// 엔진은 이 목록을 캐시하고 "설정 섹션이 바뀌었다"는 신호에만 다시 읽는다 → 그 신호를 직접 준다.
+	FCoreDelegates::TSOnConfigSectionsChanged().Broadcast(GEngineIni, { FString(Section) });
+
+	UE_LOG(LogTemp, Log, TEXT("[RPC] 바인드 override 등록: Port=%d BindAddress=%s (출처: %s)"),
+		Port, *Bind, AppConfig.RpcBindAddress.IsEmpty() ? TEXT("기본값") : TEXT("config_pmaker.json rpc_bind"));
+}
+
 void URpcServerSubsystem::StartServer()
 {
 	// -RpcPort=0 → 리스닝 소켓을 아예 만들지 않는다(라우터도 잡지 않는다).
@@ -279,6 +322,8 @@ void URpcServerSubsystem::StartServer()
 		UE_LOG(LogTemp, Log, TEXT("[RPC] -RpcPort=0 지정 — JSON-RPC 서버를 시작하지 않습니다."));
 		return;
 	}
+
+	EnsureListenerBindOverride();
 
 	FHttpServerModule& Http = FHttpServerModule::Get();
 	Router = Http.GetHttpRouter(static_cast<uint32>(Port));

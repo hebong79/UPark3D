@@ -260,6 +260,16 @@ private:
 	// 프리셋 ↔ 컨트롤(§6.2)
 	void FillControlsFromDir(const FCamDir& Dir);   // min/max 먼저, value 클램프
 	void CollectDirFromControls(FCamDir& OutDir);   // pos=Unity좌표, rot=(tilt,pan,0), ptzmin/max
+
+	/**
+	 * 높이·X·Z 는 카메라 한 대의 속성이다 — 같은 카메라의 프리셋은 모두 같은 자리에 서야 한다.
+	 * 프리셋이 바꾸는 것은 바라보는 방향(Pan/Tilt/Zoom)뿐이다.
+	 *
+	 * 데이터는 pos 를 프리셋(FCamDir)마다 들고 있으므로, 위치가 바뀔 때마다 그 카메라의
+	 * 모든 프리셋에 같은 값을 써 넣어 어긋나지 않게 한다.
+	 * @param bFromControls true = 지금 UI 값 기준, false = 현재 프리셋의 pos 기준(로드 직후 정합용)
+	 */
+	void SyncCameraPosAcrossPresets(bool bFromControls);
 	void RebuildCameraCombo();
 	void RebuildPresetCombo();
 	FCameraPos& CurCameraPos();                      // CamData.datas[CurCamIndex] (없으면 슬롯 확보)

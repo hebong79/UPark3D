@@ -13,6 +13,8 @@
 #include "Components/ComboBoxString.h"
 #include "Components/EditableTextBox.h"
 #include "Components/Slider.h"
+#include "Park3DPanelStyle.h"
+#include "Styling/CoreStyle.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Components/Border.h"
@@ -75,9 +77,16 @@ namespace
 }
 
 // ===== 초기화 =====
+
+
 void UCameraControlWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+
+	// 어두운 패널 위에서 슬라이더·체크박스가 보이도록 스타일을 입힌다.
+	// WBP 쪽에서 칠하면 값만 들어가고 화면에는 반영되지 않는다.
+	Park3DPanelStyle::ApplyToTree(WidgetTree);
+
 	bDistanceAutoOpenAttemptedThisViewportSession = false;
 
 	// 1) Controls 배열 구성 — BindWidget 위젯을 종류별 묶음으로 매핑.
@@ -505,6 +514,10 @@ void UCameraControlWidget::ApplyControlToCamera(ECamCtrl Kind)
 		UnrealM.z = GetControlCur(ECamCtrl::Height);
 		const FVector UE = UCameraControlLibrary::UnrealMetersToWorld(UnrealM, MetersToUU);
 		Cam->SetCameraWorldLocation(UE.X, UE.Y, UE.Z); // (X_ue, Y_ue, HeightZ_ue)
+
+		// 위치는 카메라 한 대의 속성이다 — 이 카메라의 모든 프리셋에 같은 자리를 써 넣는다.
+		// 여기서 한 번에 처리하면 슬라이더·입력칸·프리셋 수정 어느 경로로 바뀌어도 어긋나지 않는다.
+		SyncCameraPosAcrossPresets(/*bFromControls=*/true);
 		break;
 	}
 	case ECamCtrl::Pan:
@@ -579,6 +592,9 @@ void UCameraControlWidget::HandleCameraChanged(FString /*Item*/, ESelectInfo::Ty
 	if (CP.datas.IsValidIndex(0))
 	{
 		CurPresetIndex = 0;
+		// 예전에 저장된 파일은 프리셋마다 위치가 다를 수 있다 — 첫 프리셋 기준으로 맞춘 뒤 채운다.
+		// 그래야 프리셋을 넘겨도 카메라가 제자리에 선다.
+		SyncCameraPosAcrossPresets(/*bFromControls=*/false);
 		FillControlsFromDir(CP.datas[0]);
 	}
 	else
@@ -797,6 +813,39 @@ void UCameraControlWidget::FillControlsFromDir(const FCamDir& Dir)
 	ApplyAllControlsToCamera();
 }
 
+void UCameraControlWidget::SyncCameraPosAcrossPresets(bool bFromControls)
+{
+	if (!CamData.datas.IsValidIndex(CurCamIndex))
+	{
+		return;
+	}
+	FCameraPos& CP = CamData.datas[CurCamIndex];
+	if (CP.datas.Num() == 0)
+	{
+		return;
+	}
+
+	FCamVec3 Pos;
+	if (bFromControls)
+	{
+		// 저장 순서는 CollectDirFromControls 와 같아야 한다(x=X, y=Z, z=높이).
+		Pos.x = GetControlCur(ECamCtrl::X);
+		Pos.y = GetControlCur(ECamCtrl::Z);
+		Pos.z = GetControlCur(ECamCtrl::Height);
+	}
+	else
+	{
+		// 로드 직후 정합 — 프리셋마다 다른 값이 들어 있을 수 있으므로 현재 프리셋을 기준으로 통일한다.
+		const int32 Base = CP.datas.IsValidIndex(CurPresetIndex) ? CurPresetIndex : 0;
+		Pos = CP.datas[Base].pos;
+	}
+
+	for (FCamDir& D : CP.datas)
+	{
+		D.pos = Pos;
+	}
+}
+
 void UCameraControlWidget::CollectDirFromControls(FCamDir& OutDir)
 {
 	// pos는 Unreal 미터: UI X/높이/Z를 저장 순서 X/Z/Y로 매핑한다. rot=(tilt, pan, 0).
@@ -923,6 +972,21 @@ bool UCameraControlWidget::LoadFromJsonFile(const FString& Path)
 	EnsureCamDataSlots();
 	RebuildCameraCombo();
 	RebuildPresetCombo();
+
+	// 예전 파일은 프리셋마다 위치가 다를 수 있다. 위치는 카메라의 속성이므로 카메라마다
+	// 첫 프리셋 기준으로 통일해 둔다 — 안 그러면 프리셋을 넘길 때 카메라가 움직인다.
+	for (FCameraPos& Cam : CamData.datas)
+	{
+		if (Cam.datas.Num() < 2)
+		{
+			continue;
+		}
+		const FCamVec3 Base = Cam.datas[0].pos;
+		for (FCamDir& D : Cam.datas)
+		{
+			D.pos = Base;
+		}
+	}
 
 	FCameraPos& CP = CurCameraPos();
 	if (CP.datas.IsValidIndex(0))

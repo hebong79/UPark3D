@@ -13,6 +13,8 @@
 #include "Components/Border.h"
 #include "Components/TextBlock.h"
 #include "Components/Slider.h"
+#include "Park3DPanelStyle.h"
+#include "Styling/CoreStyle.h"
 #include "Blueprint/WidgetTree.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
@@ -62,9 +64,16 @@ namespace
 	}
 }
 
+
+
 void UPresetMakerWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+
+	// 어두운 패널 위에서 슬라이더·체크박스가 보이도록 스타일을 입힌다.
+	// WBP 쪽에서 칠하면 값만 들어가고 화면에는 반영되지 않는다.
+	Park3DPanelStyle::ApplyToTree(WidgetTree);
+
 
 	// 바인딩은 반드시 AddUniqueDynamic 을 쓴다(AddDynamic 은 중복을 막지 않는다).
 	// MainMenuWidget::TogglePanel 이 패널 인스턴스를 캐시한 채 RemoveFromParent/AddToViewport 를
@@ -77,7 +86,6 @@ void UPresetMakerWidget::NativeConstruct()
 	if (Btn_Init)       Btn_Init->OnClicked.AddUniqueDynamic(this, &UPresetMakerWidget::HandleInit);
 	if (Btn_Save)       Btn_Save->OnClicked.AddUniqueDynamic(this, &UPresetMakerWidget::HandleSave);
 	if (Btn_Open)       Btn_Open->OnClicked.AddUniqueDynamic(this, &UPresetMakerWidget::HandleOpen);
-	if (Btn_Create)     Btn_Create->OnClicked.AddUniqueDynamic(this, &UPresetMakerWidget::HandleCreate);
 	if (Btn_OffsetPick) Btn_OffsetPick->OnClicked.AddUniqueDynamic(this, &UPresetMakerWidget::HandleOffsetPick);
 
 	if (Radio_Move)   Radio_Move->OnCheckStateChanged.AddUniqueDynamic(this, &UPresetMakerWidget::HandleMoveChanged);
@@ -556,12 +564,6 @@ void UPresetMakerWidget::HandleOpen()
 	const bool bOk = LoadFromJsonFile(Path);
 	OnOpenPreset();
 	Notify(bOk ? FString::Printf(TEXT("열기 완료 (총 %d개): %s"), Presets.Num(), *Path) : TEXT("열기 실패(파일 없음?)"));
-}
-
-void UPresetMakerWidget::HandleCreate()
-{
-	// 생성 버튼은 추가 버튼과 동일하게 현재 입력 폼을 새 프리셋으로 추가한다.
-	AddCurrentPreset();
 }
 
 void UPresetMakerWidget::HandleOffsetPick()

@@ -41,9 +41,9 @@ FIELD_INK = color(0.15, 0.15, 0.15)          # 밝은 바탕 위 글자
 ACCENT    = color(0.13, 0.59, 0.95)          # 파란 강조
 DANGER    = color(0.90, 0.33, 0.29)
 # 이전 UI 는 거의 검정에 가까운 카드다. 밝게 두면 씬과 대비가 무너져 글자가 묻힌다.
-PANEL_BG  = {"DrawAs": "RoundedBox", "TintColor": color(0.035, 0.035, 0.040, 0.94),
+PANEL_BG  = {"DrawAs": "RoundedBox", "TintColor": color(0.035, 0.035, 0.040, 0.82),
              "OutlineSettings": {"CornerRadii": {"X": 6, "Y": 6, "Z": 6, "W": 6}, "RoundingType": "FixedRadius"}}
-TITLE_BG  = {"DrawAs": "RoundedBox", "TintColor": color(0.085, 0.085, 0.092, 0.96)}
+TITLE_BG  = {"DrawAs": "RoundedBox", "TintColor": color(0.085, 0.085, 0.092, 0.88)}
 DOCK_BG   = {"DrawAs": "RoundedBox", "TintColor": color(0.035, 0.035, 0.040, 0.92),
              "OutlineSettings": {"CornerRadii": {"X": 8, "Y": 8, "Z": 8, "W": 8}, "RoundingType": "FixedRadius"}}
 
@@ -96,7 +96,9 @@ def widgets():
     for w in (v.get("widgets", []) if isinstance(v, dict) else []):
         nm = w.get("widgetName")
         p = _path(w.get("widget"))
-        if not nm or not p or w.get("bInherited"):
+        # bInherited=true 라도 실제 위젯이 있으면(경로가 있으면) 트리의 일부다.
+        # 그것까지 거르면 BindWidget 으로 선언된 위젯(RootBorder·Slider·CheckBox…)을 통째로 놓친다.
+        if not nm or not p:
             continue
         out[nm] = {"path": p, "slot": _path(w.get("slot")), "class": _path(w.get("widgetClassPath")) or ""}
     return out
@@ -269,8 +271,7 @@ def slider_row(parent, row_name, label, slider_name, min_name, cur_name, max_nam
     pad(slot_of("Lbl_" + row_name), b=1)
 
     sld = add("Slider", slider_name, box)
-    setp(sld, {"SliderBarColor": color(0.75, 0.75, 0.75),
-               "SliderHandleColor": color(0.13, 0.59, 0.95)})
+    setp(sld, slider_style())
     pad(slot_of(slider_name), b=1)
 
     vals = add("HBox", row_name + "_Vals", box)
@@ -286,6 +287,62 @@ def slider_row(parent, row_name, label, slider_name, min_name, cur_name, max_nam
     return box
 
 
+def label_row(parent, row_name, label, width=96):
+    """라벨(고정폭) + 오른쪽 내용. 이전 UI 는 대부분 이 2열 형태다 —
+    세로로만 쌓으면 패널이 길어지고 눈이 좌우로 짝을 못 찾아 읽기 어려워진다."""
+    row = add("HBox", row_name, parent)
+    t = add("Text", "Lbl_" + row_name, row)
+    setp(t, {"Text": label, "Font": FONT_BODY, "ColorAndOpacity": INK, "MinDesiredWidth": width})
+    sp = slot_of("Lbl_" + row_name)
+    if sp:
+        setp(sp, {"VerticalAlignment": "VAlign_Center", "Padding": {"Left": 0, "Top": 0, "Right": 6, "Bottom": 0}})
+    pad(slot_of(row_name), b=4)
+    return row
+
+
+def fill(name, right=4):
+    """행 안에서 남는 폭을 나눠 갖게 한다."""
+    sp = slot_of(name)
+    if sp:
+        setp(sp, {"Size": {"SizeRule": "Fill", "Value": 1.0}, "HorizontalAlignment": "HAlign_Fill",
+                  "VerticalAlignment": "VAlign_Center",
+                  "Padding": {"Left": 0, "Top": 0, "Right": right, "Bottom": 0}})
+
+
+def auto(name, right=4):
+    """행 안에서 제 크기만 차지하게 한다."""
+    sp = slot_of(name)
+    if sp:
+        setp(sp, {"Size": {"SizeRule": "Automatic"}, "VerticalAlignment": "VAlign_Center",
+                  "Padding": {"Left": 0, "Top": 0, "Right": right, "Bottom": 0}})
+
+
+def minmax_row(parent, row_name, label, slider_name, min_name, cur_name, max_name,
+               min_text="0", cur_text="0", max_text="0"):
+    """이전 카메라 패널 형식 — 제목 줄, 그 아래 `Min [ ] Cur [ ] Max [ ]` 한 줄, 그 아래 슬라이더."""
+    box = add("VBox", row_name, parent)
+
+    t = add("Text", "Lbl_" + row_name, box)
+    setp(t, {"Text": label, "Font": FONT_BODY, "ColorAndOpacity": INK})
+    pad(slot_of("Lbl_" + row_name), b=2)
+
+    row = add("HBox", row_name + "_Vals", box)
+    for cap, nm, txt in (("Min", min_name, min_text), ("Cur", cur_name, cur_text), ("Max", max_name, max_text)):
+        c = add("Text", "Cap_" + nm, row)
+        setp(c, {"Text": cap, "Font": FONT_NUM, "ColorAndOpacity": INK_DIM})
+        auto("Cap_" + nm, right=3)
+        f = add("Field", nm, row)
+        setp(f, {"Text": txt, "Justification": "Right",
+                 "WidgetStyle": {"TextStyle": {"Font": FONT_NUM}}})
+        fill(nm, right=6)
+    pad(slot_of(row_name + "_Vals"), b=2)
+
+    sld = add("Slider", slider_name, box)
+    setp(sld, slider_style())
+    pad(slot_of(slider_name), b=8)
+    return box
+
+
 def check(parent, name, label):
     """체크박스 + 라벨(체크박스만 있으면 무엇을 켜는지 화면에서 알 수 없다)."""
     row = add("HBox", name + "_Row", parent)
@@ -295,6 +352,32 @@ def check(parent, name, label):
     pad(slot_of("Lbl_" + name), l=5)
     pad(slot_of(name + "_Row"), b=4)
     return c
+
+
+def slider_style(bar=None, thumb=None):
+    """슬라이더가 보이게 하는 최소 스타일.
+
+    UMG Slider 의 기본 스타일 브러시는 imageType=NoImage 라 아무것도 그리지 않는다 —
+    SliderBarColor/SliderHandleColor 만 바꾸면 색만 정해질 뿐 여전히 안 보인다.
+    트랙과 핸들 브러시를 RoundedBox 로 명시해야 화면에 나온다.
+    """
+    bar = bar or color(0.62, 0.64, 0.68)
+    thumb = thumb or color(0.13, 0.59, 0.95)
+    barbrush = {"DrawAs": "RoundedBox", "TintColor": bar,
+                "ImageSize": {"X": 16, "Y": 4},
+                "OutlineSettings": {"CornerRadii": {"X": 2, "Y": 2, "Z": 2, "W": 2},
+                                    "RoundingType": "FixedRadius"}}
+    thumbbrush = {"DrawAs": "RoundedBox", "TintColor": thumb,
+                  "ImageSize": {"X": 12, "Y": 12},
+                  "OutlineSettings": {"CornerRadii": {"X": 6, "Y": 6, "Z": 6, "W": 6},
+                                      "RoundingType": "FixedRadius"}}
+    dim = dict(barbrush); dim["TintColor"] = color(0.35, 0.36, 0.38)
+    return {"WidgetStyle": {"NormalBarImage": barbrush, "HoveredBarImage": barbrush,
+                            "DisabledBarImage": dim,
+                            "NormalThumbImage": thumbbrush, "HoveredThumbImage": thumbbrush,
+                            "DisabledThumbImage": dim,
+                            "BarThickness": 4.0},
+            "SliderBarColor": color(1, 1, 1), "SliderHandleColor": color(1, 1, 1)}
 
 
 TAB_ICON = "/Game/Widgets/Icons/TabIcons/%s.%s"

@@ -1,6 +1,8 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "CarActor.h"
+#include "CarPlateNumberWidget.h"
+#include "Components/WidgetComponent.h"
 #include "CarColorComponent.h"
 #include "CarPlacementLibrary.h"
 #include "Components/PrimitiveComponent.h"
@@ -87,6 +89,25 @@ ACarActor::ACarActor()
 	FrontPlateText->SetupAttachment(FrontPlateComp);
 	BackPlateText = CreateDefaultSubobject<UTextRenderComponent>(TEXT("BackPlateText"));
 	BackPlateText->SetupAttachment(BackPlateComp);
+
+	// 실제 표시는 3D 위젯이 한다(위 TextRender 는 Runtime 폰트를 못 그린다 — CarPlateNumberWidget.h 주석).
+	// DrawSize 는 번호판 비율(520×110)과 같게 두고, 실제 크기는 아래 정렬에서 스케일로 맞춘다.
+	FrontPlateWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("FrontPlateWidget"));
+	FrontPlateWidget->SetupAttachment(FrontPlateComp);
+	BackPlateWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("BackPlateWidget"));
+	BackPlateWidget->SetupAttachment(BackPlateComp);
+	for (UWidgetComponent* PlateWidget : { FrontPlateWidget, BackPlateWidget })
+	{
+		PlateWidget->SetWidgetClass(UCarPlateNumberWidget::StaticClass());
+		PlateWidget->SetWidgetSpace(EWidgetSpace::World);
+		PlateWidget->SetDrawSize(FVector2D(520.f, 110.f));
+		PlateWidget->SetTwoSided(false);
+		PlateWidget->SetBackgroundColor(FLinearColor::Transparent); // 판의 흰 바탕·파란 KOR 은 메시가 그린다.
+		PlateWidget->SetTickWhenOffscreen(false);
+		PlateWidget->SetGenerateOverlapEvents(false);
+		PlateWidget->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		PlateWidget->SetCastShadow(false);
+	}
 	ConfigurePlateVisual(FrontPlateText);
 	ConfigurePlateVisual(BackPlateText);
 	for (UTextRenderComponent* PlateText : { FrontPlateText, BackPlateText })
@@ -250,6 +271,22 @@ void ACarActor::AlignPlateAndText(UStaticMeshComponent* Plate, UTextRenderCompon
 	const FVector TextLocal = BoundsOrigin + OutwardLocal * (ThinExtent + PlateTextSurfaceGap) + MeshWide * PlateTextSideShift;
 	Text->SetRelativeLocation(TextLocal);
 	Text->SetRelativeRotation(FRotationMatrix::MakeFromXZ(OutwardLocal, MeshWide ^ OutwardLocal).Rotator());
+
+	// 실제로 보이는 것은 위젯이다. 같은 면 바깥에 두되, 위젯 평면은 자기 +X 가 아니라 -X 를 향해 그려지므로
+	// (WidgetComponent 는 XY 평면에 그리고 법선이 +X 다) 텍스트와 같은 회전을 쓰고 위치만 살짝 더 띄운다.
+	if (UWidgetComponent* Widget = (Plate == FrontPlateComp) ? FrontPlateWidget : BackPlateWidget)
+	{
+		Widget->SetRelativeLocation(BoundsOrigin + OutwardLocal * (ThinExtent + PlateWidgetSurfaceGap));
+		Widget->SetRelativeRotation(FRotationMatrix::MakeFromXZ(OutwardLocal, MeshWide ^ OutwardLocal).Rotator());
+		// DrawSize(520×110 px) → 실제 판 크기(긴 축 지름 = 넓은 축 extent×2 cm)에 맞춘 스케일.
+		const double PlateWidthCm = Ext[WideAxis] * 2.0;
+		const float Scale = static_cast<float>(PlateWidthCm / 520.0) * PlateWidgetFill;
+		Widget->SetRelativeScale3D(FVector(Scale));
+		if (UCarPlateNumberWidget* PlateWidget = Cast<UCarPlateNumberWidget>(Widget->GetUserWidgetObject()))
+		{
+			PlateWidget->SetPlateNumber(MakePlateDisplayText(PlateNumber));
+		}
+	}
 
 	// 판·글자가 어디에 어떤 자세로 놓였는지 한 줄로 남긴다. "로그에는 vis=1 인데 화면에 없다"를
 	// 다시 만나면 이 값(법선·간격·월드 위치)이 원인을 바로 가리킨다.

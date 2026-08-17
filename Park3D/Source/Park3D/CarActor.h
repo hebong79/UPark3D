@@ -11,6 +11,7 @@
 
 class UStaticMeshComponent;
 class UTextRenderComponent;
+class UWidgetComponent;
 class UCarColorComponent;
 class UMaterialInterface;
 
@@ -55,6 +56,16 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Car|Plate")
 	UTextRenderComponent* BackPlateText;
+
+	/**
+	 * 실제로 화면에 번호를 그리는 3D 위젯(앞/뒤). 위의 TextRender 는 Runtime 캐시 폰트를 못 그려
+	 * 아무것도 표시하지 못한다(Docs/20260817_225749) — 컴포넌트는 호환을 위해 남기되 숨긴다.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Car|Plate")
+	UWidgetComponent* FrontPlateWidget;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Car|Plate")
+	UWidgetComponent* BackPlateWidget;
 
 	/** 이 actor 수명 동안 유지되는 결정적 한국 일반 승용차 형식(123다4567) 번호. JSON에는 저장하지 않는다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Car|Plate")
@@ -122,6 +133,14 @@ private:
 	static constexpr float PlateTextSurfaceGap = 0.3f;
 	/** 좌측 파란 KOR 영역을 피해 글자를 오른쪽으로 미는 양(cm, 판의 긴 축 방향). */
 	static constexpr float PlateTextSideShift = 4.f;
+	/** 번호 위젯을 판 표면에서 띄우는 양(cm). 글자(TextRender)보다 살짝 더 바깥. */
+	static constexpr float PlateWidgetSurfaceGap = 0.5f;
+	/**
+	 * 위젯이 판 폭에서 차지하는 비율(좌측 파란 KOR 영역을 빼고 남는 만큼).
+	 * 글자는 ScaleBox 가 담기는 만큼 줄이므로 이 값은 "번호가 쓰이는 영역"의 폭만 정한다
+	 * (좌측 파란 KOR 영역 + 테두리를 뺀 비율).
+	 */
+	static constexpr float PlateWidgetFill = 0.82f;
 
 	bool bSelected = false;
 };

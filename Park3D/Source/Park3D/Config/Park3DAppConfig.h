@@ -32,6 +32,26 @@ struct FPark3DAppConfig
 	FString CameraPosFile;
 
 	/**
+	 * 기동할 레벨. 빈 문자열 = 부팅맵(ini GameDefaultMap) 그대로.
+	 * 세 가지 표기를 모두 받는다: "Levels/LV_Park_01", "/Game/Levels/LV_Park_01", "LV_Park_01".
+	 * 예) "Maps/PresetMaker1"  = 바닥만 있는 기본 레벨(주차면·차량·카메라를 config 파일로 그려 넣는 쪽)
+	 *     "Levels/LV_Park_01" = 건물·도로가 있는 도심 주차장 레벨
+	 * ⚠ 여기에 적을 수 있는 레벨은 쿡에 포함된 것뿐이다(DefaultGame.ini 의 MapsToCook).
+	 * ⚠ 레벨이 자기 노면을 가지면 map_floor 를 false 로 함께 둘 것 — 아니면 단색 바닥이 그 위를 덮는다.
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = "Config")
+	FString Level;
+
+	/**
+	 * Save/3D/Light 기준 조명 설정 파일명. 빈 문자열 = 기존 동작(_default.txt 가 가리키는 파일).
+	 * **레벨과 짝이다.** 통합 하늘이 있는 레벨(LV_Park_01)은 코드가 조명에 손대지 않지만,
+	 * 하늘이 없는 레벨(Maps/PresetMaker1)은 코드가 태양·하늘·노출볼륨을 만들고 이 값을 적용한다 —
+	 * 도심 레벨용 값을 그대로 쓰면 화면이 하얗게 뜬다. level 을 바꾸면 이 값도 함께 바꿀 것.
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = "Config")
+	FString LightFile;
+
+	/**
 	 * PTZ 카메라 줌 상한(배율). 0 이하 = 미지정(액터 기본값 유지).
 	 * 최상위 max_zoom 과 camera.max_zoom 이 모두 여기로 들어오며, 둘 다 있으면 camera 쪽이 이긴다(설계 §3.2).
 	 */

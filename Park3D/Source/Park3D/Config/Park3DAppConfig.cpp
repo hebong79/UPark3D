@@ -87,6 +87,8 @@ bool UPark3DAppConfigLibrary::FromJson(const FString& Json, FPark3DAppConfig& Ou
 	if (Root->TryGetStringField(TEXT("preset_file"), Str))    { Parsed.PresetFile = Str.TrimStartAndEnd(); }
 	if (Root->TryGetStringField(TEXT("carpos_file"), Str))    { Parsed.CarPosFile = Str.TrimStartAndEnd(); }
 	if (Root->TryGetStringField(TEXT("camerapos_file"), Str)) { Parsed.CameraPosFile = Str.TrimStartAndEnd(); }
+	if (Root->TryGetStringField(TEXT("level"), Str))          { Parsed.Level = Str.TrimStartAndEnd(); }
+	if (Root->TryGetStringField(TEXT("light_file"), Str))     { Parsed.LightFile = Str.TrimStartAndEnd(); }
 
 	Out = Parsed;
 	return true;

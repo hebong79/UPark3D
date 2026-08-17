@@ -14,6 +14,7 @@
 #include "Sim/ParkingSimManager.h"
 #include "Sim/ParkingSimWidget.h"
 #include "Light/LightControlLibrary.h"
+#include "Park3DDataPaths.h"   // config 의 light_file 을 Save/3D/Light 기준으로 푼다.
 #include "Light/LightControlManager.h"
 #include "Blueprint/UserWidget.h"
 #include "Camera/PlayerCameraManager.h"
@@ -54,9 +55,63 @@ APark3DGameMode::APark3DGameMode()
 	DefaultPawnClass = AParkFlyPawn::StaticClass();
 }
 
+bool APark3DGameMode::TravelToConfigLevel()
+{
+	// 한 프로세스에서 한 번만 시도한다. 이동에 실패하는 경우(쿡에 없는 레벨 이름 등)에도
+	// 같은 판정을 반복하지 않기 위해서다 — 실패한 이동을 매번 다시 걸면 아무것도 못 하게 된다.
+	static bool bAttempted = false;
+	if (bAttempted)
+	{
+		return false;
+	}
+
+	FPark3DAppConfig Config;
+	if (!UPark3DAppConfigLibrary::Load(Config) || Config.Level.IsEmpty())
+	{
+		bAttempted = true;
+		return false; // 지정이 없으면 부팅맵 그대로 쓴다.
+	}
+
+	// "LV_Park_01" · "Levels/LV_Park_01" · "/Game/Levels/LV_Park_01" 을 모두 같은 것으로 본다.
+	FString Target = Config.Level.Replace(TEXT("\\"), TEXT("/"));
+	Target.RemoveFromEnd(TEXT(".umap"));
+	if (!Target.StartsWith(TEXT("/")))
+	{
+		Target = TEXT("/Game/") + Target;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		bAttempted = true;
+		return false;
+	}
+	// PIE 는 패키지명에 UEDPIE_0_ 접두어를 붙인다. 떼고 비교하지 않으면 영원히 같지 않다고 판정한다.
+	const FString Current = UWorld::StripPIEPrefixFromPackageName(
+		World->GetOutermost()->GetName(), World->StreamingLevelsPrefix);
+
+	bAttempted = true;
+	if (Current.Equals(Target, ESearchCase::IgnoreCase))
+	{
+		UE_LOG(LogTemp, Log, TEXT("[Park3DGameMode] 레벨 %s (config 지정과 일치 — 이동 없음)"), *Current);
+		return false;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[Park3DGameMode] 레벨 이동: %s → %s (출처: config_pmaker.json level)"), *Current, *Target);
+	UGameplayStatics::OpenLevel(this, FName(*Target));
+	return true;
+}
+
 void APark3DGameMode::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// config 가 다른 레벨을 가리키면 그쪽으로 옮겨 간다. 여기서 되돌아가면 아래 초기화는
+	// 새 레벨에서 다시 돈다(GameMode 는 레벨마다 새로 만들어진다).
+	if (TravelToConfigLevel())
+	{
+		return;
+	}
 
 	APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
 	if (!PC)
@@ -295,12 +350,27 @@ void APark3DGameMode::ApplyStartupLighting()
 		return;
 	}
 
+	// 조명 설정은 레벨과 짝이다(하늘 없는 레벨은 코드가 조명을 만들고 이 값을 그대로 적용한다).
+	// 그래서 레벨을 정하는 config 가 조명 파일도 정하게 한다 — 없으면 종전대로 _default.txt 를 따른다.
 	FLightSettings Settings;
-	const bool bFromFile = ULightControlLibrary::LoadDefaultSettings(Settings);
+	FString Source;
+	FPark3DAppConfig AppConfig;
+	if (UPark3DAppConfigLibrary::Load(AppConfig) && !AppConfig.LightFile.IsEmpty()
+		&& ULightControlLibrary::LoadFromFile(Park3DDataPaths::GetDataFilePath(TEXT("Light"), *AppConfig.LightFile), Settings))
+	{
+		Source = FString::Printf(TEXT("config_pmaker.json light_file=%s"), *AppConfig.LightFile);
+	}
+	else
+	{
+		if (!AppConfig.LightFile.IsEmpty())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Light] config 의 light_file(%s) 을 읽지 못해 기본값으로 넘어갑니다."), *AppConfig.LightFile);
+		}
+		Source = ULightControlLibrary::LoadDefaultSettings(Settings) ? TEXT("_default.txt") : TEXT("내장 기본값");
+	}
 	LightMgr->ApplySettings(Settings);
 	UE_LOG(LogTemp, Log, TEXT("[Light] 시작 조명 적용 — %s (노출 %.2f, 태양 %.1f lux, 고도 %.1f°)"),
-		bFromFile ? TEXT("저장된 기본값 파일") : TEXT("내장 기본값"),
-		Settings.ExposureEV100, Settings.SunIntensity, Settings.SunAltitudeDeg);
+		*Source, Settings.ExposureEV100, Settings.SunIntensity, Settings.SunAltitudeDeg);
 }
 
 void APark3DGameMode::ApplyStartupConfig()

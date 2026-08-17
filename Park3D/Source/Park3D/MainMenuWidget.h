@@ -24,8 +24,6 @@ public:
 	UPROPERTY(meta = (BindWidget)) UButton* Btn_Camera = nullptr;        // 카메라 컨트롤
 	UPROPERTY(meta = (BindWidget)) UButton* Btn_MapSize = nullptr;       // 맵 크기 변경
 	UPROPERTY(meta = (BindWidget)) UButton* Btn_DistFeature = nullptr;   // 거리.피쳐 체크
-	UPROPERTY(meta = (BindWidget)) UButton* Btn_VlaTrain = nullptr;      // VLA 학습 데이터
-	UPROPERTY(meta = (BindWidget)) UButton* Btn_VlaSim = nullptr;        // VLA 시뮬레이터
 	UPROPERTY(meta = (BindWidget)) UButton* Btn_Exit = nullptr;          // Exit
 
 	// 배경 프레임 겸 드래그 핸들(WBP_MainMenu 에서 VBox_Menu 를 감싼 Border).
@@ -77,8 +75,6 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Menu") void OnCameraControl();
 	UFUNCTION(BlueprintImplementableEvent, Category = "Menu") void OnMapSize();
 	UFUNCTION(BlueprintImplementableEvent, Category = "Menu") void OnDistanceFeature();
-	UFUNCTION(BlueprintImplementableEvent, Category = "Menu") void OnVlaTrain();
-	UFUNCTION(BlueprintImplementableEvent, Category = "Menu") void OnVlaSim();
 
 protected:
 	/** Slate 트리가 만들어지기 전 시점 — 메뉴에 버튼을 끼워 넣으려면 여기여야 순서가 반영된다. */
@@ -95,8 +91,6 @@ protected:
 	UFUNCTION() void HandleCamera();
 	UFUNCTION() void HandleMapSize();
 	UFUNCTION() void HandleDistFeature();
-	UFUNCTION() void HandleVlaTrain();
-	UFUNCTION() void HandleVlaSim();
 	UFUNCTION() void HandleExit();
 	UFUNCTION() void HandleLight();
 	UFUNCTION() void HandleSimPanel();
@@ -111,7 +105,18 @@ private:
 	 * 스타일·폰트·슬롯 패딩을 기존 버튼(Btn_MapSize)에서 복사해 모양을 맞춘다.
 	 * @return 삽입된 버튼(목록을 못 찾으면 nullptr). OnClicked 바인딩은 호출자가 한다.
 	 */
-	UButton* InsertMenuButtonBeforeExit(const TCHAR* WidgetName, const FText& Label);
+	UButton* InsertMenuButtonBeforeExit(const TCHAR* WidgetName, const FText& Label,
+		const TCHAR* IconAssetPath = nullptr);
+
+	/**
+	 * 독 버튼(WBP 바인딩분)에 아이콘을 입힌다.
+	 * WBP 브러시에 텍스처 참조를 저장해 두면 런타임에 그려지지 않았다(브러시 값은 맞는데 화면이 빈칸).
+	 * 주입 버튼이 LoadObject 로 잘 붙는 것과 대비되므로, 아이콘은 한 경로(코드)로 통일한다.
+	 */
+	void ApplyDockIcons();
+
+	/** 버튼의 자식을 아이콘 이미지 하나로 교체한다. */
+	void SetButtonIcon(UButton* Button, const TCHAR* IconAssetPath, const FText& Tooltip);
 
 	/** "조명 설정" 버튼 삽입. */
 	void InjectLightButton();

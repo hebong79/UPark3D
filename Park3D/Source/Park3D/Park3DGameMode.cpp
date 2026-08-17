@@ -15,6 +15,7 @@
 #include "Sim/ParkingSimWidget.h"
 #include "Light/LightControlLibrary.h"
 #include "Park3DDataPaths.h"   // config 의 light_file 을 Save/3D/Light 기준으로 푼다.
+#include "Env/EnvActorLibrary.h" // config 의 hide_actors 적용(env.hide 와 같은 로직).
 #include "Light/LightControlManager.h"
 #include "Blueprint/UserWidget.h"
 #include "Camera/PlayerCameraManager.h"
@@ -120,6 +121,10 @@ void APark3DGameMode::BeginPlay()
 		return;
 	}
 	CachedPC = PC;
+
+	// config 의 hide_actors 적용 — 레벨의 나무·간판처럼 시야를 가리는 물체를 치운다.
+	// 숨김은 런타임 상태라 실행할 때마다 다시 걸어야 한다(env.hide 와 같은 처리를 여기서 한 번).
+	ApplyConfigHiddenActors();
 
 	// 카메라(초기) 시점 설정 — bOverrideCameraStart=true 면 PlayerStart 대신 지정 위치/회전 사용.
 	ApplyCameraStart();
@@ -340,6 +345,29 @@ void APark3DGameMode::ReplayParkingSim()
 			UE_LOG(LogTemp, Warning, TEXT("[Sim] 리플레이 실패: %s"), *Err);
 		}
 	}
+}
+
+void APark3DGameMode::ApplyConfigHiddenActors()
+{
+	FPark3DAppConfig Config;
+	if (!UPark3DAppConfigLibrary::Load(Config) || Config.HideActors.Num() == 0)
+	{
+		return;
+	}
+
+	const TSet<FString> Wanted(Config.HideActors);
+	const TArray<AActor*> Changed = Park3DEnv::SetHiddenByNames(GetWorld(), Wanted, /*bHidden=*/true);
+
+	// 못 찾은 이름을 조용히 넘기지 않는다 — 레벨을 바꾸면 액터 이름이 통째로 달라지는데,
+	// 그때 "설정은 그대로인데 나무가 다시 보인다"의 원인이 이 목록이라는 것을 알 수 있어야 한다.
+	TArray<FString> Missing = Config.HideActors;
+	for (const AActor* Actor : Changed)
+	{
+		Missing.Remove(Actor->GetName());
+	}
+	UE_LOG(LogTemp, Log, TEXT("[Env] config hide_actors 적용: %d/%d 숨김%s"),
+		Changed.Num(), Config.HideActors.Num(),
+		Missing.Num() > 0 ? *FString::Printf(TEXT(" — 못 찾음: %s"), *FString::Join(Missing, TEXT(", "))) : TEXT(""));
 }
 
 void APark3DGameMode::ApplyStartupLighting()

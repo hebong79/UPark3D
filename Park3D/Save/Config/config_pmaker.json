@@ -12,5 +12,8 @@
 		"hfov_wide": 56.5,
 		"max_zoom": 36.0
 	},
-	"map_floor": false
+	"map_floor": false,
+	"hide_actors": [
+		"StaticMeshActor_188"
+	]
 }

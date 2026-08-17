@@ -7,42 +7,10 @@
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
 #include "Components/PrimitiveComponent.h"
+#include "../../Env/EnvActorLibrary.h"
 
 namespace
 {
-	/**
-	 * 목록에 낼 가치가 있는 액터인가.
-	 * 보이는 지오메트리가 있어야 "가리는 물체"로서 의미가 있다 — 컨트롤러·게임모드·볼륨은 걸러낸다.
-	 */
-	bool IsVisibleGeometry(const AActor* Actor)
-	{
-		if (!Actor || !IsValid(Actor))
-		{
-			return false;
-		}
-		TArray<UPrimitiveComponent*> Prims;
-		const_cast<AActor*>(Actor)->GetComponents<UPrimitiveComponent>(Prims);
-		for (const UPrimitiveComponent* Prim : Prims)
-		{
-			// 숨겨 둔 것도 목록에는 남긴다 — 다시 켜려면 이름이 보여야 한다.
-			if (Prim && Prim->IsRegistered() && Prim->Bounds.SphereRadius > 1.f)
-			{
-				return true;
-			}
-		}
-		return false;
-	}
-
-	/** Park3D 가 소유한 액터는 제외한다 — 그쪽은 car.* / preset.* / cam.* 이 담당한다. */
-	bool IsPark3DOwned(const AActor* Actor)
-	{
-		const FString Class = Actor->GetClass()->GetName();
-		return Class.StartsWith(TEXT("CarActor")) || Class.StartsWith(TEXT("PTZCamera"))
-			|| Class.StartsWith(TEXT("Parking")) || Class.StartsWith(TEXT("MapFloor"))
-			|| Class.StartsWith(TEXT("CarPlacement")) || Class.StartsWith(TEXT("CameraControl"))
-			|| Class.StartsWith(TEXT("LightControl"));
-	}
-
 	TSharedPtr<FJsonObject> ActorToDto(AActor* Actor, const FVector& From, bool bHasFrom)
 	{
 		const FVector Origin = Actor->GetActorLocation();
@@ -86,7 +54,7 @@ void FEnvRpcModule::Register(URpcDispatcher& Dispatcher)
 		for (TActorIterator<AActor> It(World); It; ++It)
 		{
 			AActor* Actor = *It;
-			if (!IsVisibleGeometry(Actor) || IsPark3DOwned(Actor))
+			if (!Park3DEnv::IsEnvActor(Actor))
 			{
 				continue;
 			}
@@ -155,18 +123,12 @@ void FEnvRpcModule::Register(URpcDispatcher& Dispatcher)
 		}
 		const bool bHidden = RpcParam::GetBool(P, TEXT("hidden"), true);
 
+		// 실제 숨김은 공용 로직이 한다 — 시작 시 config 의 hide_actors 적용도 같은 함수를 쓴다.
 		TArray<TSharedPtr<FJsonValue>> Changed;
 		TSet<FString> Found;
-		for (TActorIterator<AActor> It(World); It; ++It)
+		for (AActor* Actor : Park3DEnv::SetHiddenByNames(World, Wanted, bHidden))
 		{
-			AActor* Actor = *It;
-			if (!Actor || !Wanted.Contains(Actor->GetName()))
-			{
-				continue;
-			}
 			Found.Add(Actor->GetName());
-			Actor->SetActorHiddenInGame(bHidden);
-			Actor->SetActorEnableCollision(!bHidden);
 			Changed.Add(MakeShared<FJsonValueObject>(ActorToDto(Actor, FVector::ZeroVector, false)));
 		}
 

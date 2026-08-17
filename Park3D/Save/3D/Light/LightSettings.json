@@ -1,0 +1,10 @@
+{
+	"ExposureEV100": 3.5,
+	"SunIntensity": 150,
+	"SunColorR": 1,
+	"SunColorG": 1,
+	"SunColorB": 1,
+	"SunAltitudeDeg": 75,
+	"SunAzimuthDeg": 150,
+	"SkyIntensity": 20
+}

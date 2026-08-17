@@ -1,1 +1,1 @@
-Sangmyung.json
+LightSettings.json

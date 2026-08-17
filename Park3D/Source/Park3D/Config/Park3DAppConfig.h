@@ -62,6 +62,14 @@ struct FPark3DAppConfig
 	UPROPERTY(BlueprintReadWrite, Category = "Config")
 	int32 CamPortMax = 0;
 
+	/**
+	 * 코드가 까는 단색 바닥(AMapFloorActor)을 쓸 것인가. 기본 true = 기존 동작(빈 부트 맵 대비).
+	 * 레벨이 자기 노면(아스팔트·차선·연석)을 갖고 있으면 false 로 둔다 — true 로 두면 160×160m
+	 * 평면이 그 위를 덮어 레벨 노면이 보이지 않는다.
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = "Config")
+	bool bMapFloor = true;
+
 	/** 포트 대역이 유효한가(둘 다 지정 + 2<=min<=max<=65535). min=1 은 BasePort 0 이 되어 거부된다. */
 	bool HasValidCamPortRange() const
 	{

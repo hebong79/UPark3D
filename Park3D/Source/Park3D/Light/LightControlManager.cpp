@@ -34,21 +34,33 @@ ALightControlManager* ALightControlManager::GetOrSpawn(UWorld* World)
 	return World->SpawnActor<ALightControlManager>(ALightControlManager::StaticClass(), Params);
 }
 
-ADirectionalLight* ALightControlManager::FindSun() const
+UDirectionalLightComponent* ALightControlManager::FindSun() const
 {
 	UWorld* World = GetWorld();
 	if (!World)
 	{
 		return nullptr;
 	}
+	// ADirectionalLight 액터를 먼저 본다(가장 흔한 형태이자 기존 동작).
 	for (TActorIterator<ADirectionalLight> It(World); It; ++It)
 	{
-		return *It;
+		if (UDirectionalLightComponent* C = Cast<UDirectionalLightComponent>(It->GetLightComponent()))
+		{
+			return C;
+		}
+	}
+	// 없으면 BP 액터가 품은 것까지 훑는다(UltraDynamicSky 등).
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		if (UDirectionalLightComponent* C = It->FindComponentByClass<UDirectionalLightComponent>())
+		{
+			return C;
+		}
 	}
 	return nullptr;
 }
 
-ASkyLight* ALightControlManager::FindSky() const
+USkyLightComponent* ALightControlManager::FindSky() const
 {
 	UWorld* World = GetWorld();
 	if (!World)
@@ -57,7 +69,17 @@ ASkyLight* ALightControlManager::FindSky() const
 	}
 	for (TActorIterator<ASkyLight> It(World); It; ++It)
 	{
-		return *It;
+		if (USkyLightComponent* C = It->GetLightComponent())
+		{
+			return C;
+		}
+	}
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		if (USkyLightComponent* C = It->FindComponentByClass<USkyLightComponent>())
+		{
+			return C;
+		}
 	}
 	return nullptr;
 }
@@ -112,11 +134,15 @@ void ALightControlManager::EnsureLightingActors()
 	}
 
 	// 하늘(배경). SkyLight 가 캡처할 대상이자 화면의 배경이다 — 없으면 배경이 검게 남는다.
+	// 태양·하늘빛과 같은 이유로 컴포넌트까지 본다(UDS 는 대기를 컴포넌트로 품는다 — 겹치면 하늘이 두 겹).
 	bool bHasAtmosphere = false;
-	for (TActorIterator<ASkyAtmosphere> It(World); It; ++It)
+	for (TActorIterator<AActor> It(World); It; ++It)
 	{
-		bHasAtmosphere = true;
-		break;
+		if (It->FindComponentByClass<USkyAtmosphereComponent>())
+		{
+			bHasAtmosphere = true;
+			break;
+		}
 	}
 	if (!bHasAtmosphere)
 	{
@@ -159,32 +185,25 @@ void ALightControlManager::ApplySettings(const FLightSettings& Settings)
 	FLightSettings S = Settings;
 	ULightControlLibrary::ClampSettings(S);
 
-	if (ADirectionalLight* Sun = FindSun())
+	if (UDirectionalLightComponent* Sun = FindSun())
 	{
-		// roll 은 방향(액터 +X)에 영향이 없으므로 원본을 보존한다.
-		const FRotator Cur = Sun->GetActorRotation();
-		Sun->SetActorRotation(FRotator(ULightControlLibrary::AltitudeToPitch(S.SunAltitudeDeg),
+		// roll 은 방향(+X)에 영향이 없으므로 원본을 보존한다.
+		const FRotator Cur = Sun->GetComponentRotation();
+		Sun->SetWorldRotation(FRotator(ULightControlLibrary::AltitudeToPitch(S.SunAltitudeDeg),
 			S.SunAzimuthDeg, Cur.Roll));
-
-		if (UDirectionalLightComponent* C = Cast<UDirectionalLightComponent>(Sun->GetLightComponent()))
-		{
-			C->SetIntensity(S.SunIntensity);
-			C->SetLightColor(S.SunColor);
-		}
+		Sun->SetIntensity(S.SunIntensity);
+		Sun->SetLightColor(S.SunColor);
 	}
 	else
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[Light] DirectionalLight 를 찾지 못해 태양 설정을 건너뜁니다."));
 	}
 
-	if (ASkyLight* Sky = FindSky())
+	if (USkyLightComponent* Sky = FindSky())
 	{
-		if (USkyLightComponent* C = Sky->GetLightComponent())
-		{
-			C->SetIntensity(S.SkyIntensity);
-			// RealTimeCapture 가 꺼져 있는 레벨에서도 태양 변경이 하늘빛에 반영되도록 한 번 재캡처한다.
-			C->RecaptureSky();
-		}
+		Sky->SetIntensity(S.SkyIntensity);
+		// RealTimeCapture 가 꺼져 있는 레벨에서도 태양 변경이 하늘빛에 반영되도록 한 번 재캡처한다.
+		Sky->RecaptureSky();
 	}
 	else
 	{
@@ -210,7 +229,7 @@ void ALightControlManager::ApplySettings(const FLightSettings& Settings)
 
 bool ALightControlManager::CaptureCurrent(FLightSettings& Out) const
 {
-	ADirectionalLight* Sun = FindSun();
+	const UDirectionalLightComponent* Sun = FindSun();
 	if (!Sun)
 	{
 		return false;
@@ -218,22 +237,15 @@ bool ALightControlManager::CaptureCurrent(FLightSettings& Out) const
 
 	FLightSettings S;
 	// FRotator 성분은 double — 설정 구조체(float)에 맞춰 명시적으로 좁힌다.
-	const FRotator Rot = Sun->GetActorRotation();
+	const FRotator Rot = Sun->GetComponentRotation();
 	S.SunAltitudeDeg = ULightControlLibrary::PitchToAltitude(static_cast<float>(Rot.Pitch));
 	S.SunAzimuthDeg = static_cast<float>(Rot.Yaw);
+	S.SunIntensity = Sun->Intensity;
+	S.SunColor = Sun->GetLightColor();
 
-	if (const UDirectionalLightComponent* C = Cast<UDirectionalLightComponent>(Sun->GetLightComponent()))
+	if (const USkyLightComponent* Sky = FindSky())
 	{
-		S.SunIntensity = C->Intensity;
-		S.SunColor = C->GetLightColor();
-	}
-
-	if (const ASkyLight* Sky = FindSky())
-	{
-		if (const USkyLightComponent* C = Sky->GetLightComponent())
-		{
-			S.SkyIntensity = C->Intensity;
-		}
+		S.SkyIntensity = Sky->Intensity;
 	}
 
 	if (const APostProcessVolume* V = FindExposureVolume())

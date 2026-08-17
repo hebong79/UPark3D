@@ -72,6 +72,9 @@ bool UPark3DAppConfigLibrary::FromJson(const FString& Json, FPark3DAppConfig& Ou
 		Parsed.CamPortMax = static_cast<int32>(MaxNum);
 	}
 
+	bool bFlag = false;
+	if (Root->TryGetBoolField(TEXT("map_floor"), bFlag)) { Parsed.bMapFloor = bFlag; }
+
 	FString Str;
 	if (Root->TryGetStringField(TEXT("preset_file"), Str))    { Parsed.PresetFile = Str.TrimStartAndEnd(); }
 	if (Root->TryGetStringField(TEXT("carpos_file"), Str))    { Parsed.CarPosFile = Str.TrimStartAndEnd(); }

@@ -73,20 +73,31 @@ void APark3DGameMode::BeginPlay()
 	ApplyMainViewFov();
 
 	// 주차장 아스팔트 바닥(기본 160×160m). 패널을 한 번도 열지 않아도 바닥은 존재한다.
-	AMapFloorActor::GetOrSpawn(GetWorld());
+	// 레벨이 자기 노면을 갖고 있으면(map_floor:false) 깔지 않는다 — 깔면 레벨 노면을 덮는다.
+	// 설정을 여기서 한 번 더 읽는 이유: ApplyStartupConfig 는 이 아래(메뉴 표시 뒤)에서 돌아
+	// 그때는 이미 바닥이 스폰된 뒤다. 파일 하나 파싱이라 비용은 무시할 수준이다.
+	{
+		FPark3DAppConfig FloorConfig;
+		if (!UPark3DAppConfigLibrary::Load(FloorConfig) || FloorConfig.bMapFloor)
+		{
+			AMapFloorActor::GetOrSpawn(GetWorld());
+		}
+		else
+		{
+			UE_LOG(LogTemp, Log, TEXT("[Park3DGameMode] map_floor=false — 레벨 노면을 쓰므로 단색 바닥을 생성하지 않습니다."));
+		}
+	}
 
 	// 조명: 마지막으로 저장·열기한 설정 파일을 기본값으로 적용한다.
 	// 포인터/파일/파싱 중 어느 단계든 실패하면 FLightSettings 의 내장 기본값을 쓴다(레벨 값 대신
 	// 내장 기본을 적용해야 "앱이 시작되면 파일 값을 사용" 요구가 일관되게 지켜진다).
-	if (ALightControlManager* LightMgr = ALightControlManager::GetOrSpawn(GetWorld()))
-	{
-		FLightSettings Settings;
-		const bool bFromFile = ULightControlLibrary::LoadDefaultSettings(Settings);
-		LightMgr->ApplySettings(Settings);
-		UE_LOG(LogTemp, Log, TEXT("[Light] 시작 조명 적용 — %s (노출 %.2f, 태양 %.1f lux, 고도 %.1f°)"),
-			bFromFile ? TEXT("저장된 기본값 파일") : TEXT("내장 기본값"),
-			Settings.ExposureEV100, Settings.SunIntensity, Settings.SunAltitudeDeg);
-	}
+	//
+	// 여기서 곧바로 적용하면 안 된다 — UltraDynamicSky 같은 하늘 BP 는 자기 BeginPlay 에서 태양을
+	// 자기 값으로 세팅하므로, 우리 값이 그 뒤에 덮인다(로그에는 적용됐다고 남는데 화면은 안 바뀐다.
+	// 실측: 태양 150 lux 를 적용한 직후 월드 값이 5 lux 로 돌아갔다). 덮어쓰기는 초기 1회뿐이라
+	// 짧은 지연 뒤 적용하면 우리 값이 남는다(적용 후 40초 유지 확인).
+	GetWorldTimerManager().SetTimer(StartupLightTimer, this,
+		&APark3DGameMode::ApplyStartupLighting, 0.5f, false);
 
 	// UI 조작이 가능하도록 마우스 커서 표시 + 게임/UI 혼합 입력 모드.
 	PC->bShowMouseCursor = true;
@@ -274,6 +285,22 @@ void APark3DGameMode::ReplayParkingSim()
 			UE_LOG(LogTemp, Warning, TEXT("[Sim] 리플레이 실패: %s"), *Err);
 		}
 	}
+}
+
+void APark3DGameMode::ApplyStartupLighting()
+{
+	ALightControlManager* LightMgr = ALightControlManager::GetOrSpawn(GetWorld());
+	if (!LightMgr)
+	{
+		return;
+	}
+
+	FLightSettings Settings;
+	const bool bFromFile = ULightControlLibrary::LoadDefaultSettings(Settings);
+	LightMgr->ApplySettings(Settings);
+	UE_LOG(LogTemp, Log, TEXT("[Light] 시작 조명 적용 — %s (노출 %.2f, 태양 %.1f lux, 고도 %.1f°)"),
+		bFromFile ? TEXT("저장된 기본값 파일") : TEXT("내장 기본값"),
+		Settings.ExposureEV100, Settings.SunIntensity, Settings.SunAltitudeDeg);
 }
 
 void APark3DGameMode::ApplyStartupConfig()

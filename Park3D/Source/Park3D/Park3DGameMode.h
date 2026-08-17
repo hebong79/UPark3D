@@ -143,6 +143,15 @@ private:
 	 */
 	void ApplyStartupConfig();
 
+	/**
+	 * 저장된 기본 조명 설정을 레벨에 적용한다. BeginPlay 에서 바로 부르지 않고 타이머로 미룬다 —
+	 * 하늘 BP(UltraDynamicSky)가 자기 BeginPlay 에서 태양을 자기 값으로 세팅해 우리 값을 덮기 때문.
+	 */
+	void ApplyStartupLighting();
+
+	/** 시작 조명 지연 적용 타이머. */
+	FTimerHandle StartupLightTimer;
+
 	/** 생성된 메뉴 위젯 인스턴스(중복 생성 방지/참조 보관용). */
 	UPROPERTY(Transient)
 	TObjectPtr<UUserWidget> MenuWidget = nullptr;

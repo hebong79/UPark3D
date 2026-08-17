@@ -14,6 +14,8 @@ class ADirectionalLight;
 class ASkyLight;
 class APostProcessVolume;
 class ASkyAtmosphere;
+class UDirectionalLightComponent;
+class USkyLightComponent;
 
 UCLASS()
 class PARK3D_API ALightControlManager : public AActor
@@ -39,8 +41,14 @@ public:
 	const FLightSettings& GetLastApplied() const { return LastApplied; }
 
 private:
-	ADirectionalLight* FindSun() const;
-	ASkyLight* FindSky() const;
+	/**
+	 * 태양·하늘빛은 액터가 아니라 컴포넌트로 찾는다. 조명을 ADirectionalLight/ASkyLight 액터로만
+	 * 찾으면 UltraDynamicSky 처럼 BP 액터가 조명 컴포넌트를 품은 레벨에서 "조명 없음"으로 오판해
+	 * 두 번째 태양을 스폰하고, 그 결과 이중 조명이 된다.
+	 * ADirectionalLight 의 경우 조명 컴포넌트가 곧 루트라 회전을 걸면 액터 회전도 함께 움직인다.
+	 */
+	UDirectionalLightComponent* FindSun() const;
+	USkyLightComponent* FindSky() const;
 	/** 화면 전체에 걸리는 unbound 볼륨을 우선 고른다(노출은 전역이어야 한다). */
 	APostProcessVolume* FindExposureVolume() const;
 

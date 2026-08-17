@@ -8,6 +8,7 @@
         "hfov_wide": 56.5,
         "max_zoom": 36.0
     },
-    "cam_port_min": 13611,
-    "cam_port_max": 13650
+    "cam_port_min": 13601,
+    "cam_port_max": 13610,
+    "map_floor": false
 }

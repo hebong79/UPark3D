@@ -52,6 +52,14 @@ struct FPark3DAppConfig
 	FString LightFile;
 
 	/**
+	 * 시작할 때 숨길 레벨 액터 이름 목록(JSON `hide_actors`). 이름은 `env.list` 가 주는 `name` 이다.
+	 * 레벨의 나무·간판처럼 카메라 시야를 가리는 물체를 레벨 에셋을 고치지 않고 치우기 위한 것 —
+	 * `env.hide` 와 같은 처리를 기동 시 한 번 적용한다(숨김은 런타임 상태라 실행마다 다시 걸어야 한다).
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = "Config")
+	TArray<FString> HideActors;
+
+	/**
 	 * PTZ 카메라 줌 상한(배율). 0 이하 = 미지정(액터 기본값 유지).
 	 * 최상위 max_zoom 과 camera.max_zoom 이 모두 여기로 들어오며, 둘 다 있으면 camera 쪽이 이긴다(설계 §3.2).
 	 */

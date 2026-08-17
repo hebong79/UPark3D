@@ -90,6 +90,22 @@ bool UPark3DAppConfigLibrary::FromJson(const FString& Json, FPark3DAppConfig& Ou
 	if (Root->TryGetStringField(TEXT("level"), Str))          { Parsed.Level = Str.TrimStartAndEnd(); }
 	if (Root->TryGetStringField(TEXT("light_file"), Str))     { Parsed.LightFile = Str.TrimStartAndEnd(); }
 
+	// 숨길 액터 목록. 문자열 배열만 받고, 빈 문자열은 버린다(오타로 전부를 숨기는 사고가 없게).
+	const TArray<TSharedPtr<FJsonValue>>* HideArr = nullptr;
+	if (Root->TryGetArrayField(TEXT("hide_actors"), HideArr) && HideArr)
+	{
+		Parsed.HideActors.Reset();
+		for (const TSharedPtr<FJsonValue>& V : *HideArr)
+		{
+			FString Name;
+			if (V.IsValid() && V->TryGetString(Name))
+			{
+				Name.TrimStartAndEndInline();
+				if (!Name.IsEmpty()) { Parsed.HideActors.Add(Name); }
+			}
+		}
+	}
+
 	Out = Parsed;
 	return true;
 }

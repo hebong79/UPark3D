@@ -128,6 +128,9 @@ protected:
 	 */
 	bool TravelToConfigLevel();
 
+	/** config 의 hide_actors 목록을 숨긴다(env.hide 와 같은 공용 로직). 실행마다 한 번 적용한다. */
+	void ApplyConfigHiddenActors();
+
 private:
 	/** 메뉴 위젯을 생성(최초 1회)하고 뷰포트에 표시한다. */
 	void ShowMenu();

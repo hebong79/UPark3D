@@ -48,6 +48,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Menu")
 	TSubclassOf<UUserWidget> LightControlWidgetClass;
 
+	/**
+	 * 차량 랜덤 패널. 비워 두면 코드가 /Game/UI/WBP_RenderPanel 을 찾아 쓴다 —
+	 * 다른 패널들처럼 BP 기본값으로 지정할 수도 있지만, 이 패널은 WBP 를 코드가 만들었으므로
+	 * 지정을 잊어도 동작하도록 폴백을 둔다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Menu")
+	TSubclassOf<UUserWidget> RenderPanelWidgetClass;
+
 	/** 배타적 패널 토글: 다른 패널은 모두 숨기고, 클릭한 패널이 숨겨져 있었으면 표시(재클릭이면 숨김). 항상 최대 1개(인스턴스 캐시). */
 	UFUNCTION(BlueprintCallable, Category = "Menu")
 	void TogglePanel(TSubclassOf<UUserWidget> WidgetClass);
@@ -92,6 +100,7 @@ protected:
 	UFUNCTION() void HandleExit();
 	UFUNCTION() void HandleLight();
 	UFUNCTION() void HandleSimPanel();
+	UFUNCTION() void HandleRenderPanel();
 
 private:
 	UUserWidget* GetOrCreatePanel(TSubclassOf<UUserWidget> WidgetClass);
@@ -110,6 +119,9 @@ private:
 	/** "주차 시뮬레이션" 버튼 삽입(HUD 열고 닫기). */
 	void InjectSimButton();
 
+	/** "차량 랜덤" 버튼 삽입(WBP_RenderPanel 토글). */
+	void InjectRenderButton();
+
 	/** 런타임에 만든 조명 버튼(WBP 바인딩이 아니다). */
 	UPROPERTY(Transient)
 	TObjectPtr<UButton> Btn_Light = nullptr;
@@ -117,6 +129,10 @@ private:
 	/** 런타임에 만든 주차 시뮬레이션 버튼(WBP 바인딩이 아니다). */
 	UPROPERTY(Transient)
 	TObjectPtr<UButton> Btn_Sim = nullptr;
+
+	/** 런타임에 만든 차량 랜덤 버튼(WBP 바인딩이 아니다). */
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> Btn_Render = nullptr;
 
 	// 메뉴 드래그 상태.
 	bool bDraggingMenu = false;

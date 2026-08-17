@@ -21,6 +21,7 @@ void UMainMenuWidget::NativeOnInitialized()
 	// 순서(Exit 앞)가 실제 화면에 반영된다. NativeConstruct 에서 하면 버튼이 Exit 아래로 붙는다.
 	InjectLightButton();
 	InjectSimButton();
+	InjectRenderButton();
 }
 
 void UMainMenuWidget::NativeConstruct()
@@ -166,6 +167,36 @@ void UMainMenuWidget::HandleLight()
 	// WBP 없이 C++ 로 구성되는 패널이라, BP 기본값이 없으면 C++ 클래스를 직접 쓴다.
 	TogglePanel(LightControlWidgetClass ? LightControlWidgetClass
 										: TSubclassOf<UUserWidget>(ULightControlWidget::StaticClass()));
+}
+
+void UMainMenuWidget::InjectRenderButton()
+{
+	if (Btn_Render)
+	{
+		return;
+	}
+	Btn_Render = InsertMenuButtonBeforeExit(TEXT("Btn_Render"), FText::FromString(TEXT("차량 랜덤")));
+	if (Btn_Render)
+	{
+		Btn_Render->OnClicked.AddUniqueDynamic(this, &UMainMenuWidget::HandleRenderPanel);
+	}
+}
+
+void UMainMenuWidget::HandleRenderPanel()
+{
+	TSubclassOf<UUserWidget> Cls = RenderPanelWidgetClass;
+	if (!Cls)
+	{
+		// BP 기본값이 비어 있으면 자산을 직접 찾는다. 조명 패널처럼 C++ 클래스로 폴백하지 않는 이유는
+		// 이 패널은 위젯 트리가 WBP 에 있어 C++ 클래스만으로는 화면이 비기 때문이다.
+		Cls = LoadClass<UUserWidget>(nullptr, TEXT("/Game/UI/WBP_RenderPanel.WBP_RenderPanel_C"));
+	}
+	if (!Cls)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[MainMenu] WBP_RenderPanel 을 찾지 못해 차량 랜덤 패널을 열지 못했습니다."));
+		return;
+	}
+	TogglePanel(Cls);
 }
 
 UUserWidget* UMainMenuWidget::GetOrCreatePanel(TSubclassOf<UUserWidget> WidgetClass)

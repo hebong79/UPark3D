@@ -1,0 +1,19 @@
+{
+  "_설명": [
+    "이 브리지가 부를 수 있는 Park3D 인스턴스 목록. 여기만 고치면 되고 소스는 건드리지 않는다.",
+    "각 인스턴스의 rpcUrl 포트는 그 인스턴스의 Save/Config/config_pmaker.json 의 rpc_port 와 같아야 한다.",
+    "호출할 때 park3d_rpc(sim: \"sim2\", ...) 처럼 이름으로 고른다. 생략하면 default 를 쓴다.",
+    "지금 어느 것이 떠 있는지는 park3d_instances 로 확인한다."
+  ],
+  "default": "sim1",
+  "instances": {
+    "sim1": {
+      "rpcUrl": "http://localhost:13510",
+      "note": "정본. 메인 뷰 :13600, 카메라 :13611+"
+    },
+    "sim2": {
+      "rpcUrl": "http://localhost:13520",
+      "note": "같은 PC 에서 두 번째로 띄우는 시뮬레이터. 메인 뷰 :13700, 카메라 :13711+ 로 갈라 쓴다"
+    }
+  }
+}

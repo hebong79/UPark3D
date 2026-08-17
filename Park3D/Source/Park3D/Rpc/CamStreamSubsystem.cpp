@@ -45,7 +45,18 @@ void UCamStreamSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	// 포트 대역: config_pmaker.json 의 cam_port_min/max 가 ini 값보다 우선한다(rpc_port 와 같은 규약).
 	// camId 1 이 min 을 받아야 하므로 BasePort = min-1 로 환산한다.
 	FPark3DAppConfig AppConfig;
-	if (UPark3DAppConfigLibrary::Load(AppConfig) && AppConfig.HasValidCamPortRange())
+	const bool bHasConfig = UPark3DAppConfigLibrary::Load(AppConfig);
+
+	// 메인 뷰 포트도 config 로 덮을 수 있다 — 한 PC 에서 두 대를 띄울 때 두 번째 인스턴스가
+	// 이 포트를 비켜 가야 하는데, ini 는 패키지에 쿠킹돼 인스턴스별로 바꿀 수 없기 때문이다.
+	if (bHasConfig && AppConfig.MainPort > 0)
+	{
+		UE_LOG(LogCamStreamSub, Log, TEXT("[CamStream] 메인 뷰 포트 %d → %d (출처: config_pmaker.json main_port)"),
+			MainPort, AppConfig.MainPort);
+		MainPort = AppConfig.MainPort;
+	}
+
+	if (bHasConfig && AppConfig.HasValidCamPortRange())
 	{
 		int32 NewBase = 0, NewMax = 0;
 		if (Park3DCamStream::PortRangeToBase(AppConfig.CamPortMin, AppConfig.CamPortMax, NewBase, NewMax))

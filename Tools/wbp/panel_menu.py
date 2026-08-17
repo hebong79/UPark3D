@@ -18,7 +18,7 @@ print("기존 위젯 정리: %d개" % K.clear_tree())
 
 canvas = K.add("Canvas", "RootCanvas")
 border = K.add("Border", "RootBorder", canvas)
-K.setp(border, {"Background": K.DOCK_BG, "Padding": {"Left": 6, "Top": 5, "Right": 6, "Bottom": 5}})
+K.setp(border, {"Background": K.DOCK_BG, "Padding": {"Left": 5, "Top": 4, "Right": 5, "Bottom": 4}})
 
 bar = K.add("HBox", "HBox_Menu", border)
 
@@ -34,7 +34,7 @@ for i, (nm, ico, tip) in enumerate(ITEMS):
     K.icon_button(bar, nm, ico, tip)
     sp = K.slot_of(nm)
     if sp:
-        K.setp(sp, {"Padding": {"Left": 0, "Top": 0, "Right": 3, "Bottom": 0},
+        K.setp(sp, {"Padding": {"Left": 0, "Top": 0, "Right": 2, "Bottom": 0},
                     "VerticalAlignment": "VAlign_Fill"})
 
 # 종료는 어울리는 아이콘이 없어 글자로 둔다(빨간 글씨로 구분).

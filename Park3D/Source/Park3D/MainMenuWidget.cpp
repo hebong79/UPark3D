@@ -168,7 +168,7 @@ void UMainMenuWidget::SetButtonIcon(UButton* Button, const TCHAR* IconAssetPath,
 	Button->ClearChildren();   // WBP 가 넣어 둔 빈 이미지/글자를 치운다
 	UImage* IconImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
 	IconImage->SetBrushFromTexture(Icon, false);
-	IconImage->SetDesiredSizeOverride(FVector2D(22.f, 22.f));
+	IconImage->SetDesiredSizeOverride(FVector2D(DockIconSize, DockIconSize));
 	Button->AddChild(IconImage);
 	Button->SetToolTipText(Tooltip);   // 아이콘만으로는 뜻이 흐리다
 }

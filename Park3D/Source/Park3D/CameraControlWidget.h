@@ -294,6 +294,18 @@ private:
 	void BuildGetPtzButton();
 	/** 방향 패드(▲◀중지▶▼) + 줌(＋/－) + step 필드를 VBox_Root 끝에 만든다(WBP 자산 변경 없이). */
 	void BuildPtzPad();
+	/**
+	 * 하단 동작 버튼(저장·열기·초기화·피킹·폴대·거리측정·PTZ 가져오기)을 PTZ 패드 오른쪽 빈 칸으로 옮긴다.
+	 * 세로로 쌓여 있던 줄이 패드 옆으로 가면서 패널 높이가 줄고 스크롤이 사라진다.
+	 * 버튼 자체는 그대로 옮기기만 하므로(부모만 바뀜) 바인딩·핸들러·라벨 갱신 경로는 손대지 않는다.
+	 */
+	void RelocateActionButtons();
+	/** VBox_Root 의 직계 자식 중 InChild 를 품은 것을 돌려준다(줄 단위 이동/구분선 삽입용). */
+	UWidget* FindRootRow(UWidget* InChild) const;
+	/** 그룹 사이에 넣을 1px 가로선. */
+	UWidget* MakeGroupDivider();
+	/** 카메라/프리셋/컨트롤/PTZ 묶음 사이에 구분선을 넣는다. */
+	void InsertGroupDividers();
 	/** 누르는 동안 이동을 시작한다(이미 다른 방향이면 교체). */
 	void BeginPtzMove(EPtzMove Move);
 	/**
@@ -406,6 +418,15 @@ private:
 	 */
 	TWeakObjectPtr<UEditableTextBox> Field_PtzStep;      // Pan/Tilt
 	TWeakObjectPtr<UEditableTextBox> Field_PtzStepZoom;  // Zoom
+	/** PTZ 패드 오른쪽 칸 — 하단 동작 버튼들이 이리로 옮겨진다(RelocateActionButtons). */
+	TWeakObjectPtr<UVerticalBox> PtzSideColumn;
+	/**
+	 * 옆 칸 최소 폭(px). 카드 폭은 디자이너 값 그대로 두므로(지시) 이 값은 카드 폭에서
+	 * PTZ 패드가 쓰고 남는 만큼이어야 한다 — 넘기면 버튼이 카드 밖으로 나가 글자만 뜬다.
+	 */
+	static constexpr float SideColumnMinWidth = 120.f;
+	bool bActionButtonsRelocated = false;
+	bool bGroupDividersInserted = false;
 	TWeakObjectPtr<UButton> PtzButtons[PtzMoveCount]; // 인덱스 = (int32)EPtzMove - 1
 	EPtzMove ActivePtzMove = EPtzMove::None;
 	// 패드 상단 P/T/Z 현재값 표시.

@@ -83,8 +83,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Viewer")
 	float FrameThickness = 2.f;
 
+	/**
+	 * 화면 중앙 십자 조준선. **UPROPERTY 로 두지 않는다** — 이미 쿠킹된 WBP 의 C++ 베이스에
+	 * UPROPERTY 를 추가하면 패키지가 Bad export index 로 즉사하고 콘텐츠 재쿠킹이 필요해진다
+	 * (CLAUDE.md 2026-08-12, 이 파일의 PTZ 패드 참조가 약참조인 것과 같은 이유).
+	 * 값을 바꿀 일이 생기면 여기 상수를 고친다.
+	 */
+	static constexpr float CrossThickness = 1.5f;
+	/** 길이는 뷰가 작아지면 짧은 변의 40% 로 함께 줄어든다(작은 뷰를 다 덮지 않도록). */
+	static constexpr float CrossLength = 34.f;
+
 protected:
 	virtual void NativeConstruct() override;
+
 	/** 컨트롤 패널이 닫혀 있어도 선택 카메라(RPC cam.select 등)를 따라가도록 선택 렌더타겟을 폴링한다. */
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;

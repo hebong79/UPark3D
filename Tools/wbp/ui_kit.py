@@ -383,7 +383,7 @@ def slider_style(bar=None, thumb=None):
 TAB_ICON = "/Game/Widgets/Icons/TabIcons/%s.%s"
 
 
-def icon_button(parent, name, icon_asset, tooltip, size=22):
+def icon_button(parent, name, icon_asset, tooltip, size=18):
     """아이콘만 있는 독 버튼. 이전 UI 의 하단 바가 이 형태다.
 
     이모지 문자는 쓸 수 없다 — UE 기본 폰트에 그 글리프가 없어 빈 사각형이 된다.

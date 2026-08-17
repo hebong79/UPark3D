@@ -115,6 +115,9 @@ private:
 	 */
 	void ApplyDockIcons();
 
+	/** 독 아이콘 한 변(px). 화면을 덜 가리도록 22 에서 80% 로 줄였다. */
+	static constexpr float DockIconSize = 18.f;
+
 	/** 버튼의 자식을 아이콘 이미지 하나로 교체한다. */
 	void SetButtonIcon(UButton* Button, const TCHAR* IconAssetPath, const FText& Tooltip);
 

@@ -8,6 +8,7 @@
 #include "Modules/RandomRpcModule.h"
 #include "../CarPlacementManager.h"
 #include "../Config/Park3DAppConfig.h"
+#include "CamStreamSubsystem.h"   // system.health 의 포트 지도(메인 뷰·카메라 대역)를 여기서 읽는다.
 
 #include "HttpServerModule.h"
 #include "IHttpRouter.h"
@@ -249,13 +250,32 @@ void URpcServerSubsystem::RegisterSystemMethods()
 		return MakeShared<FJsonValueObject>(P.IsValid() ? P : MakeShared<FJsonObject>());
 	});
 
-	// system.health — {ok:true, port}.
+	// system.health — {ok:true, port, ports:{...}}.
+	//
+	// ports 는 이 인스턴스가 여는 포트 전부다. 클라이언트가 영상 포트를 추측하지 않게 하기 위한 것이다 —
+	// 한 PC 에 시뮬레이터를 두 대 띄우면 대역이 갈라지는데(13611+ / 13711+), "13600 + camId" 같은
+	// 추측이 박혀 있으면 다른 카메라를 보게 된다. 제어 URL 하나만 알면 나머지는 여기서 얻는다.
 	const int32 CapturedPort = Port;
 	Dispatcher->RegisterPersistent(TEXT("system.health"), [CapturedPort](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetBoolField(TEXT("ok"), true);
 		O->SetNumberField(TEXT("port"), CapturedPort);
+
+		TSharedPtr<FJsonObject> Ports = MakeShared<FJsonObject>();
+		Ports->SetNumberField(TEXT("rpc"), CapturedPort);
+		// 스트림 포트는 스트림 서브시스템이 권위다(config 로 바뀔 수 있다). 서브시스템이 없으면 그 필드는 뺀다.
+		if (const UWorld* World = GEngine ? GEngine->GetCurrentPlayWorld() : nullptr)
+		{
+			if (const UCamStreamSubsystem* Stream = World->GetSubsystem<UCamStreamSubsystem>())
+			{
+				Ports->SetNumberField(TEXT("mainView"), Stream->GetMainPort());
+				Ports->SetNumberField(TEXT("camMin"), Stream->GetCamPortMin());
+				Ports->SetNumberField(TEXT("camMax"), Stream->GetCamPortMax());
+				Ports->SetStringField(TEXT("camFormula"), TEXT("camMin + (camId - 1)"));
+			}
+		}
+		O->SetObjectField(TEXT("ports"), Ports);
 		return MakeShared<FJsonValueObject>(O);
 	});
 

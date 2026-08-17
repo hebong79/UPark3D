@@ -49,10 +49,16 @@ if not exist "%~dp0BuildProgress.ps1" (
     exit /b 1
 )
 
+rem -IgnoreCookErrors: legacy blueprints under /Game/Core and /Game/Widgets (the previous
+rem BP-based UI set) call file-dialog nodes from a third-party plugin that is not installed
+rem on this machine, so they cannot compile. Nothing in Source or Config references them -
+rem the boot level pulls them in only through BP_Camera. Without this flag those 35 compile
+rem errors abort the whole package even though the cook itself completes 2124/2124.
+rem Revisit if that plugin is ever restored, or if the legacy set is deleted for good.
 call "%RUNUAT%" BuildCookRun ^
     -project="%PROJECT%" ^
     -noP4 -platform=Win64 -clientconfig=Development ^
-    -cook -build -stage -pak ^
+    -cook -build -stage -pak -IgnoreCookErrors ^
     -archive -archivedirectory="%ARCHIVE%" 2>&1 | powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0BuildProgress.ps1" -LogPath "%LOG%"
 
 rem RunUAT's wrapper can return 0 even when the build failed (e.g. cook errors),

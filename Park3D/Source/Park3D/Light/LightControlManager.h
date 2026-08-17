@@ -49,6 +49,15 @@ private:
 	 */
 	UDirectionalLightComponent* FindSun() const;
 	USkyLightComponent* FindSky() const;
+
+	/**
+	 * 레벨이 자체 하늘 시스템(UltraDynamicSky 등)을 갖고 있는가.
+	 * 그런 시스템은 태양·달·하늘·구름·하늘빛·노출을 한 액터가 통합 관리하며 자기 시간대로 계속
+	 * 갱신하므로, 개별 라이트를 바깥에서 조작하면 서로 덮어써 화면이 의도대로 서지 않는다.
+	 * 판정: 태양이 ADirectionalLight 액터가 아니라 BP 액터가 품은 컴포넌트로 존재하는가
+	 * (우리가 스폰하는 태양은 항상 ADirectionalLight 이므로 그것과 구분된다).
+	 */
+	bool HasExternalSkySystem() const;
 	/** 화면 전체에 걸리는 unbound 볼륨을 우선 고른다(노출은 전역이어야 한다). */
 	APostProcessVolume* FindExposureVolume() const;
 

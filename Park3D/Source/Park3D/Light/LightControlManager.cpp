@@ -41,23 +41,34 @@ UDirectionalLightComponent* ALightControlManager::FindSun() const
 	{
 		return nullptr;
 	}
-	// ADirectionalLight 액터를 먼저 본다(가장 흔한 형태이자 기존 동작).
-	for (TActorIterator<ADirectionalLight> It(World); It; ++It)
-	{
-		if (UDirectionalLightComponent* C = Cast<UDirectionalLightComponent>(It->GetLightComponent()))
-		{
-			return C;
-		}
-	}
-	// 없으면 BP 액터가 품은 것까지 훑는다(UltraDynamicSky 등).
+	// 1순위: 대기(SkyAtmosphere)의 태양으로 지정된 라이트.
+	// 이름이나 발견 순서로 고르면 안 된다 — UltraDynamicSky 는 한 액터 안에 Sun 과 Moon 을
+	// 모두 두고 컴포넌트 배열에서 Moon 이 앞선다. 실제로 "처음 찾은 것"을 쓰던 구현이
+	// 패키지에서 달을 집어, light.get 은 우리 값을 돌려주는데 화면은 야간인 상태가 됐다.
+	// bAtmosphereSunLight 는 하늘을 실제로 밝히는 라이트만 참이라 달·번개광과 구분된다.
+	UDirectionalLightComponent* Fallback = nullptr;
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
-		if (UDirectionalLightComponent* C = It->FindComponentByClass<UDirectionalLightComponent>())
+		TArray<UDirectionalLightComponent*> Comps;
+		It->GetComponents<UDirectionalLightComponent>(Comps);
+		for (UDirectionalLightComponent* C : Comps)
 		{
-			return C;
+			if (!C || !C->IsVisible() || !C->bAffectsWorld)
+			{
+				continue;   // 꺼져 있는 보조광(예: UDW 의 Lightning Light)
+			}
+			if (C->IsUsedAsAtmosphereSunLight())
+			{
+				return C;
+			}
+			if (!Fallback)
+			{
+				Fallback = C;
+			}
 		}
 	}
-	return nullptr;
+	// 2순위: 대기 태양 지정이 없는 레벨(빈 부트 맵에 우리가 스폰한 태양 포함).
+	return Fallback;
 }
 
 USkyLightComponent* ALightControlManager::FindSky() const
@@ -67,21 +78,30 @@ USkyLightComponent* ALightControlManager::FindSky() const
 	{
 		return nullptr;
 	}
-	for (TActorIterator<ASkyLight> It(World); It; ++It)
-	{
-		if (USkyLightComponent* C = It->GetLightComponent())
-		{
-			return C;
-		}
-	}
+	// 태양과 같은 이유로 "처음 찾은 것"을 쓰지 않는다 — UltraDynamicSky 는 하늘빛을 둘
+	// (Captured Scene / Cubemap) 두고 상황에 따라 한쪽만 켠다. 꺼진 쪽을 잡으면 설정이 화면에 없다.
+	USkyLightComponent* Fallback = nullptr;
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
-		if (USkyLightComponent* C = It->FindComponentByClass<USkyLightComponent>())
+		TArray<USkyLightComponent*> Comps;
+		It->GetComponents<USkyLightComponent>(Comps);
+		for (USkyLightComponent* C : Comps)
 		{
-			return C;
+			if (!C)
+			{
+				continue;
+			}
+			if (C->IsVisible() && C->bAffectsWorld)
+			{
+				return C;
+			}
+			if (!Fallback)
+			{
+				Fallback = C;
+			}
 		}
 	}
-	return nullptr;
+	return Fallback;
 }
 
 APostProcessVolume* ALightControlManager::FindExposureVolume() const
@@ -112,10 +132,23 @@ APostProcessVolume* ALightControlManager::FindExposureVolume() const
 	return Fallback;
 }
 
+bool ALightControlManager::HasExternalSkySystem() const
+{
+	const UDirectionalLightComponent* Sun = FindSun();
+	return Sun && Sun->GetOwner() && !Sun->GetOwner()->IsA(ADirectionalLight::StaticClass());
+}
+
 void ALightControlManager::EnsureLightingActors()
 {
 	UWorld* World = GetWorld();
 	if (!World)
+	{
+		return;
+	}
+
+	// 통합 하늘 시스템이 있으면 아무것도 만들지 않는다. 특히 노출 볼륨을 추가하면 그 시스템의
+	// 자체 포스트프로세스를 덮어 화면이 어두워진다(unbound 볼륨이 전역으로 걸리기 때문).
+	if (HasExternalSkySystem())
 	{
 		return;
 	}
@@ -184,6 +217,18 @@ void ALightControlManager::ApplySettings(const FLightSettings& Settings)
 
 	FLightSettings S = Settings;
 	ULightControlLibrary::ClampSettings(S);
+
+	// 통합 하늘 시스템이 있는 레벨에서는 적용하지 않는다 — 그 시스템이 자기 시간대로 태양·하늘·
+	// 노출을 계속 갱신하므로, 여기서 값을 넣어도 화면은 그쪽을 따른다(넣은 값만 되읽히고 그림은
+	// 안 바뀌어, 적용된 것처럼 보이는 상태가 된다). 밝기는 그 시스템의 시간대로 맞춘다.
+	if (HasExternalSkySystem())
+	{
+		UE_LOG(LogTemp, Log,
+			TEXT("[Light] 레벨이 자체 하늘 시스템을 갖고 있어 조명 설정을 적용하지 않습니다 "
+			     "(밝기는 그 시스템의 시간대 설정으로 조절하세요)."));
+		LastApplied = S;
+		return;
+	}
 
 	if (UDirectionalLightComponent* Sun = FindSun())
 	{

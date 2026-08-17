@@ -216,6 +216,49 @@ FString ACarActor::MakePlateDisplayText(const FString& CanonicalNumber)
 		: CanonicalNumber;
 }
 
+void ACarActor::AlignPlateAndText(UStaticMeshComponent* Plate, UTextRenderComponent* Text, bool bFront)
+{
+	if (!Plate || !Text || !Plate->GetStaticMesh())
+	{
+		return;
+	}
+
+	// 메시 바운즈에서 축을 읽는다: 가장 얇은 축 = 판의 면 법선, 가장 긴 축 = 글자가 흐르는 방향.
+	// 원점(BoundsOrigin)도 함께 쓴다 — 메시가 원점 기준으로 치우쳐 있으면 두께만으로 띄운 글자가 판 속에 박힌다.
+	const FVector BoundsOrigin = Plate->GetStaticMesh()->GetBounds().Origin;
+	const FVector Ext = Plate->GetStaticMesh()->GetBounds().BoxExtent;
+	const int32 ThinAxis = (Ext.X <= Ext.Y && Ext.X <= Ext.Z) ? 0 : ((Ext.Y <= Ext.Z) ? 1 : 2);
+	const int32 WideAxis = (Ext.X >= Ext.Y && Ext.X >= Ext.Z) ? 0 : ((Ext.Y >= Ext.Z) ? 1 : 2);
+	const double ThinExtent = Ext[ThinAxis];
+
+	// 판을 돌려 얇은 축을 차량 바깥(전면 -Y / 후면 +Y)으로, 긴 축을 차량 좌우(X)로 보낸다.
+	const FVector Outward = bFront ? FVector(0.f, -1.f, 0.f) : FVector(0.f, 1.f, 0.f);
+	FVector Axes[3] = { FVector::XAxisVector, FVector::YAxisVector, FVector::ZAxisVector };
+	FVector MeshNormal = Axes[ThinAxis];
+	FVector MeshWide = Axes[WideAxis];
+	// 메시 축 → 원하는 축으로 보내는 회전(축이 축에 대응하므로 XZ 두 축만 지정하면 결정된다).
+	const FMatrix Basis = FRotationMatrix::MakeFromXZ(Outward, FVector::ZAxisVector)
+		* FRotationMatrix::MakeFromXZ(MeshNormal, MeshWide ^ MeshNormal).Inverse();
+	Plate->SetRelativeRotation(Basis.Rotator());
+
+	// 글자는 판의 자식이다. 판 로컬 기준으로 면 바로 바깥에 두고, TextRender 의 기준축(법선 +X)을
+	// 판의 법선에 맞춘다. 글자가 흐르는 방향(-Y)은 판의 긴 축과 나란해진다.
+	// 어느 쪽이 "바깥"인가는 메시가 정한다(SM_Plate_F/B 는 보이는 면이 local -Y 쪽이다).
+	// 판이 차체에 붙는 방향에서 역산한다: 판을 차량 바깥으로 향하게 돌려 놓았으므로,
+	// 차량 바깥 방향(전면 -Y / 후면 +Y)을 판 로컬로 되돌리면 그것이 글자를 놓을 쪽이다.
+	const FVector OutwardLocal = Plate->GetRelativeRotation().UnrotateVector(Outward).GetSafeNormal();
+	const FVector TextLocal = BoundsOrigin + OutwardLocal * (ThinExtent + PlateTextSurfaceGap) + MeshWide * PlateTextSideShift;
+	Text->SetRelativeLocation(TextLocal);
+	Text->SetRelativeRotation(FRotationMatrix::MakeFromXZ(OutwardLocal, MeshWide ^ OutwardLocal).Rotator());
+
+	// 판·글자가 어디에 어떤 자세로 놓였는지 한 줄로 남긴다. "로그에는 vis=1 인데 화면에 없다"를
+	// 다시 만나면 이 값(법선·간격·월드 위치)이 원인을 바로 가리킨다.
+	UE_LOG(LogTemp, Display,
+		TEXT("[CarPlate] %s 정렬: 메시축(얇=%d 넓=%d) 두께=%.2f 원점=%s → 글자 local=%s world=%s"),
+		bFront ? TEXT("Front") : TEXT("Back"), ThinAxis, WideAxis, ThinExtent,
+		*BoundsOrigin.ToString(), *TextLocal.ToString(), *Text->GetComponentLocation().ToString());
+}
+
 void ACarActor::UpdatePlatePresentation()
 {
 	const bool bHasVehicleMesh = MeshComp && MeshComp->GetStaticMesh();
@@ -250,9 +293,13 @@ void ACarActor::UpdatePlatePresentation()
 	const float MountZ = Origin.Z - Extent.Z * 0.4f;
 	const float MountY = Extent.Y + 1.f;
 	FrontPlateComp->SetRelativeLocation(FVector(Origin.X, Origin.Y - MountY, MountZ));
-	FrontPlateComp->SetRelativeRotation(FRotator(0.f, 180.f, 0.f)); // local +Y 표면 -> 차량 전면 world -Y.
 	BackPlateComp->SetRelativeLocation(FVector(Origin.X, Origin.Y + MountY, MountZ));
-	BackPlateComp->SetRelativeRotation(FRotator::ZeroRotator); // local +Y 표면 -> 차량 후면 world +Y.
+
+	// 판의 회전과 글자 위치는 **메시의 실제 축**에서 구한다. 예전 에셋은 면 법선이 local +Y 였고 그 값이
+	// 코드에 박혀 있었는데, 2026-08-16 콘텐츠 교체로 들어온 SM_Plate_F/B 는 얇은 축이 local X 다.
+	// 그래서 글자가 판과 나란히(모서리 방향으로) 서서 화면에서 사라졌다 — 로그에는 vis=1 로 남는다.
+	AlignPlateAndText(FrontPlateComp, FrontPlateText, /*bFront=*/true);
+	AlignPlateAndText(BackPlateComp, BackPlateText, /*bFront=*/false);
 
 	// PIE 실측 근거: component 생성/가시성만이 아니라 실제 transform/bounds/font/material을 남긴다.
 	auto LogPlateState = [this](const TCHAR* Side, const UStaticMeshComponent* Plate, const UTextRenderComponent* Text)

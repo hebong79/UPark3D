@@ -13,6 +13,8 @@
 #include "Components/ComboBoxString.h"
 #include "Components/EditableTextBox.h"
 #include "Components/Slider.h"
+#include "Park3DPanelStyle.h"
+#include "Styling/CoreStyle.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Components/Border.h"
@@ -66,7 +68,7 @@ namespace
 	static constexpr float GSliderThumbDiameter = 28.f;
 
 	// PTZ 패드 조작부(방향·줌 버튼, step 입력) 확대 배율. 크기와 글자 크기에 함께 곱한다.
-	static constexpr float GPtzPadScale = 1.5f;
+	static constexpr float GPtzPadScale = 1.0f;
 	static int32 ScaledFont(int32 Size) { return FMath::RoundToInt(Size * GPtzPadScale); }
 
 	// 에디트박스 표시는 소수 3자리로 고정한다. 필드 텍스트가 값의 원본(GetControlXxx 이 Atof 로 되읽음)이므로
@@ -75,9 +77,16 @@ namespace
 }
 
 // ===== 초기화 =====
+
+
 void UCameraControlWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+
+	// 어두운 패널 위에서 슬라이더·체크박스가 보이도록 스타일을 입힌다.
+	// WBP 쪽에서 칠하면 값만 들어가고 화면에는 반영되지 않는다.
+	Park3DPanelStyle::ApplyToTree(WidgetTree);
+
 	bDistanceAutoOpenAttemptedThisViewportSession = false;
 
 	// 1) Controls 배열 구성 — BindWidget 위젯을 종류별 묶음으로 매핑.
@@ -242,6 +251,8 @@ void UCameraControlWidget::NativeConstruct()
 	BuildGetPtzButton();
 	CollapsePtzSliderGroups(); // 패드가 들어갈 자리를 먼저 비운다(인덱스도 여기서 정해진다).
 	BuildPtzPad();
+	RelocateActionButtons(); // 패드가 있어야 옆 칸이 존재한다.
+	InsertGroupDividers();   // 줄이 다 자리 잡은 뒤에 넣어야 인덱스가 맞는다.
 	ApplySliderThumbStyle();
 	// 창은 여기서 뷰포트에 넣어 두되 접어 둔다(늦게 넣으면 크기가 잡히지 않는다 — EnsureDistanceDialog 주석).
 	// 시작 시에는 접힌 상태 그대로이고, 사용자가 열어 둔 채 패널만 닫았다 다시 연 경우에만 펼친다.
@@ -505,6 +516,10 @@ void UCameraControlWidget::ApplyControlToCamera(ECamCtrl Kind)
 		UnrealM.z = GetControlCur(ECamCtrl::Height);
 		const FVector UE = UCameraControlLibrary::UnrealMetersToWorld(UnrealM, MetersToUU);
 		Cam->SetCameraWorldLocation(UE.X, UE.Y, UE.Z); // (X_ue, Y_ue, HeightZ_ue)
+
+		// 위치는 카메라 한 대의 속성이다 — 이 카메라의 모든 프리셋에 같은 자리를 써 넣는다.
+		// 여기서 한 번에 처리하면 슬라이더·입력칸·프리셋 수정 어느 경로로 바뀌어도 어긋나지 않는다.
+		SyncCameraPosAcrossPresets(/*bFromControls=*/true);
 		break;
 	}
 	case ECamCtrl::Pan:
@@ -579,6 +594,9 @@ void UCameraControlWidget::HandleCameraChanged(FString /*Item*/, ESelectInfo::Ty
 	if (CP.datas.IsValidIndex(0))
 	{
 		CurPresetIndex = 0;
+		// 예전에 저장된 파일은 프리셋마다 위치가 다를 수 있다 — 첫 프리셋 기준으로 맞춘 뒤 채운다.
+		// 그래야 프리셋을 넘겨도 카메라가 제자리에 선다.
+		SyncCameraPosAcrossPresets(/*bFromControls=*/false);
 		FillControlsFromDir(CP.datas[0]);
 	}
 	else
@@ -797,6 +815,39 @@ void UCameraControlWidget::FillControlsFromDir(const FCamDir& Dir)
 	ApplyAllControlsToCamera();
 }
 
+void UCameraControlWidget::SyncCameraPosAcrossPresets(bool bFromControls)
+{
+	if (!CamData.datas.IsValidIndex(CurCamIndex))
+	{
+		return;
+	}
+	FCameraPos& CP = CamData.datas[CurCamIndex];
+	if (CP.datas.Num() == 0)
+	{
+		return;
+	}
+
+	FCamVec3 Pos;
+	if (bFromControls)
+	{
+		// 저장 순서는 CollectDirFromControls 와 같아야 한다(x=X, y=Z, z=높이).
+		Pos.x = GetControlCur(ECamCtrl::X);
+		Pos.y = GetControlCur(ECamCtrl::Z);
+		Pos.z = GetControlCur(ECamCtrl::Height);
+	}
+	else
+	{
+		// 로드 직후 정합 — 프리셋마다 다른 값이 들어 있을 수 있으므로 현재 프리셋을 기준으로 통일한다.
+		const int32 Base = CP.datas.IsValidIndex(CurPresetIndex) ? CurPresetIndex : 0;
+		Pos = CP.datas[Base].pos;
+	}
+
+	for (FCamDir& D : CP.datas)
+	{
+		D.pos = Pos;
+	}
+}
+
 void UCameraControlWidget::CollectDirFromControls(FCamDir& OutDir)
 {
 	// pos는 Unreal 미터: UI X/높이/Z를 저장 순서 X/Z/Y로 매핑한다. rot=(tilt, pan, 0).
@@ -923,6 +974,21 @@ bool UCameraControlWidget::LoadFromJsonFile(const FString& Path)
 	EnsureCamDataSlots();
 	RebuildCameraCombo();
 	RebuildPresetCombo();
+
+	// 예전 파일은 프리셋마다 위치가 다를 수 있다. 위치는 카메라의 속성이므로 카메라마다
+	// 첫 프리셋 기준으로 통일해 둔다 — 안 그러면 프리셋을 넘길 때 카메라가 움직인다.
+	for (FCameraPos& Cam : CamData.datas)
+	{
+		if (Cam.datas.Num() < 2)
+		{
+			continue;
+		}
+		const FCamVec3 Base = Cam.datas[0].pos;
+		for (FCamDir& D : Cam.datas)
+		{
+			D.pos = Base;
+		}
+	}
 
 	FCameraPos& CP = CurCameraPos();
 	if (CP.datas.IsValidIndex(0))
@@ -1080,7 +1146,7 @@ void UCameraControlWidget::BuildDistanceLauncher()
 	// 측정 본문은 VBox_Root에 넣지 않는다. 이 버튼은 독립 대화상자를 여는 명시적 진입점이다.
 	if (!VBox_Root || Btn_OpenDistance) return;
 	Btn_OpenDistance = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
-	UTextBlock* Label = MakeDynamicButtonLabel(TEXT("거리 측정 열기"));
+	UTextBlock* Label = MakeDynamicButtonLabel(TEXT("거리 측정"));
 	Btn_OpenDistance->SetContent(Label);
 	Btn_OpenDistance->OnClicked.AddUniqueDynamic(this, &UCameraControlWidget::HandleOpenDistanceDialog);
 	AddDynamicButtonToRoot(Btn_OpenDistance);
@@ -1267,40 +1333,62 @@ void UCameraControlWidget::BuildPtzPad()
 	AddToZoomCol(MakePadButton(TEXT("+"), ZoomW, ZoomH, ScaledFont(11), BtnZoomIn));
 	AddToZoomCol(MakePadButton(TEXT("−"), ZoomW, ZoomH, ScaledFont(11), BtnZoomOut));
 
-	UHorizontalBox* StepRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
-	UTextBlock* StepLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
-	StepLabel->SetText(FText::FromString(TEXT("step")));
-	StepLabel->SetColorAndOpacity(FSlateColor(FLinearColor::Black));
-	FSlateFontInfo StepFont = StepLabel->GetFont();
-	StepFont.Size = ScaledFont(10);
-	StepLabel->SetFont(StepFont);
-	if (UHorizontalBoxSlot* HBSlot = StepRow->AddChildToHorizontalBox(StepLabel))
+	// step 은 두 줄이다 — Pan/Tilt(도/초)와 Zoom(배율/초)은 단위가 달라 값을 따로 둔다.
+	auto MakeStepRow = [&](const TCHAR* Label, const TCHAR* Default) -> UEditableTextBox*
 	{
-		HBSlot->SetVerticalAlignment(VAlign_Center);
-		HBSlot->SetPadding(FMargin(0.f, 0.f, 3.f, 0.f));
-	}
-	UEditableTextBox* StepBox = WidgetTree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass());
-	StepBox->SetText(FText::FromString(TEXT("2")));
-	StepBox->SetForegroundColor(FLinearColor::Black); // 다른 입력 필드와 같은 규약(NativeConstruct 1-b).
-	// 폰트를 줄이지 않으면 기본 크기(24)에 스타일 패딩이 얹혀 아래 획이 잘린다.
-	FEditableTextBoxStyle StepStyle = StepBox->GetWidgetStyle();
-	StepStyle.TextStyle.Font.Size = ScaledFont(11);
-	StepBox->SetWidgetStyle(StepStyle);
-	USizeBox* StepSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
-	StepSize->SetWidthOverride(46.f * GPtzPadScale);
-	StepSize->SetHeightOverride(26.f * GPtzPadScale);
-	StepSize->AddChild(StepBox);
-	if (UHorizontalBoxSlot* HBSlot = StepRow->AddChildToHorizontalBox(StepSize))
-	{
-		HBSlot->SetVerticalAlignment(VAlign_Center);
-	}
-	AddToZoomCol(StepRow);
+		UHorizontalBox* StepRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+		UTextBlock* StepLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		StepLabel->SetText(FText::FromString(Label));
+		StepLabel->SetColorAndOpacity(FSlateColor(FLinearColor::Black));
+		FSlateFontInfo StepFont = StepLabel->GetFont();
+		StepFont.Size = ScaledFont(10);
+		StepLabel->SetFont(StepFont);
+		if (UHorizontalBoxSlot* HBSlot = StepRow->AddChildToHorizontalBox(StepLabel))
+		{
+			HBSlot->SetVerticalAlignment(VAlign_Center);
+			HBSlot->SetPadding(FMargin(0.f, 0.f, 3.f, 0.f));
+		}
+		UEditableTextBox* Box = WidgetTree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass());
+		Box->SetText(FText::FromString(Default));
+		Box->SetForegroundColor(FLinearColor::Black); // 다른 입력 필드와 같은 규약(NativeConstruct 1-b).
+		// 폰트를 줄이지 않으면 기본 크기(24)에 스타일 패딩이 얹혀 아래 획이 잘린다.
+		FEditableTextBoxStyle StepStyle = Box->GetWidgetStyle();
+		StepStyle.TextStyle.Font.Size = ScaledFont(11);
+		Box->SetWidgetStyle(StepStyle);
+		USizeBox* StepSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+		StepSize->SetWidthOverride(46.f * GPtzPadScale);
+		StepSize->SetHeightOverride(26.f * GPtzPadScale);
+		StepSize->AddChild(Box);
+		if (UHorizontalBoxSlot* HBSlot = StepRow->AddChildToHorizontalBox(StepSize))
+		{
+			HBSlot->SetVerticalAlignment(VAlign_Center);
+		}
+		AddToZoomCol(StepRow);
+		return Box;
+	};
+	UEditableTextBox* StepBox = MakeStepRow(TEXT("P/T"), TEXT("2"));
+	UEditableTextBox* StepBoxZoom = MakeStepRow(TEXT("Zoom"), TEXT("0.5"));
 
 	if (UHorizontalBoxSlot* HBSlot = Row->AddChildToHorizontalBox(ZoomCol))
 	{
 		HBSlot->SetPadding(FMargin(8.f, 0.f, 0.f, 0.f));
 		HBSlot->SetVerticalAlignment(VAlign_Center);
 	}
+
+	// 패드 오른쪽 빈 칸 — 하단 동작 버튼들이 여기로 옮겨 온다(RelocateActionButtons).
+	// 패드는 정사각에 가까워 오른쪽이 통째로 비는데, 그 폭만큼 세로 줄을 줄일 수 있다.
+	UVerticalBox* SideCol = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+	// 폭을 못 박지 않으면 좁은 카드 폭에 눌려 라벨이 겹쳐 뭉갠다("거리 측정 열기"가 두 글자씩 포개짐).
+	// 카드 폭은 FitPanelToContent 가 본문에 맞춰 넓히므로 여기서 필요한 폭을 선언하는 쪽이 맞다.
+	USizeBox* SideBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+	SideBox->SetMinDesiredWidth(SideColumnMinWidth);
+	SideBox->AddChild(SideCol);
+	if (UHorizontalBoxSlot* HBSlot = Row->AddChildToHorizontalBox(SideBox))
+	{
+		HBSlot->SetPadding(FMargin(10.f, 0.f, 0.f, 0.f));
+		HBSlot->SetVerticalAlignment(VAlign_Top);
+	}
+	PtzSideColumn = SideCol;
 
 	// 누를 때 시작 / 뗄 때 정지. 가운데 '중지'는 같은 정지 핸들러를 누를 때 호출한다.
 	BtnUp->OnPressed.AddUniqueDynamic(this, &UCameraControlWidget::HandlePtzPressTiltUp);
@@ -1322,6 +1410,7 @@ void UCameraControlWidget::BuildPtzPad()
 	PtzButtons[(int32)EPtzMove::ZoomIn - 1]   = BtnZoomIn;
 	PtzButtons[(int32)EPtzMove::ZoomOut - 1]  = BtnZoomOut;
 	Field_PtzStep = StepBox;
+	Field_PtzStepZoom = StepBoxZoom;
 
 	// 접은 Pan/Tilt/Zoom 묶음 자리에 끼운다(못 찾았으면 종전대로 맨 끝).
 	UPanelSlot* PadSlot = (PtzPadInsertIndex != INDEX_NONE)
@@ -1332,6 +1421,132 @@ void UCameraControlWidget::BuildPtzPad()
 		VBSlot->SetPadding(FMargin(0.f, DynamicButtonOuterPadding, 0.f, DynamicButtonOuterPadding));
 	}
 	UpdatePtzReadout();
+}
+
+UWidget* UCameraControlWidget::FindRootRow(UWidget* InChild) const
+{
+	if (!VBox_Root || !InChild)
+	{
+		return nullptr;
+	}
+	UWidget* Cur = InChild;
+	while (Cur && Cur->GetParent() != VBox_Root)
+	{
+		Cur = Cur->GetParent();
+	}
+	return Cur;
+}
+
+void UCameraControlWidget::RelocateActionButtons()
+{
+	UVerticalBox* Col = PtzSideColumn.Get();
+	// 두 번 옮기면 안 된다 — 이미 옮긴 뒤에는 버튼의 "VBox_Root 직계 조상"이 PTZ 패드 본문이 되어
+	// 패드를 제 자식 칸 안으로 집어넣게 된다.
+	if (!VBox_Root || !Col || bActionButtonsRelocated)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CamPanel] 버튼 재배치 건너뜀 (VBox_Root=%d SideCol=%d 이미함=%d)"),
+			VBox_Root ? 1 : 0, Col ? 1 : 0, bActionButtonsRelocated ? 1 : 0);
+		return;
+	}
+	bActionButtonsRelocated = true;
+
+	// 라벨이 길면 좁아진 칸을 넘겨 패널이 다시 가로로 커진다 → 옮기는 김에 줄인다.
+	if (Btn_GetPtz)
+	{
+		SetButtonLabel(Btn_GetPtz, TEXT("PTZ 가져오기"));
+	}
+
+	// 저장·열기·초기화·피킹 네 개는 한 줄이라 옆 칸에 넣으면 폭이 모자라 라벨이 잘린다("카메라 피킹 시…").
+	// 그 줄은 패드 아래 전체 폭에 그대로 두고, 한 줄짜리 버튼 셋만 옆 칸으로 올린다.
+	TArray<int32> Indices;
+	for (UButton* Button : { Btn_ShowPole, Btn_OpenDistance, Btn_GetPtz })
+	{
+		UWidget* RootRow = FindRootRow(Button);
+		const int32 Index = RootRow ? VBox_Root->GetChildIndex(RootRow) : INDEX_NONE;
+		if (Index == INDEX_NONE)
+		{
+			continue;
+		}
+		Indices.AddUnique(Index); // WBP 가 여러 버튼을 한 줄에 묶어 뒀으면 줄째로 옮긴다.
+		// 줄만 옮기면 그 줄을 설명하던 라벨("모든 카메라 저장")이 제자리에 홀로 남는다.
+		if (Index > 0 && Cast<UTextBlock>(VBox_Root->GetChildAt(Index - 1)))
+		{
+			Indices.AddUnique(Index - 1);
+		}
+	}
+	Indices.Sort(); // 원래 위아래 순서를 옆 칸에서도 유지한다.
+
+	TArray<UWidget*> Rows;
+	for (const int32 Index : Indices)
+	{
+		if (UWidget* Child = VBox_Root->GetChildAt(Index))
+		{
+			Rows.Add(Child);
+		}
+	}
+
+	UE_LOG(LogTemp, Display, TEXT("[CamPanel] 버튼 재배치 — 옮길 줄 %d개"), Rows.Num());
+	for (UWidget* RootRow : Rows)
+	{
+		VBox_Root->RemoveChild(RootRow);
+		if (UVerticalBoxSlot* VBSlot = Col->AddChildToVerticalBox(RootRow))
+		{
+			VBSlot->SetPadding(FMargin(0.f, 1.f, 0.f, 1.f));
+			VBSlot->SetHorizontalAlignment(HAlign_Fill);
+		}
+	}
+}
+
+UWidget* UCameraControlWidget::MakeGroupDivider()
+{
+	UBorder* Line = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+	// 카드가 어두운 회색이므로 밝은 선이어야 보인다(검정 28%로 그었더니 배경에 그대로 묻혔다).
+	Line->SetBrushColor(FLinearColor(1.f, 1.f, 1.f, 0.35f));
+	USizeBox* Box = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+	Box->SetHeightOverride(1.f);
+	Box->AddChild(Line);
+	return Box;
+}
+
+void UCameraControlWidget::InsertGroupDividers()
+{
+	if (!VBox_Root || bGroupDividersInserted)
+	{
+		return;
+	}
+	bGroupDividersInserted = true;
+
+	// 묶음의 첫 줄 = 그 앞에 선이 들어갈 자리. 라벨(TextBlock)이 앞에 있으면 라벨 위에 긋는다.
+	auto AnchorIndex = [this](UWidget* FirstMember) -> int32
+	{
+		UWidget* RootRow = FindRootRow(FirstMember);
+		int32 Index = RootRow ? VBox_Root->GetChildIndex(RootRow) : INDEX_NONE;
+		if (Index > 0 && Cast<UTextBlock>(VBox_Root->GetChildAt(Index - 1)))
+		{
+			--Index;
+		}
+		return Index;
+	};
+
+	TArray<int32> Anchors;
+	// 프리셋 / 위치 슬라이더 / PTZ 패드 / 하단 버튼 줄 — 네 묶음의 경계에 긋는다.
+	for (UWidget* Member : { (UWidget*)Combo_Preset, (UWidget*)Field_H_Cur, (UWidget*)PtzSideColumn.Get(), (UWidget*)Btn_Save })
+	{
+		const int32 Index = AnchorIndex(Member);
+		if (Index > 0)
+		{
+			Anchors.AddUnique(Index);
+		}
+	}
+	// 뒤에서부터 넣어야 앞쪽 인덱스가 밀리지 않는다.
+	Anchors.Sort([](const int32& A, const int32& B) { return A > B; });
+	for (const int32 Index : Anchors)
+	{
+		if (UVerticalBoxSlot* VBSlot = Cast<UVerticalBoxSlot>(VBox_Root->InsertChildAt(Index, MakeGroupDivider())))
+		{
+			VBSlot->SetPadding(FMargin(0.f, 5.f, 0.f, 5.f));
+		}
+	}
 }
 
 void UCameraControlWidget::UpdatePtzReadout()
@@ -1352,6 +1567,10 @@ void UCameraControlWidget::FitPanelToContent()
 {
 	// 본문(VBox_Root)은 RootBorder 안의 ScrollBox 에 들어 있고 RootBorder 높이는 캔버스에서 고정이다.
 	// → 내용이 바뀌면(패드 추가, 슬라이더 묶음 접기, 손잡이 확대) 패널이 따라가야 잘리거나 비지 않는다.
+	//
+	// 1회만 맞추면 안 된다 — 첫 성공 시점의 본문 높이가 최종값이 아니라서(줄을 옮기고 구분선을 넣은
+	// 결과가 아직 레이아웃에 반영되기 전) 하단 버튼 줄이 잘렸다. 값이 바뀌면 계속 따라간다.
+	// (bPanelFitted 는 이제 "손댈 것이 없다"고 판정된 경우에만 선다 — 아래 두 분기.)
 	if (bPanelFitted || !RootBorder || !VBox_Root)
 	{
 		return;
@@ -1373,8 +1592,22 @@ void UCameraControlWidget::FitPanelToContent()
 		return;
 	}
 
+	// 카드에서 본문이 아닌 부분(제목줄·파일명·여백)의 높이는 상수로 찍으면 틀린다 —
+	// 16 으로 두었더니 제목줄만큼 모자라 하단 버튼 줄이 잘렸다. 실제 레이아웃에서 잰다:
+	// 카드 높이 − 스크롤 영역 높이 = 본문 밖에 쓰인 높이. 매 틱 다시 재므로 스스로 수렴한다.
+	float Chrome = GPanelChromeHeight;
+	if (const UWidget* ScrollView = VBox_Root->GetParent())
+	{
+		const float ViewportHeight = ScrollView->GetCachedGeometry().GetLocalSize().Y;
+		const float PanelHeight = CanvasSlot->GetSize().Y;
+		if (ViewportHeight > 1.f && PanelHeight > ViewportHeight)
+		{
+			Chrome = PanelHeight - ViewportHeight;
+		}
+	}
+
 	// 화면 밖으로 넘치면 스크롤이 받아야 하므로, 뷰포트 안으로 제한한다.
-	float MaxHeight = ContentHeight + GPanelChromeHeight;
+	float MaxHeight = ContentHeight + Chrome;
 	if (const APlayerController* PC = GetOwningPlayer())
 	{
 		int32 VpX = 0, VpY = 0;
@@ -1388,9 +1621,15 @@ void UCameraControlWidget::FitPanelToContent()
 	}
 
 	const FVector2D PanelSize = CanvasSlot->GetSize();
+	if (FMath::IsNearlyEqual(PanelSize.Y, MaxHeight, 1.f))
+	{
+		return; // 이미 맞다 — 매 틱 같은 값을 다시 넣지 않는다.
+	}
+	// 폭은 디자이너 값 그대로 둔다(지시). 본문이 그 폭 안에 들어가야 하므로
+	// PTZ 패드 배율(GPtzPadScale)과 옆 칸 폭(SideColumnMinWidth)이 이 카드 폭 안에서 결정된다.
 	CanvasSlot->SetSize(FVector2D(PanelSize.X, MaxHeight));
-	bPanelFitted = true;
-	Notify(FString::Printf(TEXT("패널 높이 %.0f → %.0f (본문 %.0f)"), PanelSize.Y, MaxHeight, ContentHeight));
+	UE_LOG(LogTemp, Display, TEXT("[CamPanel] 패널 높이 %.0f → %.0f (카드 폭 %.0f / 본문 %.0fx%.0f)"),
+		PanelSize.Y, MaxHeight, PanelSize.X, VBox_Root->GetDesiredSize().X, ContentHeight);
 }
 
 int32 UCameraControlWidget::CollapseControlGroup(UWidget* FieldsMember, USlider* Slider)
@@ -1504,6 +1743,14 @@ float UCameraControlWidget::GetPtzStep() const
 	return Step > 0.f ? Step : 2.f;
 }
 
+float UCameraControlWidget::GetPtzStepZoom() const
+{
+	const float Step = Field_PtzStepZoom.IsValid()
+		? FCString::Atof(*Field_PtzStepZoom->GetText().ToString()) : 0.f;
+	// 줌은 1~36 배율이라 Pan/Tilt 기본값(2/초)을 쓰면 한 번 눌러도 끝까지 튄다.
+	return Step > 0.f ? Step : 0.5f;
+}
+
 void UCameraControlWidget::StepControl(ECamCtrl Kind, float Delta)
 {
 	const float Lo = FMath::Min(GetControlMin(Kind), GetControlMax(Kind));
@@ -1528,7 +1775,9 @@ void UCameraControlWidget::TickPtzMove(float DeltaSeconds)
 		return;
 	}
 
-	const float Delta = GetPtzStep() * DeltaSeconds; // step = 초당 이동량
+	// step = 초당 이동량. Pan/Tilt(도)와 Zoom(배율)은 단위가 달라 각자의 값을 쓴다.
+	const float Delta = GetPtzStep() * DeltaSeconds;
+	const float DeltaZoom = GetPtzStepZoom() * DeltaSeconds;
 	switch (ActivePtzMove)
 	{
 	// tilt 는 아래를 볼수록 커진다(PanTiltToRotator: Pitch = -Tilt) → ▲ = 감소.
@@ -1536,8 +1785,8 @@ void UCameraControlWidget::TickPtzMove(float DeltaSeconds)
 	case EPtzMove::TiltDown: StepControl(ECamCtrl::Tilt, +Delta); break;
 	case EPtzMove::PanLeft:  StepControl(ECamCtrl::Pan,  -Delta); break;
 	case EPtzMove::PanRight: StepControl(ECamCtrl::Pan,  +Delta); break;
-	case EPtzMove::ZoomIn:   StepControl(ECamCtrl::Zoom, +Delta); break;
-	case EPtzMove::ZoomOut:  StepControl(ECamCtrl::Zoom, -Delta); break;
+	case EPtzMove::ZoomIn:   StepControl(ECamCtrl::Zoom, +DeltaZoom); break;
+	case EPtzMove::ZoomOut:  StepControl(ECamCtrl::Zoom, -DeltaZoom); break;
 	default: break;
 	}
 }
@@ -1620,7 +1869,7 @@ void UCameraControlWidget::HideDistanceDialog()
 void UCameraControlWidget::RefreshDistanceButtonLabel()
 {
 	bDistanceDialogVisibleLastTick = IsDistanceDialogVisible();
-	SetDistanceButtonLabel(Btn_OpenDistance, bDistanceDialogVisibleLastTick ? TEXT("거리 측정 닫기") : TEXT("거리 측정 열기"));
+	SetDistanceButtonLabel(Btn_OpenDistance, bDistanceDialogVisibleLastTick ? TEXT("거리 측정 닫기") : TEXT("거리 측정"));
 }
 
 void UCameraControlWidget::BuildDistancePanel()

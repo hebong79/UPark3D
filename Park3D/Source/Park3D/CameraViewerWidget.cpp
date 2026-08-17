@@ -272,6 +272,35 @@ int32 UCameraViewerWidget::NativePaint(const FPaintArgs& Args, const FGeometry& 
 			Pts.Add(FVector2f(0.f, 0.f));
 			FSlateDrawElement::MakeLines(OutDrawElements, (uint32)(Layer + 1), ImgGeo.ToPaintGeometry(), Pts,
 				ESlateDrawEffect::None, FrameColor, true, FrameThickness);
+
+			// 화면 한가운데 십자 조준선 — 카메라가 어디를 겨누는지 눈으로 잡기 위한 것.
+			// 위젯을 얹지 않고 여기서 그리는 이유: Img_View 를 다른 패널로 옮기면
+			// ApplyViewSize/드래그가 쓰는 CanvasPanelSlot 캐스팅이 깨진다.
+			if (CrossThickness > 0.f && CrossLength > 0.f)
+			{
+				// 흰 선 하나만 그리면 밝은 노면 위에서 묻힌다(실측으로 확인).
+				// 어두운 테두리를 먼저 굵게 깔고 그 위에 밝은 심을 얹어 어느 배경에서도 보이게 한다.
+				const FLinearColor Outline(0.f, 0.f, 0.f, 0.55f);
+				const FLinearColor Core(1.f, 1.f, 1.f, 0.95f);
+				const float Cx = (float)Size.X * 0.5f;
+				const float Cy = (float)Size.Y * 0.5f;
+				const float Half = FMath::Min(CrossLength, (float)FMath::Min(Size.X, Size.Y) * 0.4f) * 0.5f;
+
+				TArray<FVector2f> H;
+				H.Add(FVector2f(Cx - Half, Cy));
+				H.Add(FVector2f(Cx + Half, Cy));
+				TArray<FVector2f> V;
+				V.Add(FVector2f(Cx, Cy - Half));
+				V.Add(FVector2f(Cx, Cy + Half));
+
+				for (const TArray<FVector2f>* Line : { &H, &V })
+				{
+					FSlateDrawElement::MakeLines(OutDrawElements, (uint32)(Layer + 1), ImgGeo.ToPaintGeometry(),
+						*Line, ESlateDrawEffect::None, Outline, true, CrossThickness + 2.f);
+					FSlateDrawElement::MakeLines(OutDrawElements, (uint32)(Layer + 1), ImgGeo.ToPaintGeometry(),
+						*Line, ESlateDrawEffect::None, Core, true, CrossThickness);
+				}
+			}
 		}
 	}
 	return Layer + 1;

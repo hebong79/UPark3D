@@ -4,7 +4,11 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/Button.h"
 #include "Components/Border.h"
+#include "Components/Image.h"
+#include "Engine/Texture2D.h"
 #include "Components/TextBlock.h"
+#include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Kismet/KismetSystemLibrary.h"
@@ -19,8 +23,11 @@ void UMainMenuWidget::NativeOnInitialized()
 
 	// NativeConstruct 는 Slate 트리가 이미 만들어진 뒤라, 여기서 넣어야 ShiftChild 로 잡은
 	// 순서(Exit 앞)가 실제 화면에 반영된다. NativeConstruct 에서 하면 버튼이 Exit 아래로 붙는다.
+	ApplyDockIcons();
 	InjectLightButton();
 	InjectSimButton();
+	// 차량 랜덤 버튼은 독에서 뺐다(사용자 요청). 패널과 핸들러는 남아 있어
+	// InjectRenderButton() 한 줄을 되살리면 그대로 다시 뜬다.
 }
 
 void UMainMenuWidget::NativeConstruct()
@@ -32,8 +39,6 @@ void UMainMenuWidget::NativeConstruct()
 	if (Btn_Camera)       Btn_Camera->OnClicked.AddUniqueDynamic(this, &UMainMenuWidget::HandleCamera);
 	if (Btn_MapSize)      Btn_MapSize->OnClicked.AddUniqueDynamic(this, &UMainMenuWidget::HandleMapSize);
 	if (Btn_DistFeature)  Btn_DistFeature->OnClicked.AddUniqueDynamic(this, &UMainMenuWidget::HandleDistFeature);
-	if (Btn_VlaTrain)     Btn_VlaTrain->OnClicked.AddUniqueDynamic(this, &UMainMenuWidget::HandleVlaTrain);
-	if (Btn_VlaSim)       Btn_VlaSim->OnClicked.AddUniqueDynamic(this, &UMainMenuWidget::HandleVlaSim);
 	if (Btn_Exit)         Btn_Exit->OnClicked.AddUniqueDynamic(this, &UMainMenuWidget::HandleExit);
 
 	// 앱 실행 시 기본으로 PresetMaker 패널을 연다(요구사항: 시작 시 PresetMaker 출력).
@@ -41,19 +46,26 @@ void UMainMenuWidget::NativeConstruct()
 	TogglePanel(PresetMakerWidgetClass);
 }
 
-UButton* UMainMenuWidget::InsertMenuButtonBeforeExit(const TCHAR* WidgetName, const FText& Label)
+UButton* UMainMenuWidget::InsertMenuButtonBeforeExit(const TCHAR* WidgetName, const FText& Label,
+	const TCHAR* IconAssetPath)
 {
 	if (!WidgetTree)
 	{
 		return nullptr;
 	}
 
-	// 메뉴 세로 목록을 찾는다. 이름은 WBP_MainMenu 의 VBox_Menu.
-	UVerticalBox* Menu = WidgetTree->FindWidget<UVerticalBox>(TEXT("VBox_Menu"));
+	// 메뉴 목록을 찾는다. 가로 독(HBox_Menu)을 먼저 보고, 없으면 기존 세로 목록(VBox_Menu).
+	// 두 형태를 다 받는 이유: 이전 UI 처럼 하단 가로 바로 바꾸는 중이고, 그 사이 어느 쪽 자산이
+	// 와도 버튼이 사라지지 않아야 한다. 아래 삽입 로직은 UPanelWidget 공통 API 만 쓴다.
+	UPanelWidget* Menu = WidgetTree->FindWidget<UHorizontalBox>(TEXT("HBox_Menu"));
+	if (!Menu)
+	{
+		Menu = WidgetTree->FindWidget<UVerticalBox>(TEXT("VBox_Menu"));
+	}
 	if (!Menu)
 	{
 		// 구조가 바뀌었어도 패널 자체는 TogglePanel(BlueprintCallable)로 열 수 있다.
-		UE_LOG(LogTemp, Warning, TEXT("[MainMenu] VBox_Menu 를 찾지 못해 '%s' 버튼을 넣지 못했습니다."), *Label.ToString());
+		UE_LOG(LogTemp, Warning, TEXT("[MainMenu] HBox_Menu/VBox_Menu 를 찾지 못해 '%s' 버튼을 넣지 못했습니다."), *Label.ToString());
 		return nullptr;
 	}
 
@@ -65,19 +77,28 @@ UButton* UMainMenuWidget::InsertMenuButtonBeforeExit(const TCHAR* WidgetName, co
 		Button->SetStyle(Btn_MapSize->GetStyle());
 	}
 
-	UTextBlock* LabelText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
-	LabelText->SetText(Label);
-	LabelText->SetJustification(ETextJustify::Center);
-	if (Btn_MapSize)
+	// 아이콘이 주어지면 아이콘 버튼으로, 아니면 글자 버튼으로 만든다.
+	// 독은 아이콘 줄이므로 글자 버튼이 섞이면 줄 높이가 흐트러진다.
+	if (IconAssetPath)
 	{
-		// 기존 버튼 라벨의 폰트를 복사(한글 폰트·크기 일치).
-		if (UTextBlock* SrcLabel = Cast<UTextBlock>(Btn_MapSize->GetChildAt(0)))
-		{
-			LabelText->SetFont(SrcLabel->GetFont());
-			LabelText->SetColorAndOpacity(SrcLabel->GetColorAndOpacity());
-		}
+		SetButtonIcon(Button, IconAssetPath, Label);
 	}
-	Button->AddChild(LabelText);
+	else
+	{
+		UTextBlock* LabelText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		LabelText->SetText(Label);
+		LabelText->SetJustification(ETextJustify::Center);
+		if (Btn_MapSize)
+		{
+			// 기존 버튼 라벨의 폰트를 복사(한글 폰트·크기 일치).
+			if (UTextBlock* SrcLabel = Cast<UTextBlock>(Btn_MapSize->GetChildAt(0)))
+			{
+				LabelText->SetFont(SrcLabel->GetFont());
+				LabelText->SetColorAndOpacity(SrcLabel->GetColorAndOpacity());
+			}
+		}
+		Button->AddChild(LabelText);
+	}
 
 	// Exit 바로 앞에 넣는다(Exit 는 항상 마지막이어야 한다).
 	// Btn_Exit 가 VBox 의 직계 자식이 아니라 래퍼(SizeBox 등) 안에 들어 있을 수 있으므로,
@@ -106,10 +127,10 @@ UButton* UMainMenuWidget::InsertMenuButtonBeforeExit(const TCHAR* WidgetName, co
 		UE_LOG(LogTemp, Warning, TEXT("[MainMenu] Exit 위치를 찾지 못해 '%s' 버튼을 목록 끝에 둡니다."), *Label.ToString());
 	}
 
-	// 세로 목록 간격을 기존 항목과 맞춘다.
-	if (UVerticalBoxSlot* VS = Cast<UVerticalBoxSlot>(NewSlot))
+	// 간격을 기존 항목과 맞춘다(세로/가로 각각의 슬롯 타입으로).
+	if (Btn_MapSize)
 	{
-		if (Btn_MapSize)
+		if (UVerticalBoxSlot* VS = Cast<UVerticalBoxSlot>(NewSlot))
 		{
 			if (UVerticalBoxSlot* SrcSlot = Cast<UVerticalBoxSlot>(Btn_MapSize->Slot))
 			{
@@ -118,8 +139,60 @@ UButton* UMainMenuWidget::InsertMenuButtonBeforeExit(const TCHAR* WidgetName, co
 				VS->SetSize(SrcSlot->GetSize());
 			}
 		}
+		else if (UHorizontalBoxSlot* HS = Cast<UHorizontalBoxSlot>(NewSlot))
+		{
+			if (UHorizontalBoxSlot* SrcSlot = Cast<UHorizontalBoxSlot>(Btn_MapSize->Slot))
+			{
+				HS->SetPadding(SrcSlot->GetPadding());
+				HS->SetVerticalAlignment(SrcSlot->GetVerticalAlignment());
+				HS->SetSize(SrcSlot->GetSize());
+			}
+		}
 	}
 	return Button;
+}
+
+void UMainMenuWidget::SetButtonIcon(UButton* Button, const TCHAR* IconAssetPath, const FText& Tooltip)
+{
+	if (!Button || !WidgetTree || !IconAssetPath)
+	{
+		return;
+	}
+	UTexture2D* Icon = LoadObject<UTexture2D>(nullptr, IconAssetPath);
+	if (!Icon)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[MainMenu] 아이콘을 찾지 못했습니다: %s"), IconAssetPath);
+		return;
+	}
+
+	Button->ClearChildren();   // WBP 가 넣어 둔 빈 이미지/글자를 치운다
+	UImage* IconImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
+	IconImage->SetBrushFromTexture(Icon, false);
+	IconImage->SetDesiredSizeOverride(FVector2D(DockIconSize, DockIconSize));
+	Button->AddChild(IconImage);
+	Button->SetToolTipText(Tooltip);   // 아이콘만으로는 뜻이 흐리다
+}
+
+void UMainMenuWidget::ApplyDockIcons()
+{
+	const TCHAR* Dir = TEXT("/Game/Widgets/Icons/TabIcons/");
+	struct FDockIcon { UButton* Button; const TCHAR* Asset; const TCHAR* Tip; };
+	const FDockIcon Items[] = {
+		{ Btn_PresetMaker,  TEXT("T_Parking"), TEXT("주차면") },
+		{ Btn_CarPlacement, TEXT("T_Car"),     TEXT("차량 배치") },
+		{ Btn_Camera,       TEXT("T_PTZ"),     TEXT("카메라 컨트롤") },
+		{ Btn_MapSize,      TEXT("T_Box"),     TEXT("맵 크기") },
+		{ Btn_DistFeature,  TEXT("T_Graph"),   TEXT("거리·피쳐 측정") },
+	};
+	for (const FDockIcon& It : Items)
+	{
+		if (!It.Button)
+		{
+			continue;
+		}
+		const FString Path = FString::Printf(TEXT("%s%s.%s"), Dir, It.Asset, It.Asset);
+		SetButtonIcon(It.Button, *Path, FText::FromString(It.Tip));
+	}
 }
 
 void UMainMenuWidget::InjectLightButton()
@@ -128,7 +201,8 @@ void UMainMenuWidget::InjectLightButton()
 	{
 		return;
 	}
-	Btn_Light = InsertMenuButtonBeforeExit(TEXT("Btn_Light"), FText::FromString(TEXT("조명 설정")));
+	Btn_Light = InsertMenuButtonBeforeExit(TEXT("Btn_Light"), FText::FromString(TEXT("조명 설정")),
+		TEXT("/Game/Widgets/Icons/TabIcons/T_Lighting.T_Lighting"));
 	if (Btn_Light)
 	{
 		Btn_Light->OnClicked.AddUniqueDynamic(this, &UMainMenuWidget::HandleLight);
@@ -141,7 +215,8 @@ void UMainMenuWidget::InjectSimButton()
 	{
 		return;
 	}
-	Btn_Sim = InsertMenuButtonBeforeExit(TEXT("Btn_Sim"), FText::FromString(TEXT("주차 시뮬레이션")));
+	Btn_Sim = InsertMenuButtonBeforeExit(TEXT("Btn_Sim"), FText::FromString(TEXT("주차 시뮬레이션")),
+		TEXT("/Game/Widgets/Icons/TabIcons/T_Pole.T_Pole"));
 	if (Btn_Sim)
 	{
 		Btn_Sim->OnClicked.AddUniqueDynamic(this, &UMainMenuWidget::HandleSimPanel);
@@ -166,6 +241,37 @@ void UMainMenuWidget::HandleLight()
 	// WBP 없이 C++ 로 구성되는 패널이라, BP 기본값이 없으면 C++ 클래스를 직접 쓴다.
 	TogglePanel(LightControlWidgetClass ? LightControlWidgetClass
 										: TSubclassOf<UUserWidget>(ULightControlWidget::StaticClass()));
+}
+
+void UMainMenuWidget::InjectRenderButton()
+{
+	if (Btn_Render)
+	{
+		return;
+	}
+	Btn_Render = InsertMenuButtonBeforeExit(TEXT("Btn_Render"), FText::FromString(TEXT("차량 랜덤")),
+		TEXT("/Game/Widgets/Icons/TabIcons/T_Render.T_Render"));
+	if (Btn_Render)
+	{
+		Btn_Render->OnClicked.AddUniqueDynamic(this, &UMainMenuWidget::HandleRenderPanel);
+	}
+}
+
+void UMainMenuWidget::HandleRenderPanel()
+{
+	TSubclassOf<UUserWidget> Cls = RenderPanelWidgetClass;
+	if (!Cls)
+	{
+		// BP 기본값이 비어 있으면 자산을 직접 찾는다. 조명 패널처럼 C++ 클래스로 폴백하지 않는 이유는
+		// 이 패널은 위젯 트리가 WBP 에 있어 C++ 클래스만으로는 화면이 비기 때문이다.
+		Cls = LoadClass<UUserWidget>(nullptr, TEXT("/Game/UI/WBP_RenderPanel.WBP_RenderPanel_C"));
+	}
+	if (!Cls)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[MainMenu] WBP_RenderPanel 을 찾지 못해 차량 랜덤 패널을 열지 못했습니다."));
+		return;
+	}
+	TogglePanel(Cls);
 }
 
 UUserWidget* UMainMenuWidget::GetOrCreatePanel(TSubclassOf<UUserWidget> WidgetClass)
@@ -257,8 +363,6 @@ void UMainMenuWidget::HandleCamera()       { TogglePanel(CameraControlWidgetClas
 // TODO(P7): WBP_MainMenu 의 OnMapSize BP 구현 유무 확인 — 존재 시 제거/무해화(잔재 정리).
 void UMainMenuWidget::HandleMapSize()      { TogglePanel(MapSizeWidgetClass); }
 void UMainMenuWidget::HandleDistFeature()  { OnDistanceFeature(); }
-void UMainMenuWidget::HandleVlaTrain()     { OnVlaTrain(); }
-void UMainMenuWidget::HandleVlaSim()       { OnVlaSim(); }
 
 void UMainMenuWidget::HandleExit()
 {

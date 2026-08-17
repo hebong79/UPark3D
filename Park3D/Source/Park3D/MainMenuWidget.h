@@ -24,8 +24,6 @@ public:
 	UPROPERTY(meta = (BindWidget)) UButton* Btn_Camera = nullptr;        // 카메라 컨트롤
 	UPROPERTY(meta = (BindWidget)) UButton* Btn_MapSize = nullptr;       // 맵 크기 변경
 	UPROPERTY(meta = (BindWidget)) UButton* Btn_DistFeature = nullptr;   // 거리.피쳐 체크
-	UPROPERTY(meta = (BindWidget)) UButton* Btn_VlaTrain = nullptr;      // VLA 학습 데이터
-	UPROPERTY(meta = (BindWidget)) UButton* Btn_VlaSim = nullptr;        // VLA 시뮬레이터
 	UPROPERTY(meta = (BindWidget)) UButton* Btn_Exit = nullptr;          // Exit
 
 	// 배경 프레임 겸 드래그 핸들(WBP_MainMenu 에서 VBox_Menu 를 감싼 Border).
@@ -48,6 +46,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Menu")
 	TSubclassOf<UUserWidget> LightControlWidgetClass;
 
+	/**
+	 * 차량 랜덤 패널. 비워 두면 코드가 /Game/UI/WBP_RenderPanel 을 찾아 쓴다 —
+	 * 다른 패널들처럼 BP 기본값으로 지정할 수도 있지만, 이 패널은 WBP 를 코드가 만들었으므로
+	 * 지정을 잊어도 동작하도록 폴백을 둔다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Menu")
+	TSubclassOf<UUserWidget> RenderPanelWidgetClass;
+
 	/** 배타적 패널 토글: 다른 패널은 모두 숨기고, 클릭한 패널이 숨겨져 있었으면 표시(재클릭이면 숨김). 항상 최대 1개(인스턴스 캐시). */
 	UFUNCTION(BlueprintCallable, Category = "Menu")
 	void TogglePanel(TSubclassOf<UUserWidget> WidgetClass);
@@ -69,8 +75,6 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Menu") void OnCameraControl();
 	UFUNCTION(BlueprintImplementableEvent, Category = "Menu") void OnMapSize();
 	UFUNCTION(BlueprintImplementableEvent, Category = "Menu") void OnDistanceFeature();
-	UFUNCTION(BlueprintImplementableEvent, Category = "Menu") void OnVlaTrain();
-	UFUNCTION(BlueprintImplementableEvent, Category = "Menu") void OnVlaSim();
 
 protected:
 	/** Slate 트리가 만들어지기 전 시점 — 메뉴에 버튼을 끼워 넣으려면 여기여야 순서가 반영된다. */
@@ -87,11 +91,10 @@ protected:
 	UFUNCTION() void HandleCamera();
 	UFUNCTION() void HandleMapSize();
 	UFUNCTION() void HandleDistFeature();
-	UFUNCTION() void HandleVlaTrain();
-	UFUNCTION() void HandleVlaSim();
 	UFUNCTION() void HandleExit();
 	UFUNCTION() void HandleLight();
 	UFUNCTION() void HandleSimPanel();
+	UFUNCTION() void HandleRenderPanel();
 
 private:
 	UUserWidget* GetOrCreatePanel(TSubclassOf<UUserWidget> WidgetClass);
@@ -102,13 +105,30 @@ private:
 	 * 스타일·폰트·슬롯 패딩을 기존 버튼(Btn_MapSize)에서 복사해 모양을 맞춘다.
 	 * @return 삽입된 버튼(목록을 못 찾으면 nullptr). OnClicked 바인딩은 호출자가 한다.
 	 */
-	UButton* InsertMenuButtonBeforeExit(const TCHAR* WidgetName, const FText& Label);
+	UButton* InsertMenuButtonBeforeExit(const TCHAR* WidgetName, const FText& Label,
+		const TCHAR* IconAssetPath = nullptr);
+
+	/**
+	 * 독 버튼(WBP 바인딩분)에 아이콘을 입힌다.
+	 * WBP 브러시에 텍스처 참조를 저장해 두면 런타임에 그려지지 않았다(브러시 값은 맞는데 화면이 빈칸).
+	 * 주입 버튼이 LoadObject 로 잘 붙는 것과 대비되므로, 아이콘은 한 경로(코드)로 통일한다.
+	 */
+	void ApplyDockIcons();
+
+	/** 독 아이콘 한 변(px). 화면을 덜 가리도록 22 에서 80% 로 줄였다. */
+	static constexpr float DockIconSize = 18.f;
+
+	/** 버튼의 자식을 아이콘 이미지 하나로 교체한다. */
+	void SetButtonIcon(UButton* Button, const TCHAR* IconAssetPath, const FText& Tooltip);
 
 	/** "조명 설정" 버튼 삽입. */
 	void InjectLightButton();
 
 	/** "주차 시뮬레이션" 버튼 삽입(HUD 열고 닫기). */
 	void InjectSimButton();
+
+	/** "차량 랜덤" 버튼 삽입(WBP_RenderPanel 토글). */
+	void InjectRenderButton();
 
 	/** 런타임에 만든 조명 버튼(WBP 바인딩이 아니다). */
 	UPROPERTY(Transient)
@@ -117,6 +137,10 @@ private:
 	/** 런타임에 만든 주차 시뮬레이션 버튼(WBP 바인딩이 아니다). */
 	UPROPERTY(Transient)
 	TObjectPtr<UButton> Btn_Sim = nullptr;
+
+	/** 런타임에 만든 차량 랜덤 버튼(WBP 바인딩이 아니다). */
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> Btn_Render = nullptr;
 
 	// 메뉴 드래그 상태.
 	bool bDraggingMenu = false;

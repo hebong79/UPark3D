@@ -260,6 +260,16 @@ private:
 	// 프리셋 ↔ 컨트롤(§6.2)
 	void FillControlsFromDir(const FCamDir& Dir);   // min/max 먼저, value 클램프
 	void CollectDirFromControls(FCamDir& OutDir);   // pos=Unity좌표, rot=(tilt,pan,0), ptzmin/max
+
+	/**
+	 * 높이·X·Z 는 카메라 한 대의 속성이다 — 같은 카메라의 프리셋은 모두 같은 자리에 서야 한다.
+	 * 프리셋이 바꾸는 것은 바라보는 방향(Pan/Tilt/Zoom)뿐이다.
+	 *
+	 * 데이터는 pos 를 프리셋(FCamDir)마다 들고 있으므로, 위치가 바뀔 때마다 그 카메라의
+	 * 모든 프리셋에 같은 값을 써 넣어 어긋나지 않게 한다.
+	 * @param bFromControls true = 지금 UI 값 기준, false = 현재 프리셋의 pos 기준(로드 직후 정합용)
+	 */
+	void SyncCameraPosAcrossPresets(bool bFromControls);
 	void RebuildCameraCombo();
 	void RebuildPresetCombo();
 	FCameraPos& CurCameraPos();                      // CamData.datas[CurCamIndex] (없으면 슬롯 확보)
@@ -284,6 +294,18 @@ private:
 	void BuildGetPtzButton();
 	/** 방향 패드(▲◀중지▶▼) + 줌(＋/－) + step 필드를 VBox_Root 끝에 만든다(WBP 자산 변경 없이). */
 	void BuildPtzPad();
+	/**
+	 * 하단 동작 버튼(저장·열기·초기화·피킹·폴대·거리측정·PTZ 가져오기)을 PTZ 패드 오른쪽 빈 칸으로 옮긴다.
+	 * 세로로 쌓여 있던 줄이 패드 옆으로 가면서 패널 높이가 줄고 스크롤이 사라진다.
+	 * 버튼 자체는 그대로 옮기기만 하므로(부모만 바뀜) 바인딩·핸들러·라벨 갱신 경로는 손대지 않는다.
+	 */
+	void RelocateActionButtons();
+	/** VBox_Root 의 직계 자식 중 InChild 를 품은 것을 돌려준다(줄 단위 이동/구분선 삽입용). */
+	UWidget* FindRootRow(UWidget* InChild) const;
+	/** 그룹 사이에 넣을 1px 가로선. */
+	UWidget* MakeGroupDivider();
+	/** 카메라/프리셋/컨트롤/PTZ 묶음 사이에 구분선을 넣는다. */
+	void InsertGroupDividers();
 	/** 누르는 동안 이동을 시작한다(이미 다른 방향이면 교체). */
 	void BeginPtzMove(EPtzMove Move);
 	/**
@@ -307,6 +329,9 @@ private:
 	void TickPtzMove(float DeltaSeconds);
 	/** step 필드 값(초당 이동량: pan/tilt 는 도, zoom 은 배율). 비었거나 0 이하면 2 로 본다. */
 	float GetPtzStep() const;
+
+	/** Zoom 전용 step(배율/초). 비었거나 0 이하면 0.5 로 본다 — Pan/Tilt 기본 2 를 쓰면 너무 빠르다. */
+	float GetPtzStepZoom() const;
 	/** 컨트롤 현재값에 Delta 를 더하고 Min/Max 로 클램프한 뒤 필드·슬라이더·카메라에 반영한다. */
 	void StepControl(ECamCtrl Kind, float Delta);
 	/** 하단 동적 버튼용 라벨 생성(가운데 정렬·검정·DynamicButtonFontSize). 폰트 크기 적용 지점은 여기 하나다. */
@@ -387,7 +412,21 @@ private:
 	// 이미 쿠킹된 WBP_CameraControl 의 C++ 베이스에 UPROPERTY 를 추가하면 패키지가
 	// Bad export index 로 즉사해 콘텐츠 재쿠킹이 필요해진다(CLAUDE.md 2026-08-12).
 	// 실제 소유(GC 참조)는 WidgetTree 와 부모 패널 슬롯이 하므로 여기서는 보기만 하면 된다.
-	TWeakObjectPtr<UEditableTextBox> Field_PtzStep;
+	/**
+	 * step 은 두 개다 — Pan/Tilt(도/초)와 Zoom(배율/초)은 단위가 달라 하나로 묶으면
+	 * 한쪽이 항상 너무 빠르거나 너무 느리다(Pan 은 수십 도, Zoom 은 1~36 배율).
+	 */
+	TWeakObjectPtr<UEditableTextBox> Field_PtzStep;      // Pan/Tilt
+	TWeakObjectPtr<UEditableTextBox> Field_PtzStepZoom;  // Zoom
+	/** PTZ 패드 오른쪽 칸 — 하단 동작 버튼들이 이리로 옮겨진다(RelocateActionButtons). */
+	TWeakObjectPtr<UVerticalBox> PtzSideColumn;
+	/**
+	 * 옆 칸 최소 폭(px). 카드 폭은 디자이너 값 그대로 두므로(지시) 이 값은 카드 폭에서
+	 * PTZ 패드가 쓰고 남는 만큼이어야 한다 — 넘기면 버튼이 카드 밖으로 나가 글자만 뜬다.
+	 */
+	static constexpr float SideColumnMinWidth = 120.f;
+	bool bActionButtonsRelocated = false;
+	bool bGroupDividersInserted = false;
 	TWeakObjectPtr<UButton> PtzButtons[PtzMoveCount]; // 인덱스 = (int32)EPtzMove - 1
 	EPtzMove ActivePtzMove = EPtzMove::None;
 	// 패드 상단 P/T/Z 현재값 표시.

@@ -1,5 +1,5 @@
 {
-	"rpc_port": 13520,
+	"rpc_port": 13510,
 	"main_port": 13600,
 	"cam_port_min": 13611,
 	"cam_port_max": 13650,

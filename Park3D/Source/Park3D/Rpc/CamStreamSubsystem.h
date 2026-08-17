@@ -129,6 +129,14 @@ public:
 	UPROPERTY(config, EditAnywhere, Category = "CamStream")
 	bool bEnabled = true;
 
+	// 실효 포트 조회 — 클라이언트가 영상 포트를 추측하지 않도록 system.health 가 이 값을 그대로 실어 보낸다.
+	/** 메인 뷰 채널 포트(config 의 main_port 가 있으면 그 값). */
+	int32 GetMainPort() const { return MainPort; }
+	/** camId 1 의 포트. */
+	int32 GetCamPortMin() const { return BasePort + 1; }
+	/** 대역의 마지막 포트(= camId MaxCameras). */
+	int32 GetCamPortMax() const { return BasePort + MaxCameras; }
+
 	/**
 	 * 포트 시작값. camId 1 = BasePort+1 (기본 13601). 13510(RPC)/13520(MCP 브리지)와 무충돌.
 	 * Save/Config/config_pmaker.json 에 cam_port_min/max 가 있으면 기동 시 그 값으로 덮인다.

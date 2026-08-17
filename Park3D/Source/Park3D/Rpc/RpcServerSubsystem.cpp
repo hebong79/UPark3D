@@ -105,19 +105,20 @@ void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	Super::Initialize(Collection);
 
 	// 리슨 포트 결정 우선순위:
-	//   커맨드라인 -RpcPort= > Save/Config/config_pmaker.json rpc_port > DefaultGame.ini [RpcServer] Port > 기본 13510.
-	// 자동화·MCP 브리지가 -RpcPort= 로 띄우는 기존 동작이 설정 파일에 덮이지 않도록 커맨드라인을 최우선으로 둔다.
+	//   커맨드라인 -RpcPort= > Save/Config/config_pmaker.json 의 rpc_port > 소스 기본값(13510).
+	//
+	// ini 는 일부러 보지 않는다. 패키지에는 DefaultGame.ini 가 존재하지 않고(빌드 시 바이너리 설정으로 구워진다)
+	// 거기 적힌 포트는 재패키지 없이는 바꿀 수 없다 — "ini 에 13510 이라 적혀 있는데 왜 13520 으로 뜨지?" 라는
+	// 혼란만 남는다. 포트가 사는 곳은 config_pmaker.json 하나다(카메라·메인 뷰 포트와 같은 규약).
+	// 커맨드라인은 자동화용 일회성 예외로 남긴다.
+	FString PortSource(TEXT("소스 기본값"));
 	{
-		int32 ConfigPort = 0;
-		if (GConfig && GConfig->GetInt(TEXT("RpcServer"), TEXT("Port"), ConfigPort, GGameIni) && ConfigPort > 0 && ConfigPort <= 65535)
-		{
-			Port = ConfigPort;
-		}
-		// 앱 설정 파일. 범위 검증은 파서가 하고(범위 밖 → 0), 여기서는 지정 여부만 본다.
+		// 범위 검증은 파서가 하고(범위 밖 → 0), 여기서는 지정 여부만 본다.
 		FPark3DAppConfig AppConfig;
 		if (UPark3DAppConfigLibrary::Load(AppConfig) && AppConfig.RpcPort > 0)
 		{
 			Port = AppConfig.RpcPort;
+			PortSource = TEXT("config_pmaker.json rpc_port");
 		}
 		// 스위치의 "존재"와 "값"을 분리한다: -RpcPort=0 은 무시가 아니라 명시적 비활성화다.
 		// (바인드를 외부로 여는 구성에서 자동화가 LAN 에 리스닝 소켓을 여는 사고를 막는다.)
@@ -131,13 +132,15 @@ void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 			else if (CmdPort > 0 && CmdPort <= 65535)
 			{
 				Port = CmdPort;
+				PortSource = TEXT("커맨드라인 -RpcPort=");
 			}
 			else
 			{
 				UE_LOG(LogTemp, Warning, TEXT("[RPC] -RpcPort=%d 는 유효 범위(1~65535) 밖 — 무시하고 %d 사용."), CmdPort, Port);
 			}
 		}
-		UE_LOG(LogTemp, Log, TEXT("[RPC] 리슨 포트 결정: %d%s"), Port,
+		// 출처를 함께 남긴다 — 포트가 예상과 다를 때 어느 파일을 열어야 하는지가 이 한 줄로 끝난다.
+		UE_LOG(LogTemp, Log, TEXT("[RPC] 리슨 포트 결정: %d (출처: %s)%s"), Port, *PortSource,
 			bServerDisabled ? TEXT(" (-RpcPort=0 → 서버 미기동)") : TEXT(""));
 	}
 

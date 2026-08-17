@@ -69,7 +69,7 @@ void UCamStreamSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	}
 	else
 	{
-		UE_LOG(LogCamStreamSub, Log, TEXT("[CamStream] 포트 대역 %d~%d (출처: DefaultGame.ini, 최대 %d대)"),
+		UE_LOG(LogCamStreamSub, Log, TEXT("[CamStream] 포트 대역 %d~%d (출처: 소스 기본값, 최대 %d대)"),
 			BasePort + 1, BasePort + MaxCameras, MaxCameras);
 	}
 

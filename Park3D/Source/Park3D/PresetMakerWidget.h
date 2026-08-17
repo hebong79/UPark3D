@@ -37,7 +37,6 @@ public:
 	UPROPERTY(meta = (BindWidget)) UButton* Btn_Save = nullptr;
 	UPROPERTY(meta = (BindWidget)) UButton* Btn_Open = nullptr;
 	UPROPERTY(meta = (BindWidget)) UButton* Btn_Init = nullptr;
-	UPROPERTY(meta = (BindWidget)) UButton* Btn_Create = nullptr;
 	UPROPERTY(meta = (BindWidget)) UButton* Btn_OffsetPick = nullptr;
 
 	// Offset Pick 버튼의 글씨(제어 상태 표시용 색 변경 대상).
@@ -196,7 +195,6 @@ protected:
 	UFUNCTION() void HandleInit();
 	UFUNCTION() void HandleSave();
 	UFUNCTION() void HandleOpen();
-	UFUNCTION() void HandleCreate();
 	UFUNCTION() void HandleOffsetPick();
 
 	/** Offset Pick 키보드 제어 상태를 설정(색상/포커스/알림 처리). */

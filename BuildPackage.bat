@@ -32,6 +32,16 @@ if not errorlevel 1 (
     exit /b 1
 )
 
+rem The staging step below (robocopy /MIR) overwrites the packaged config with the repo
+rem one. Values tweaked in place - ports, level, light file - vanish silently. Show the
+rem difference BEFORE the long build so it can be carried over to the repo config first.
+rem Korean text lives in the .ps1: a .bat cannot control its own code page (see header).
+if exist "%~dp0CheckStagedConfig.ps1" (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0CheckStagedConfig.ps1" ^
+        -RepoConfig "%~dp0Park3D\Save\Config\config_pmaker.json" ^
+        -StagedConfig "%ARCHIVE%\Windows\Save\Config\config_pmaker.json"
+)
+
 echo [PACKAGE] start - Development / Win64
 echo [PACKAGE] log: "%LOG%"
 echo.

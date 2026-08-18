@@ -74,6 +74,14 @@ void UPresetMakerWidget::NativeConstruct()
 	// WBP 쪽에서 칠하면 값만 들어가고 화면에는 반영되지 않는다.
 	Park3DPanelStyle::ApplyToTree(WidgetTree);
 
+	// 묶음 경계에 구분선(카메라 패널과 같은 정리). 한 번만 넣는다.
+	if (!bGroupDividersInserted)
+	{
+		bGroupDividersInserted = true;
+		Park3DPanelStyle::InsertGroupDividers(WidgetTree, Park3DPanelStyle::FindContentColumn(WidgetTree),
+			{ (UWidget*)Field_OffsetX, (UWidget*)Combo_DirType, (UWidget*)Check_UseDecal });
+	}
+
 
 	// 바인딩은 반드시 AddUniqueDynamic 을 쓴다(AddDynamic 은 중복을 막지 않는다).
 	// MainMenuWidget::TogglePanel 이 패널 인스턴스를 캐시한 채 RemoveFromParent/AddToViewport 를
@@ -184,6 +192,7 @@ void UPresetMakerWidget::NativeConstruct()
 void UPresetMakerWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
+	Park3DPanelStyle::FitPanelHeight(RootBorder, Park3DPanelStyle::FindContentColumn(WidgetTree), this);
 
 	// offsetPick 제어 중: 공용 WASD를 카메라(RMB)와 번갈아 쓰면 RMB 클릭 시 키보드 포커스가
 	// 뷰포트로 넘어가고, RMB 를 떼도 위젯으로 돌아오지 않아 프리셋 제어가 멈춘다.

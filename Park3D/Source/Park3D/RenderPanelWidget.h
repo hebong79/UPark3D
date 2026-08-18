@@ -60,6 +60,9 @@ protected:
 	virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
 private:
+	/** 묶음 구분선은 한 번만 넣는다 — NativeConstruct 는 패널을 다시 열 때마다 돈다. */
+	bool bGroupDividersInserted = false;
+
 	UFUNCTION() void HandleRandomize();
 	UFUNCTION() void HandleResetColor();
 	UFUNCTION() void HandleHideRandom();

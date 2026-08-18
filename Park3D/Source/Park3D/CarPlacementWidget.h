@@ -160,6 +160,9 @@ protected:
 	UFUNCTION() UWidget* HandleGenerateComboItem(FString Item);
 
 private:
+	/** 묶음 구분선은 한 번만 넣는다 — NativeConstruct 는 패널을 다시 열 때마다 돈다. */
+	bool bGroupDividersInserted = false;
+
 	TArray<FCarPresetEntry> GetCatalog() const;
 	ACarPlacementManager* GetCarManager();
 

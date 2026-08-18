@@ -37,4 +37,20 @@ struct PARK3D_API FLightSettings
 
 	/** 하늘빛(SkyLight) 광량. 그늘의 밝기를 좌우한다. */
 	UPROPERTY(BlueprintReadWrite, Category = "Light") float SkyIntensity = 1.0f;
+
+	/**
+	 * 그늘 채움광(lux). 그림자를 만들지 않는 보조 DirectionalLight 의 광량이다.
+	 * UE5.8 에는 "그림자 농도" 속성이 없어 그늘을 연하게 하려면 빛을 더하는 수밖에 없다.
+	 * 태양·하늘빛과 달리 우리가 스폰한 액터라 UltraDynamicSky 가 덮어쓰지 않는다 —
+	 * UDS 레벨에서도 유일하게 그늘 밝기를 조절할 수 있는 값이다.
+	 * 기본 0 = 끔. 기존 화면과 완전히 같게 두어 scenario.* 가림률 기준선을 보존한다.
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = "Light") float ShadowFillIntensity = 0.0f;
+
+	/**
+	 * 차량 전용 보조광(lux). 라이팅 채널 1 에만 걸려 차량만 밝힌다(노면·건물은 그대로).
+	 * 건물 그림자에 들어간 차량이 검게 뭉개지지 않도록 바닥 밝기를 깔아 주는 용도다.
+	 * 기본 0 = 끔.
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = "Light") float CarFillIntensity = 0.0f;
 };

@@ -61,6 +61,8 @@ protected:
 	UFUNCTION() void HandleAltitudeSlider(float V);
 	UFUNCTION() void HandleAzimuthSlider(float V);
 	UFUNCTION() void HandleSkyIntensitySlider(float V);
+	UFUNCTION() void HandleShadowFillSlider(float V);
+	UFUNCTION() void HandleCarFillSlider(float V);
 
 private:
 	/** 위젯 트리를 C++ 로 구성한다(최초 1회). */
@@ -92,12 +94,16 @@ private:
 	UPROPERTY(Transient) TObjectPtr<USlider> Slider_Altitude = nullptr;
 	UPROPERTY(Transient) TObjectPtr<USlider> Slider_Azimuth = nullptr;
 	UPROPERTY(Transient) TObjectPtr<USlider> Slider_SkyIntensity = nullptr;
+	UPROPERTY(Transient) TObjectPtr<USlider> Slider_ShadowFill = nullptr;
+	UPROPERTY(Transient) TObjectPtr<USlider> Slider_CarFill = nullptr;
 
 	UPROPERTY(Transient) TObjectPtr<UEditableTextBox> Field_Exposure = nullptr;
 	UPROPERTY(Transient) TObjectPtr<UEditableTextBox> Field_SunIntensity = nullptr;
 	UPROPERTY(Transient) TObjectPtr<UEditableTextBox> Field_Altitude = nullptr;
 	UPROPERTY(Transient) TObjectPtr<UEditableTextBox> Field_Azimuth = nullptr;
 	UPROPERTY(Transient) TObjectPtr<UEditableTextBox> Field_SkyIntensity = nullptr;
+	UPROPERTY(Transient) TObjectPtr<UEditableTextBox> Field_ShadowFill = nullptr;
+	UPROPERTY(Transient) TObjectPtr<UEditableTextBox> Field_CarFill = nullptr;
 
 	UPROPERTY(Transient) TObjectPtr<UEditableTextBox> Field_ColorR = nullptr;
 	UPROPERTY(Transient) TObjectPtr<UEditableTextBox> Field_ColorG = nullptr;

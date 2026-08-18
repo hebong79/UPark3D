@@ -35,6 +35,7 @@ namespace
 	constexpr float AltitudeMin = 0.0f, AltitudeMax = 90.0f;
 	constexpr float AzimuthMin = 0.0f, AzimuthMax = 360.0f;
 	constexpr float UiSkyIntensityMin = 0.0f, UiSkyIntensityMax = 20.0f;
+	constexpr float UiFillIntensityMin = 0.0f, UiFillIntensityMax = 20.0f;
 
 	// 열 너비. 라벨/수치를 고정폭으로 잡아야 슬라이더가 남는 폭을 차지하고 서로 겹치지 않는다.
 	constexpr float LabelColumnWidth = 150.0f;
@@ -190,6 +191,9 @@ void ULightControlWidget::BuildUI()
 	AddSliderRow(Box, FText::FromString(TEXT("태양 고도 (도)")), AltitudeMin, AltitudeMax, Slider_Altitude, Field_Altitude);
 	AddSliderRow(Box, FText::FromString(TEXT("태양 방위 (도)")), AzimuthMin, AzimuthMax, Slider_Azimuth, Field_Azimuth);
 	AddSliderRow(Box, FText::FromString(TEXT("하늘빛 광량")), UiSkyIntensityMin, UiSkyIntensityMax, Slider_SkyIntensity, Field_SkyIntensity);
+	// 채움광 2종. UltraDynamicSky 레벨에서는 위 5항목이 무력화되고 이 둘만 화면에 반영된다.
+	AddSliderRow(Box, FText::FromString(TEXT("그늘 채움 (lux)")), UiFillIntensityMin, UiFillIntensityMax, Slider_ShadowFill, Field_ShadowFill);
+	AddSliderRow(Box, FText::FromString(TEXT("차량 채움 (lux)")), UiFillIntensityMin, UiFillIntensityMax, Slider_CarFill, Field_CarFill);
 
 	// 태양 색 (R/G/B 0~1)
 	{
@@ -270,6 +274,8 @@ void ULightControlWidget::NativeConstruct()
 	if (Slider_Altitude) { Slider_Altitude->OnValueChanged.AddUniqueDynamic(this, &ULightControlWidget::HandleAltitudeSlider); }
 	if (Slider_Azimuth) { Slider_Azimuth->OnValueChanged.AddUniqueDynamic(this, &ULightControlWidget::HandleAzimuthSlider); }
 	if (Slider_SkyIntensity) { Slider_SkyIntensity->OnValueChanged.AddUniqueDynamic(this, &ULightControlWidget::HandleSkyIntensitySlider); }
+	if (Slider_ShadowFill) { Slider_ShadowFill->OnValueChanged.AddUniqueDynamic(this, &ULightControlWidget::HandleShadowFillSlider); }
+	if (Slider_CarFill) { Slider_CarFill->OnValueChanged.AddUniqueDynamic(this, &ULightControlWidget::HandleCarFillSlider); }
 
 	// 현재 레벨 조명을 그대로 읽어와 시작한다(패널을 열었다고 화면이 바뀌면 안 된다).
 	FLightSettings Cur;
@@ -311,12 +317,16 @@ void ULightControlWidget::SetFields(const FLightSettings& In)
 	if (Slider_Altitude) { Slider_Altitude->SetValue(S.SunAltitudeDeg); }
 	if (Slider_Azimuth) { Slider_Azimuth->SetValue(S.SunAzimuthDeg); }
 	if (Slider_SkyIntensity) { Slider_SkyIntensity->SetValue(S.SkyIntensity); }
+	if (Slider_ShadowFill) { Slider_ShadowFill->SetValue(S.ShadowFillIntensity); }
+	if (Slider_CarFill) { Slider_CarFill->SetValue(S.CarFillIntensity); }
 
 	if (Field_Exposure) { Field_Exposure->SetText(FText::FromString(Fmt(S.ExposureEV100))); }
 	if (Field_SunIntensity) { Field_SunIntensity->SetText(FText::FromString(Fmt(S.SunIntensity))); }
 	if (Field_Altitude) { Field_Altitude->SetText(FText::FromString(Fmt(S.SunAltitudeDeg))); }
 	if (Field_Azimuth) { Field_Azimuth->SetText(FText::FromString(Fmt(S.SunAzimuthDeg))); }
 	if (Field_SkyIntensity) { Field_SkyIntensity->SetText(FText::FromString(Fmt(S.SkyIntensity))); }
+	if (Field_ShadowFill) { Field_ShadowFill->SetText(FText::FromString(Fmt(S.ShadowFillIntensity))); }
+	if (Field_CarFill) { Field_CarFill->SetText(FText::FromString(Fmt(S.CarFillIntensity))); }
 
 	if (Field_ColorR) { Field_ColorR->SetText(FText::FromString(Fmt(S.SunColor.R))); }
 	if (Field_ColorG) { Field_ColorG->SetText(FText::FromString(Fmt(S.SunColor.G))); }
@@ -331,6 +341,8 @@ FLightSettings ULightControlWidget::GetFields() const
 	S.SunAltitudeDeg = ParseOr(Field_Altitude, S.SunAltitudeDeg);
 	S.SunAzimuthDeg = ParseOr(Field_Azimuth, S.SunAzimuthDeg);
 	S.SkyIntensity = ParseOr(Field_SkyIntensity, S.SkyIntensity);
+	S.ShadowFillIntensity = ParseOr(Field_ShadowFill, S.ShadowFillIntensity);
+	S.CarFillIntensity = ParseOr(Field_CarFill, S.CarFillIntensity);
 	S.SunColor = FLinearColor(ParseOr(Field_ColorR, 1.f), ParseOr(Field_ColorG, 1.f), ParseOr(Field_ColorB, 1.f), 1.f);
 	ULightControlLibrary::ClampSettings(S);
 	return S;
@@ -411,6 +423,8 @@ void ULightControlWidget::HandleSunIntensitySlider(float V) { PARK3D_SLIDER_HAND
 void ULightControlWidget::HandleAltitudeSlider(float V) { PARK3D_SLIDER_HANDLER(Field_Altitude) }
 void ULightControlWidget::HandleAzimuthSlider(float V) { PARK3D_SLIDER_HANDLER(Field_Azimuth) }
 void ULightControlWidget::HandleSkyIntensitySlider(float V) { PARK3D_SLIDER_HANDLER(Field_SkyIntensity) }
+void ULightControlWidget::HandleShadowFillSlider(float V) { PARK3D_SLIDER_HANDLER(Field_ShadowFill) }
+void ULightControlWidget::HandleCarFillSlider(float V) { PARK3D_SLIDER_HANDLER(Field_CarFill) }
 
 #undef PARK3D_SLIDER_HANDLER
 

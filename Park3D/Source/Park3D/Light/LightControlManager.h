@@ -68,6 +68,22 @@ private:
 	 */
 	void EnsureLightingActors();
 
+	/**
+	 * 채움광(그림자를 만들지 않는 보조 DirectionalLight)을 태그로 찾고, 없으면 스폰한다.
+	 * 레벨의 태양과 섞이지 않도록 우리 액터에만 태그를 달고 그 태그로만 되찾는다 —
+	 * FindSun 은 컴포넌트 기준이라 태그가 없으면 이 채움광을 태양으로 오인할 수 있다.
+	 * bCarOnly 면 라이팅 채널 1 에만 걸어 차량만 밝힌다.
+	 */
+	ADirectionalLight* EnsureFillLight(FName Tag, bool bCarOnly);
+
+	/**
+	 * 채움광 두 개에 세기를 적용한다. 통합 하늘 시스템이 있는 레벨에서도 실행된다 —
+	 * 우리가 소유한 액터라 그 시스템이 덮어쓰지 않고, 값을 더하기만 하므로 서로 싸우지 않는다.
+	 * 차량 전용 채움광이 실제로 차량에만 걸리려면 차량 메시가 라이팅 채널 1 에 있어야 하므로
+	 * 여기서 월드의 ACarActor 를 훑어 채널을 맞춰 준다(이미 맞으면 아무 일도 하지 않는다).
+	 */
+	void ApplyFillLights(const FLightSettings& S);
+
 	UPROPERTY()
 	FLightSettings LastApplied;
 };

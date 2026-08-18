@@ -52,7 +52,10 @@ void APTZCameraActor::InitRenderTarget(int32 W, int32 H)
 	{
 		RenderTarget = NewObject<UTextureRenderTarget2D>(this);
 	}
-	RenderTarget->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;  // RGBA8 ~3.5MB/1대(설계 §12-B)
+	// RGBA8 ~3.5MB/1대(설계 §12-B). sRGB 타깃이어야 리드백 바이트가 "화면에 보이는 값"이 된다 —
+	// RTF_RGBA8(선형)로 두면 엔진이 화면에 그릴 때만 sRGB 로 바꿔 주고, ReadPixels 로 꺼낸 바이트는
+	// 선형 그대로라 JPEG 이 화면보다 어둡고 진하게 나온다(실측 평균 106.8 → 62.1).
+	RenderTarget->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8_SRGB;
 	RenderTarget->ClearColor = FLinearColor::Black;
 	RenderTarget->bAutoGenerateMips = false;
 	RenderTarget->InitAutoFormat(W, H);

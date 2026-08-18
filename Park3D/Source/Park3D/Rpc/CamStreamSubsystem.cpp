@@ -551,7 +551,9 @@ bool UCamStreamSubsystem::EnsureMainCapture()
 	if (!MainRT)
 	{
 		MainRT = NewObject<UTextureRenderTarget2D>(this);
-		MainRT->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
+		// sRGB 타깃이어야 리드백 바이트가 "화면에 보이는 값"이 된다(PTZ 렌더타깃과 같은 이유).
+		// 포맷은 그대로 PF_B8G8R8A8 이라 아래의 BGRA 재해석 가드도 그대로 성립한다.
+		MainRT->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8_SRGB;
 		MainRT->ClearColor = FLinearColor::Black;
 		MainRT->bAutoGenerateMips = false;
 		MainRT->InitAutoFormat(FMath::Max(16, MainWidth), FMath::Max(16, MainHeight));

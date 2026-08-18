@@ -106,6 +106,17 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Car")
 	bool IsSelected() const { return bSelected; }
 
+	/**
+	 * 선택 표시(청록 오버레이)를 화면에 낼지 여부. 선택 상태(bSelected) 자체는 건드리지 않는다 —
+	 * 표시를 꺼도 이동·회전·수정 대상은 그대로 선택된 차량이어야 하기 때문이다.
+	 * 전체 일괄 설정은 ACarPlacementManager::SetSelectionMarkVisible 가 창구다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Car")
+	void SetSelectionMarkVisible(bool bInVisible);
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Car")
+	bool IsSelectionMarkVisible() const { return bSelectionMarkVisible; }
+
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Car|Plate")
 	FString GetPlateNumber() const { return PlateNumber; }
 
@@ -142,5 +153,9 @@ private:
 	 */
 	static constexpr float PlateWidgetFill = 0.82f;
 
+	/** 선택 여부와 표시 설정을 함께 반영한다(둘 다 참일 때만 오버레이가 붙는다). */
+	void ApplySelectionVisual();
+
 	bool bSelected = false;
+	bool bSelectionMarkVisible = true;
 };

@@ -177,6 +177,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Car")
 	void SetSelectedIndices(const TArray<int32>& SelectedIndices);
 
+	/**
+	 * 선택 표시(청록 오버레이)를 화면에 낼지 전체 일괄 설정("선택 표시" 체크박스의 진입점).
+	 * 선택 자체는 유지되므로 표시를 꺼도 이동·회전·삭제 대상은 그대로다.
+	 * @return 실제로 표시 상태가 바뀐 차량 수(선택돼 있던 차량만 화면이 바뀐다).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Car")
+	int32 SetSelectionMarkVisible(bool bInVisible);
+
+	/** 현재 선택 표시 설정(체크박스 초기 상태 동기화용). */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Car")
+	bool IsSelectionMarkVisible() const { return bSelectionMarkVisible; }
+
 	/** 현재 차량 상태 → FCarPosDatas(저장용, UE→Unity 역변환 포함). */
 	UFUNCTION(BlueprintCallable, Category = "Car")
 	FCarPosDatas ToCarPosDatas() const;
@@ -210,6 +222,13 @@ private:
 
 	/** 카탈로그에서 무작위 prefabId(1-based Idx) 반환. 빈 카탈로그면 1. */
 	static int32 RandomPrefabId(const TArray<FCarPresetEntry>& Catalog, FRandomStream& Stream);
+
+	/**
+	 * 선택 표시를 화면에 낼지. 매니저가 권위이고 차량은 이 값을 받아 간다 — 새로 스폰된 차량도
+	 * SetSelectedIndices 를 거치면서 현재 설정을 받으므로 배치 도중에 설정이 어긋나지 않는다.
+	 * UPROPERTY 로 두지 않는다: 저장 대상이 아닌 런타임 표시 설정이다(차량 숨김과 같은 성격).
+	 */
+	bool bSelectionMarkVisible = true;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<ACarActor>> Cars;

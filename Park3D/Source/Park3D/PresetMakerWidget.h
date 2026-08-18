@@ -260,4 +260,10 @@ private:
 
 	/** 파일 저장 대화상자로 저장할 경로를 받는다. 사용자가 취소하면 false. */
 	bool PromptSaveFilePath(FString& OutPath) const;
+
+	/**
+	 * 마지막으로 열거나 저장한 파일의 전체 경로. 저장 대화상자의 기본 파일명·폴더로 쓴다 —
+	 * 열어서 고친 파일을 저장할 때 고정 기본명(preset.json)이 뜨면 매번 다시 골라야 한다.
+	 */
+	FString CurFilePath;
 };

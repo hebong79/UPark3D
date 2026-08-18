@@ -475,12 +475,15 @@ void UCarPlacementWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaT
 
 	// 좌클릭(Ctrl 없이): 차량을 집으면 선택. Ctrl+좌클릭: 배치 모드일 때 빈 바닥에 차량 추가.
 	// UI 패널(RootBorder) 위 클릭은 제외해 패널 뒤 차량의 오선택을 방지.
-	const bool bCtrl = PC->IsInputKeyDown(EKeys::LeftControl) || PC->IsInputKeyDown(EKeys::RightControl);
+	// 패널이 떠 있으면 입력이 Slate 로 가서 PlayerController 는 아무것도 못 본다 → 양쪽을 함께 본다
+	// (Alt 가 이미 그렇게 돼 있었다. Ctrl·좌클릭도 같은 함정이었다 — 2026-08-18 실측).
+	const bool bCtrl = Park3DPickInput::IsCtrlDown(PC);
 	// Left Alt 는 ParkFlyPawn 의 화면기준 패닝 수정자. (PIE 가 Alt 를 가로챌 수 있어 Slate 수정자도 함께 본다)
 	const bool bLeftAlt = PC->IsInputKeyDown(EKeys::LeftAlt)
 		|| (FSlateApplication::IsInitialized() && FSlateApplication::Get().GetModifierKeys().IsLeftAltDown());
 	const bool bOverPanel = (RootBorder && RootBorder->IsHovered());
-	if (!bOverPanel && PC->WasInputKeyJustPressed(EKeys::LeftMouseButton))
+	const bool bClickJustPressed = PickClickEdge.Poll(PC);
+	if (!bOverPanel && bClickJustPressed)
 	{
 		FHitResult Hit;
 		if (PC->GetHitResultUnderCursor(ECC_Visibility, false, Hit) && Hit.bBlockingHit)

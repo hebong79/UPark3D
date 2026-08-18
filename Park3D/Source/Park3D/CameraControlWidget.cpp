@@ -450,7 +450,9 @@ void UCameraControlWidget::SetControlSlider(ECamCtrl Kind, float Value)
 	{
 		if (C->Slider)
 		{
-			// 프로그램적 SetValue는 OnValueChanged 미브로드캐스트(사용자 조작만 발생) → 재진입 없음.
+			// 주의: UE5.8 의 USlider::SetValue 는 값이 달라지면 OnValueChanged 를 브로드캐스트한다
+			// (Slider.cpp:41 — 프로그램적 세팅도 예외가 아니다). 여러 컨트롤을 이어서 채우는 경로는
+			// bFillingControls 로 이 되돌이를 막아야 한다.
 			C->Slider->SetValue(UCameraControlLibrary::ValueToSlider(Value, GetControlMin(Kind), GetControlMax(Kind)));
 		}
 	}
@@ -459,6 +461,13 @@ void UCameraControlWidget::SetControlSlider(ECamCtrl Kind, float Value)
 // ===== 슬라이더/필드 → 카메라 (§6.1) =====
 void UCameraControlWidget::OnSliderChanged(ECamCtrl Kind, float Slider01)
 {
+	if (bFillingControls)
+	{
+		// 프리셋 값을 컨트롤에 채우는 중이다. 여기서 카메라에 반영하면 아직 채우지 않은 컨트롤의
+		// 이전 값이 함께 실려 나가고, SyncCameraPosAcrossPresets 가 그 값을 프리셋에 써 버린다.
+		// 반영은 FillControlsFromDir 이 여섯 개를 다 채운 뒤 한 번에 한다.
+		return;
+	}
 	const float Value = UCameraControlLibrary::SliderToValue(Slider01, GetControlMin(Kind), GetControlMax(Kind));
 	SetControlCurText(Kind, Value);
 	ApplyControlToCamera(Kind);
@@ -771,8 +780,15 @@ void UCameraControlWidget::HandlePresetDelete()
 }
 
 // ===== 프리셋 ↔ 컨트롤 =====
-void UCameraControlWidget::FillControlsFromDir(const FCamDir& Dir)
+void UCameraControlWidget::FillControlsFromDir(const FCamDir& InDir)
 {
+	// 값을 복사해 둔다 — 호출자는 CamData 안의 원소를 그대로 넘기는데(CP.datas[0] 등),
+	// 채우는 도중 SyncCameraPosAcrossPresets 가 그 배열을 덮어쓰면 남은 항목을 이미 바뀐 값에서 읽게 된다.
+	const FCamDir Dir = InDir;
+
+	// 채우는 동안 슬라이더 콜백이 되돌아오지 못하게 막는다(USlider::SetValue 가 브로드캐스트한다).
+	TGuardValue<bool> FillGuard(bFillingControls, true);
+
 	// Pan/Tilt/Zoom 은 min/max 를 프리셋(ptzmin/ptzmax)에서 먼저 세팅 후 value 클램프.
 	// Height/X/Z 는 프리셋에 범위가 없으므로 현재 min/max(기본값) 유지, value(pos)만 세팅.
 	if (FSliderCtrl* CPan = FindControl(ECamCtrl::Pan))

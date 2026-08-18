@@ -258,7 +258,7 @@ private:
 	void ApplyAllControlsToCamera();
 
 	// 프리셋 ↔ 컨트롤(§6.2)
-	void FillControlsFromDir(const FCamDir& Dir);   // min/max 먼저, value 클램프
+	void FillControlsFromDir(const FCamDir& InDir); // min/max 먼저, value 클램프(값은 내부에서 복사해 쓴다)
 	void CollectDirFromControls(FCamDir& OutDir);   // pos=Unity좌표, rot=(tilt,pan,0), ptzmin/max
 
 	/**
@@ -368,6 +368,12 @@ private:
 
 	// 콤보 재구성 중 OnSelectionChanged 재진입 방지 플래그.
 	bool bComboRefreshing = false;
+	/**
+	 * FillControlsFromDir 로 컨트롤을 채우는 중인지. UE5.8 의 USlider::SetValue 는 값이 달라지면
+	 * OnValueChanged 를 브로드캐스트하므로(Slider.cpp:41), 프로그램적 세팅이 OnSliderChanged 로
+	 * 되돌아와 아직 채우지 않은 컨트롤 값까지 카메라·프리셋에 써 버린다.
+	 */
+	bool bFillingControls = false;
 	bool bDistanceAutoOpenAttemptedThisViewportSession = false;
 	/**
 	 * 거리 측정 창을 사용자가 띄워 둔 상태인지. 시작 시에는 false 라 창이 뜨지 않고,

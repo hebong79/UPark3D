@@ -50,6 +50,7 @@ void UCarPlacementWidget::NativeOnInitialized()
 	// 이 함수는 위젯 인스턴스당 1회라 중복 삽입도 생기지 않는다.
 	InjectRandomModeRow();
 	InjectHideCarsRow();
+	InjectSelectionMarkRow();   // 차량 숨기기 줄을 기준으로 붙으므로 그 다음에 부른다.
 }
 
 void UCarPlacementWidget::NativeConstruct()
@@ -135,6 +136,7 @@ void UCarPlacementWidget::NativeConstruct()
 	if (Radio_Front)  Radio_Front->OnCheckStateChanged.AddUniqueDynamic(this, &UCarPlacementWidget::HandleFrontChanged);
 	if (Radio_Back)   Radio_Back->OnCheckStateChanged.AddUniqueDynamic(this, &UCarPlacementWidget::HandleBackChanged);
 	if (Check_HideCars) Check_HideCars->OnCheckStateChanged.AddUniqueDynamic(this, &UCarPlacementWidget::HandleHideCarsChanged);
+	if (Check_SelMark.IsValid()) Check_SelMark->OnCheckStateChanged.AddUniqueDynamic(this, &UCarPlacementWidget::HandleSelMarkChanged);
 
 	SetFileName(CurFileName.IsEmpty() ? TEXT("CarPos_SNum.json") : CurFileName);
 
@@ -148,6 +150,10 @@ void UCarPlacementWidget::NativeConstruct()
 		if (Check_HideCars)
 		{
 			Check_HideCars->SetIsChecked(Mgr->AreAllCarsHidden());
+		}
+		if (Check_SelMark.IsValid())
+		{
+			Check_SelMark->SetIsChecked(Mgr->IsSelectionMarkVisible());
 		}
 	}
 
@@ -345,6 +351,101 @@ void UCarPlacementWidget::InjectHideCarsRow()
 	else
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[CarPlacement] 기준 줄을 찾지 못해 차량 숨기기 줄을 목록 끝에 둡니다."));
+	}
+
+	// 세로 간격을 기준 줄과 맞춘다.
+	if (UVerticalBoxSlot* VS = Cast<UVerticalBoxSlot>(NewSlot))
+	{
+		VS->SetHorizontalAlignment(HAlign_Fill);
+		if (AnchorRow)
+		{
+			if (UVerticalBoxSlot* SrcSlot = Cast<UVerticalBoxSlot>(AnchorRow->Slot))
+			{
+				VS->SetPadding(SrcSlot->GetPadding());
+			}
+		}
+	}
+}
+
+void UCarPlacementWidget::InjectSelectionMarkRow()
+{
+	if (!WidgetTree)
+	{
+		return;
+	}
+
+	// 디자이너(WBP)가 이미 같은 이름으로 제공하면 그것을 쓴다(BindWidgetOptional 과 같은 규약).
+	if (UCheckBox* Existing = WidgetTree->FindWidget<UCheckBox>(TEXT("Check_SelMark")))
+	{
+		Check_SelMark = Existing;
+		return;
+	}
+
+	UVerticalBox* Root = WidgetTree->FindWidget<UVerticalBox>(TEXT("VBox_Root"));
+	if (!Root)
+	{
+		// 줄을 못 넣어도 기능 자체는 SetSelectionMarkVisible(BlueprintCallable)로 호출 가능하다.
+		UE_LOG(LogTemp, Warning, TEXT("[CarPlacement] VBox_Root 를 찾지 못해 선택 표시 줄을 넣지 못했습니다."));
+		return;
+	}
+
+	// --- 체크박스 (스타일은 기존 체크박스에서 복사) ---
+	UCheckBox* Check = WidgetTree->ConstructWidget<UCheckBox>(UCheckBox::StaticClass(), TEXT("Check_SelMark"));
+	if (Check_Vertical)
+	{
+		Check->SetWidgetStyle(Check_Vertical->GetWidgetStyle());
+	}
+	// 기본값은 매니저의 현재 설정(기본 표시). 패널을 처음 열 때 화면과 체크가 어긋나지 않게 한다.
+	Check->SetIsChecked(true);
+	Check_SelMark = Check;
+
+	// --- 라벨 (폰트/색은 같은 줄 형식의 기존 라벨에서 복사) ---
+	UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Lbl_SelMark"));
+	Label->SetText(FText::FromString(TEXT("선택 표시")));
+	if (UTextBlock* SrcLabel = WidgetTree->FindWidget<UTextBlock>(TEXT("Lbl_Vertical")))
+	{
+		Label->SetFont(SrcLabel->GetFont());
+		Label->SetColorAndOpacity(SrcLabel->GetColorAndOpacity());
+	}
+
+	// --- 줄 구성: [체크박스] [라벨] ---
+	UHorizontalBox* Line = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("HB_SelMark"));
+	if (UHorizontalBoxSlot* CheckSlot = Cast<UHorizontalBoxSlot>(Line->AddChild(Check)))
+	{
+		CheckSlot->SetVerticalAlignment(VAlign_Center);
+	}
+	if (UHorizontalBoxSlot* LabelSlot = Cast<UHorizontalBoxSlot>(Line->AddChild(Label)))
+	{
+		LabelSlot->SetPadding(FMargin(6.f, 0.f, 0.f, 0.f)); // 체크박스와의 간격.
+		LabelSlot->SetVerticalAlignment(VAlign_Center);
+	}
+
+	// --- 삽입 위치: 차량 숨기기 줄 바로 다음 ---
+	// 앵커가 VBox_Root 의 직계 자식이 아닐 수 있으므로 부모를 거슬러 올라간다(InjectHideCarsRow 와 동일).
+	int32 AnchorIndex = INDEX_NONE;
+	UWidget* AnchorRow = nullptr;
+	if (Check_HideCars)
+	{
+		UWidget* Node = Check_HideCars;
+		while (Node && Node->GetParent() != Root)
+		{
+			Node = Node->GetParent();
+		}
+		if (Node)
+		{
+			AnchorRow = Node;
+			AnchorIndex = Root->GetChildIndex(Node);
+		}
+	}
+
+	UPanelSlot* NewSlot = Root->AddChild(Line);
+	if (AnchorIndex != INDEX_NONE)
+	{
+		Root->ShiftChild(AnchorIndex + 1, Line);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CarPlacement] 기준 줄을 찾지 못해 선택 표시 줄을 목록 끝에 둡니다."));
 	}
 
 	// 세로 간격을 기준 줄과 맞춘다.
@@ -847,6 +948,27 @@ int32 UCarPlacementWidget::SetAllCarsHidden(bool bHidden)
 	return Changed;
 }
 
+// ===== 선택 표시 출력 =====
+int32 UCarPlacementWidget::SetSelectionMarkVisible(bool bVisible)
+{
+	ACarPlacementManager* Mgr = GetCarManager();
+	if (!Mgr)
+	{
+		Notify(TEXT("선택 표시 변경 실패 — 차량 매니저 없음"));
+		return 0;
+	}
+
+	const int32 Changed = Mgr->SetSelectionMarkVisible(bVisible);
+	if (Check_SelMark.IsValid() && Check_SelMark->IsChecked() != bVisible)
+	{
+		// SetIsChecked 는 OnCheckStateChanged 를 쏘지 않으므로 재귀가 생기지 않는다.
+		Check_SelMark->SetIsChecked(bVisible);
+	}
+	Notify(FString::Printf(TEXT("선택 표시 %s — %d대 갱신"),
+		bVisible ? TEXT("켜기") : TEXT("끄기"), Changed));
+	return Changed;
+}
+
 void UCarPlacementWidget::AddCarAtWorld(const FVector& WorldLoc)
 {
 	const TArray<FCarPresetEntry> Catalog = GetCatalog();
@@ -952,6 +1074,7 @@ bool UCarPlacementWidget::SaveToJsonFile(const FString& FilePath)
 {
 	if (UCarPlacementLibrary::SaveCarDatasToJson(FilePath, CarData))
 	{
+		CurFilePath = FilePath;
 		SetFileName(FPaths::GetCleanFilename(FilePath));
 		Notify(FString::Printf(TEXT("저장 %d대 → %s"), CarData.datas.Num(), *FilePath));
 		return true;
@@ -983,6 +1106,7 @@ bool UCarPlacementWidget::LoadFromJsonFile(const FString& FilePath)
 	PrimaryIndex = CarData.datas.Num() > 0 ? 0 : INDEX_NONE;
 	SelectedIndices.Reset();
 	if (PrimaryIndex != INDEX_NONE) SelectedIndices.Add(PrimaryIndex);
+	CurFilePath = FilePath;
 	SetFileName(FPaths::GetCleanFilename(FilePath));
 	if (CarData.datas.IsValidIndex(PrimaryIndex))
 	{
@@ -1059,6 +1183,11 @@ void UCarPlacementWidget::HandleFrontChanged(bool bIsChecked)
 void UCarPlacementWidget::HandleHideCarsChanged(bool bIsChecked)
 {
 	SetAllCarsHidden(bIsChecked);
+}
+
+void UCarPlacementWidget::HandleSelMarkChanged(bool bIsChecked)
+{
+	SetSelectionMarkVisible(bIsChecked);
 }
 
 void UCarPlacementWidget::HandleBackChanged(bool bIsChecked)
@@ -1150,9 +1279,11 @@ bool UCarPlacementWidget::PromptSaveFilePath(FString& OutPath) const
 		? FSlateApplication::Get().FindBestParentWindowHandleForDialogs(nullptr)
 		: nullptr;
 
+	// 열거나 저장한 적이 있으면 그 파일을 그대로 제안한다(폴더까지). 없을 때만 고정 기본명.
 	TArray<FString> Files;
-	const FString DefaultDir = FPaths::GetPath(GetDefaultCarFilePath());
-	const FString DefaultFile = FPaths::GetCleanFilename(GetDefaultCarFilePath());
+	const FString BasePath = CurFilePath.IsEmpty() ? GetDefaultCarFilePath() : CurFilePath;
+	const FString DefaultDir = FPaths::GetPath(BasePath);
+	const FString DefaultFile = FPaths::GetCleanFilename(BasePath);
 	if (DP->SaveFileDialog(ParentHandle, TEXT("차량 배치 저장"), DefaultDir, DefaultFile,
 		TEXT("Car JSON (*.json)|*.json|All Files (*.*)|*.*"), EFileDialogFlags::None, Files) && Files.Num() > 0)
 	{

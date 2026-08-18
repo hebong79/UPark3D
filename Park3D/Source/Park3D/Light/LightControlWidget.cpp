@@ -366,6 +366,7 @@ void ULightControlWidget::SaveToFileDialog()
 		Notify(FString::Printf(TEXT("저장 실패: %s"), *Path));
 		return;
 	}
+	CurFilePath = Path;
 	ULightControlLibrary::SetDefaultFile(Path);
 	Notify(FString::Printf(TEXT("저장 완료(기본값으로 지정): %s"), *FPaths::GetCleanFilename(Path)));
 }
@@ -390,6 +391,7 @@ void ULightControlWidget::OpenFromFileDialog()
 	{
 		M->ApplySettings(S);
 	}
+	CurFilePath = Path;
 	ULightControlLibrary::SetDefaultFile(Path);
 	Notify(FString::Printf(TEXT("불러와 적용(기본값으로 지정): %s"), *FPaths::GetCleanFilename(Path)));
 }
@@ -457,10 +459,11 @@ bool ULightControlWidget::PromptSaveFilePath(FString& OutPath) const
 		? FSlateApplication::Get().FindBestParentWindowHandleForDialogs(nullptr)
 		: nullptr;
 
+	// 열거나 저장한 적이 있으면 그 파일을 그대로 제안한다(폴더까지). 없을 때만 고정 기본명.
 	TArray<FString> Files;
-	const FString Suggested = ULightControlLibrary::GetSuggestedFilePath();
-	if (DP->SaveFileDialog(ParentHandle, TEXT("조명 설정 저장"), ULightControlLibrary::GetLightDir(),
-		FPaths::GetCleanFilename(Suggested),
+	const FString BasePath = CurFilePath.IsEmpty() ? ULightControlLibrary::GetSuggestedFilePath() : CurFilePath;
+	if (DP->SaveFileDialog(ParentHandle, TEXT("조명 설정 저장"), FPaths::GetPath(BasePath),
+		FPaths::GetCleanFilename(BasePath),
 		TEXT("Light JSON (*.json)|*.json|All Files (*.*)|*.*"), EFileDialogFlags::None, Files) && Files.Num() > 0)
 	{
 		OutPath = Files[0];

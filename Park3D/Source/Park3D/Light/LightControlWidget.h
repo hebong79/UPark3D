@@ -77,6 +77,12 @@ private:
 	bool PromptOpenFilePath(FString& OutPath) const;
 	bool PromptSaveFilePath(FString& OutPath) const;
 
+	/**
+	 * 마지막으로 열거나 저장한 파일의 전체 경로. 저장 대화상자의 기본 파일명·폴더로 쓴다 —
+	 * 열어서 고친 파일을 저장할 때 고정 기본명(LightSettings.json)이 뜨면 매번 다시 골라야 한다.
+	 */
+	FString CurFilePath;
+
 	// ---- 구성 요소 ----
 	UPROPERTY(Transient) TObjectPtr<UBorder> RootBorder = nullptr;
 	UPROPERTY(Transient) TObjectPtr<UTextBlock> StatusText = nullptr;

@@ -124,6 +124,13 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Car") int32 SetAllCarsHidden(bool bHidden);
 
+	/**
+	 * 선택 표시(청록 오버레이) 출력 여부("선택 표시" 체크박스 동작). 체크박스 상태도 함께 맞춘다.
+	 * 선택 자체는 유지되므로 표시를 꺼도 이동·회전·수정 대상은 그대로다.
+	 * @return 화면이 실제로 바뀐 차량 수.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Car") int32 SetSelectionMarkVisible(bool bVisible);
+
 	UFUNCTION(BlueprintCallable, Category = "Car") FString GetDefaultCarFilePath() const;
 	UFUNCTION(BlueprintCallable, Category = "Car") bool SaveToJsonFile(const FString& FilePath);
 	UFUNCTION(BlueprintCallable, Category = "Car") bool LoadFromJsonFile(const FString& FilePath);
@@ -155,6 +162,7 @@ protected:
 	UFUNCTION() void HandleFrontChanged(bool bIsChecked);
 	UFUNCTION() void HandleBackChanged(bool bIsChecked);
 	UFUNCTION() void HandleHideCarsChanged(bool bIsChecked);
+	UFUNCTION() void HandleSelMarkChanged(bool bIsChecked);
 
 	/** 콤보 항목 위젯 생성(드롭다운/선택값 공용): 중앙 정렬 + Regular 폰트 + 높이 고정. */
 	UFUNCTION() UWidget* HandleGenerateComboItem(FString Item);
@@ -179,6 +187,21 @@ private:
 	 */
 	void InjectHideCarsRow();
 
+	/**
+	 * "선택 표시" 체크박스 한 줄을 C++ 로 만들어 차량 숨기기 줄 다음에 끼워 넣는다.
+	 * WBP 디자이너에 같은 이름(Check_SelMark)의 위젯이 이미 있으면 그것을 집어 쓴다.
+	 */
+	void InjectSelectionMarkRow();
+
+	/**
+	 * "선택 표시" 체크박스. 다른 위젯과 달리 BindWidget UPROPERTY 로 두지 않는다 —
+	 * 쿠킹된 WBP 의 C++ 베이스에 UPROPERTY 를 추가하면 패키지가 Bad export index 로 즉사해
+	 * exe 교체로는 반영되지 않고 콘텐츠 재쿡이 필요해진다(2026-08-12 기록). 함수 추가는 안전하다.
+	 * 위젯 자체는 WidgetTree 가 참조하므로 GC 로 사라지지 않고, 이름으로 찾으므로 나중에
+	 * 디자이너가 같은 이름으로 만들어 넣어도 그대로 집힌다(BindWidgetOptional 과 같은 효과).
+	 */
+	TWeakObjectPtr<UCheckBox> Check_SelMark;
+
 	/** 이동/회전 대상 인덱스 목록. 프리셋 그룹(Check_PresetGroup) 체크 시 선택 차량과 동일 presetId 전원, 아니면 선택 1대. */
 	TArray<int32> GetActiveIndices() const;
 	/** modifier 입력을 반영해 선택을 갱신한다. Shift = 클릭 항목 토글 누적, 그 외 = 단일 선택. */
@@ -196,6 +219,14 @@ private:
 	void Notify(const FString& Msg) const;
 	bool PromptOpenFilePath(FString& OutPath) const;
 	bool PromptSaveFilePath(FString& OutPath) const;
+
+	/**
+	 * 마지막으로 열거나 저장한 파일의 전체 경로. 저장 대화상자의 기본 파일명·폴더로 쓴다 —
+	 * 열어서 고친 파일을 저장할 때 고정 기본명(CarPos_SNum.json)이 뜨면 매번 다시 골라야 한다.
+	 * 파일명만 가진 CurFileName 과 달리 폴더까지 기억하므로 Save/ 밖에서 연 파일도 제자리에 저장된다.
+	 * UPROPERTY 로 두지 않는다(쿠킹된 WBP 베이스 — CarPlacementWidget.h 의 Check_SelMark 주석 참고).
+	 */
+	FString CurFilePath;
 
 	TWeakObjectPtr<ACarPlacementManager> CarManager;
 

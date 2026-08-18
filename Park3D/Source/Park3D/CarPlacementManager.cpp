@@ -207,9 +207,36 @@ void ACarPlacementManager::SetSelectedIndices(const TArray<int32>& SelectedIndic
 	{
 		if (Cars[i])
 		{
+			// 표시 설정을 여기서 같이 밀어 넣는다 — 모든 차량의 선택 표시가 이 함수를 지나므로
+			// 방금 스폰된 차량도 별도 처리 없이 현재 설정을 받는다.
+			Cars[i]->SetSelectionMarkVisible(bSelectionMarkVisible);
 			Cars[i]->SetSelected(SelectedIndices.Contains(i));
 		}
 	}
+}
+
+int32 ACarPlacementManager::SetSelectionMarkVisible(bool bInVisible)
+{
+	bSelectionMarkVisible = bInVisible;
+
+	int32 Changed = 0;
+	for (ACarActor* Car : Cars)
+	{
+		if (!Car)
+		{
+			continue;
+		}
+		// 화면이 실제로 바뀌는 것은 선택돼 있던 차량뿐이다 — 그 수를 센다.
+		if (Car->IsSelected() && Car->IsSelectionMarkVisible() != bInVisible)
+		{
+			++Changed;
+		}
+		Car->SetSelectionMarkVisible(bInVisible);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[CarPlacement] 선택 표시 %s: 차량 %d대 중 %d대 갱신"),
+		bInVisible ? TEXT("표시") : TEXT("숨김"), Cars.Num(), Changed);
+	return Changed;
 }
 
 FCarPosDatas ACarPlacementManager::ToCarPosDatas() const

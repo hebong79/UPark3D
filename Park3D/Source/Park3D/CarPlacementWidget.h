@@ -8,6 +8,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "ParkingCarTypes.h"
+#include "Park3DPickInput.h"
 #include "CarPlacementWidget.generated.h"
 
 class UButton;
@@ -233,6 +234,9 @@ private:
 	UPROPERTY(Transient) TArray<class UCarListItemWidget*> EntryItems;
 
 	ECarMoveMode MoveMode = ECarMoveMode::Move;
+
+	/** 좌클릭(선택/배치)의 클릭 에지(Slate 경유 입력까지 본다). */
+	Park3DPickInput::FLeftClickEdge PickClickEdge;
 
 	// 패널 드래그 상태
 	bool bDraggingPanel = false;

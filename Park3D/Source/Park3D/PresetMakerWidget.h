@@ -7,6 +7,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "ParkingPresetTypes.h"
+#include "Park3DPickInput.h"
 #include "PresetMakerWidget.generated.h"
 
 class UButton;
@@ -240,6 +241,9 @@ private:
 
 	// 직전 프레임의 RMB 보유 상태(릴리즈 엣지 감지 → 포커스 복귀용).
 	bool bPrevRmbDown = false;
+
+	/** Ctrl+좌클릭 피킹의 클릭 에지(Slate 경유 입력까지 본다). */
+	Park3DPickInput::FLeftClickEdge PickClickEdge;
 
 	// ---- 패널 드래그 상태 ----
 	bool bDraggingPanel = false;

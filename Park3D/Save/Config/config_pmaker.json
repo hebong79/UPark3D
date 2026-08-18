@@ -14,6 +14,7 @@
 	},
 	"map_floor": false,
 	"hide_actors": [
-		"StaticMeshActor_188"
+		"StaticMeshActor_188",
+		"StaticMeshActor_185"
 	]
 }

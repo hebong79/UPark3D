@@ -210,8 +210,11 @@ void UPresetMakerWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 			bPrevRmbDown = bRmbNow;
 
 			// Ctrl + 좌클릭: 선택된 프리셋을 클릭한 월드 지점으로 이동.
-			const bool bCtrl = PC->IsInputKeyDown(EKeys::LeftControl) || PC->IsInputKeyDown(EKeys::RightControl);
-			if (bCtrl && PC->WasInputKeyJustPressed(EKeys::LeftMouseButton) && Presets.IsValidIndex(SelectedIndex))
+			// 패널이 떠 있으면 입력이 Slate 로 가서 PlayerController 는 Ctrl 도 클릭도 못 본다 → 양쪽을 함께 본다.
+			// 에지 판정은 조건과 무관하게 매 틱 돌려야 한다 — 단축 평가로 건너뛰면 눌림 상태가 낡는다.
+			const bool bCtrl = Park3DPickInput::IsCtrlDown(PC);
+			const bool bClickJustPressed = PickClickEdge.Poll(PC);
+			if (bCtrl && bClickJustPressed && Presets.IsValidIndex(SelectedIndex))
 			{
 				FHitResult Hit;
 				if (PC->GetHitResultUnderCursor(ECC_Visibility, false, Hit) && Hit.bBlockingHit)

@@ -9,6 +9,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "CameraControlTypes.h"
+#include "Park3DPickInput.h"
 #include "CameraControlWidget.generated.h"
 
 class UButton;
@@ -402,6 +403,9 @@ private:
 	ETargetLineState TargetLineState = ETargetLineState::None;
 	bool bTargetLineActive = false;
 	bool bTargetPointPicking = false;
+
+	/** Ctrl+좌클릭 피킹의 클릭 에지(Slate 경유 입력까지 본다). */
+	Park3DPickInput::FLeftClickEdge PickClickEdge;
 	bool bHasTargetPoint = false;
 	FVector TargetLineStart = FVector::ZeroVector;
 	FVector TargetLineEnd = FVector::ZeroVector;

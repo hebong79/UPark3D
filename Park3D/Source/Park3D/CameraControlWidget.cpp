@@ -311,9 +311,13 @@ void UCameraControlWidget::NativeTick(const FGeometry& MyGeometry, float InDelta
 	{
 		return;
 	}
-	const bool bCtrl = PC->IsInputKeyDown(EKeys::LeftControl) || PC->IsInputKeyDown(EKeys::RightControl);
+	// 패널이 떠 있으면 입력이 Slate 로 가서 PlayerController 는 아무것도 못 본다 → 양쪽을 함께 본다.
+	// 클릭 에지도 직접 만든다(WasInputKeyJustPressed 는 같은 이유로 영영 false 다).
+	const bool bCtrl = Park3DPickInput::IsCtrlDown(PC);
 	const bool bOverPanel = (RootBorder && RootBorder->IsHovered());
-	if (bPicking && bCtrl && !bOverPanel && PC->WasInputKeyJustPressed(EKeys::LeftMouseButton))
+	const bool bClickJustPressed = PickClickEdge.Poll(PC);
+
+	if (bPicking && bCtrl && !bOverPanel && bClickJustPressed)
 	{
 		ACameraControlManager* Mgr = GetCameraManager();
 		FVector HitWorld;
@@ -337,7 +341,7 @@ void UCameraControlWidget::NativeTick(const FGeometry& MyGeometry, float InDelta
 	}
 
 	// Unity CPCamDistDlg: 타겟라인/타겟점은 완료 라인 표시를 유지하되 입력 소유권만 전역 PickMode로 중재한다.
-	if (bCtrl && !bOverPanel && PC->WasInputKeyJustPressed(EKeys::LeftMouseButton))
+	if (bCtrl && !bOverPanel && bClickJustPressed)
 	{
 		ACameraControlManager* Mgr = GetCameraManager();
 		FVector HitWorld;

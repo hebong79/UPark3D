@@ -943,6 +943,7 @@ void UCameraControlWidget::HandleSave()
 	}
 	if (UCameraControlLibrary::SaveToJson(Path, CamData))
 	{
+		CurFilePath = Path;
 		SetFileName(FPaths::GetCleanFilename(Path));
 		// 저장한 대수가 스트림 포트 대역을 넘으면 대역을 넓혀 config 에 남긴다
 		// (다음에 이 파일을 열었을 때 포트가 모자라지 않게).
@@ -1016,6 +1017,7 @@ bool UCameraControlWidget::LoadFromJsonFile(const FString& Path)
 		ApplyAllControlsToCamera();
 	}
 	RefreshViewerBrush();
+	CurFilePath = Path;
 	SetFileName(FPaths::GetCleanFilename(Path));
 	Notify(FString::Printf(TEXT("열기 %d대 ← %s"), CamData.datas.Num(), *Path));
 	return true;
@@ -2237,9 +2239,11 @@ bool UCameraControlWidget::PromptSaveFilePath(FString& OutPath) const
 		? FSlateApplication::Get().FindBestParentWindowHandleForDialogs(nullptr)
 		: nullptr;
 
+	// 열거나 저장한 적이 있으면 그 파일을 그대로 제안한다(폴더까지). 없을 때만 고정 기본명.
 	TArray<FString> Files;
-	const FString DefaultDir = FPaths::GetPath(GetDefaultFilePath());
-	const FString DefaultFile = FPaths::GetCleanFilename(GetDefaultFilePath());
+	const FString BasePath = CurFilePath.IsEmpty() ? GetDefaultFilePath() : CurFilePath;
+	const FString DefaultDir = FPaths::GetPath(BasePath);
+	const FString DefaultFile = FPaths::GetCleanFilename(BasePath);
 	if (DP->SaveFileDialog(ParentHandle, TEXT("카메라 프리셋 저장"), DefaultDir, DefaultFile,
 		TEXT("Camera JSON (*.json)|*.json|All Files (*.*)|*.*"), EFileDialogFlags::None, Files) && Files.Num() > 0)
 	{

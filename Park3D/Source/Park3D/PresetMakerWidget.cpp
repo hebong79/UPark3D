@@ -558,6 +558,10 @@ void UPresetMakerWidget::HandleSave()
 		return;
 	}
 	const bool bOk = SaveToJsonFile(Path);
+	if (bOk)
+	{
+		CurFilePath = Path;
+	}
 	OnSavePreset(GatherFromFields());
 	Notify(bOk ? FString::Printf(TEXT("저장 완료 (%d개): %s"), Presets.Num(), *Path) : TEXT("저장 실패"));
 }
@@ -571,6 +575,10 @@ void UPresetMakerWidget::HandleOpen()
 		return;
 	}
 	const bool bOk = LoadFromJsonFile(Path);
+	if (bOk)
+	{
+		CurFilePath = Path;
+	}
 	OnOpenPreset();
 	Notify(bOk ? FString::Printf(TEXT("열기 완료 (총 %d개): %s"), Presets.Num(), *Path) : TEXT("열기 실패(파일 없음?)"));
 }
@@ -888,8 +896,10 @@ bool UPresetMakerWidget::PromptSaveFilePath(FString& OutPath) const
 		return true;
 	}
 
-	const FString DefaultDir = FPaths::GetPath(GetDefaultPresetFilePath());
-	const FString DefaultFile = FPaths::GetCleanFilename(GetDefaultPresetFilePath());
+	// 열거나 저장한 적이 있으면 그 파일을 그대로 제안한다(폴더까지). 없을 때만 고정 기본명.
+	const FString BasePath = CurFilePath.IsEmpty() ? GetDefaultPresetFilePath() : CurFilePath;
+	const FString DefaultDir = FPaths::GetPath(BasePath);
+	const FString DefaultFile = FPaths::GetCleanFilename(BasePath);
 	TArray<FString> OutFiles;
 	const bool bPicked = DesktopPlatform->SaveFileDialog(
 		GetDialogParentWindowHandle(),

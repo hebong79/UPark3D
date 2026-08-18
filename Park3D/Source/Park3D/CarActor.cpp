@@ -397,10 +397,27 @@ FCarPos ACarActor::ToCarPos(float MetersToUU) const
 void ACarActor::SetSelected(bool bInSelected)
 {
 	bSelected = bInSelected;
-	if (MeshComp)
+	ApplySelectionVisual();
+}
+
+void ACarActor::SetSelectionMarkVisible(bool bInVisible)
+{
+	bSelectionMarkVisible = bInVisible;
+	ApplySelectionVisual();
+}
+
+void ACarActor::ApplySelectionVisual()
+{
+	if (!MeshComp)
 	{
-		// 도색(carpaint)과 겹치지 않게: 메시 위에 오버레이 머티리얼을 덧입혀 청록 림 발광으로 선택 표시.
-		MeshComp->SetOverlayMaterial(bInSelected ? SelectionOverlayMaterial : nullptr);
-		MeshComp->SetRenderCustomDepth(bInSelected);  // 외곽선 포스트프로세스 연동 시 사용(옵션).
+		return;
 	}
+
+	// 선택돼 있어도 표시가 꺼져 있으면 아무것도 덧입히지 않는다. bSelected 는 그대로 두므로
+	// IsSelected() 를 보는 쪽(Automation 테스트·RPC)은 표시 설정과 무관하게 동작한다.
+	const bool bShowMark = bSelected && bSelectionMarkVisible;
+
+	// 도색(carpaint)과 겹치지 않게: 메시 위에 오버레이 머티리얼을 덧입혀 청록 림 발광으로 선택 표시.
+	MeshComp->SetOverlayMaterial(bShowMark ? SelectionOverlayMaterial : nullptr);
+	MeshComp->SetRenderCustomDepth(bShowMark);  // 외곽선 포스트프로세스 연동 시 사용(옵션).
 }

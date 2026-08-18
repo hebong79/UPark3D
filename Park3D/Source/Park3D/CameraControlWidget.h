@@ -283,6 +283,13 @@ private:
 	void SetFileName(const FString& InName);
 
 	/**
+	 * 마지막으로 열거나 저장한 파일의 전체 경로. 저장 대화상자의 기본 파일명·폴더로 쓴다 —
+	 * 열어서 고친 파일을 저장할 때 고정 기본명(CamPos_SNum.json)이 뜨면 매번 다시 골라야 한다.
+	 * 파일명만 가진 CurFileName 과 달리 폴더까지 기억하므로 Save/ 밖에서 연 파일도 제자리에 저장된다.
+	 */
+	FString CurFilePath;
+
+	/**
 	 * 카메라 대수가 스트림 포트 대역을 넘으면 대역을 넓히도록 UCamStreamSubsystem 에 알린다.
 	 * 카메라위치 파일을 열 때와 저장할 때만 호출한다(대수가 바뀌는 지점).
 	 * 스트리밍 서브시스템은 Game/PIE 월드에만 있으므로 없으면 조용히 넘어간다.

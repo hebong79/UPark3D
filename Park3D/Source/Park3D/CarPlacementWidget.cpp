@@ -60,6 +60,14 @@ void UCarPlacementWidget::NativeConstruct()
 	// WBP 쪽에서 칠하면 값만 들어가고 화면에는 반영되지 않는다.
 	Park3DPanelStyle::ApplyToTree(WidgetTree);
 
+	// 묶음 경계에 구분선(카메라 패널과 같은 정리). 한 번만 넣는다.
+	if (!bGroupDividersInserted)
+	{
+		bGroupDividersInserted = true;
+		Park3DPanelStyle::InsertGroupDividers(WidgetTree, Park3DPanelStyle::FindContentColumn(WidgetTree),
+			{ (UWidget*)Field_Count, (UWidget*)CarList_Scroll, (UWidget*)Field_Idx, (UWidget*)Btn_Save });
+	}
+
 	// 바인딩은 반드시 AddUniqueDynamic 을 쓴다(AddDynamic 은 중복을 막지 않는다).
 	// TogglePanel 이 패널을 캐시한 채 재-AddToViewport 하므로 NativeConstruct 가 재실행되고,
 	// AddDynamic 이면 핸들러가 누적되어 클릭 1회에 N번 호출된다(대화상자가 두 번 뜨던 원인).
@@ -356,6 +364,7 @@ void UCarPlacementWidget::InjectHideCarsRow()
 void UCarPlacementWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
+	Park3DPanelStyle::FitPanelHeight(RootBorder, Park3DPanelStyle::FindContentColumn(WidgetTree), this);
 
 	APlayerController* PC = GetOwningPlayer();
 	if (!PC)

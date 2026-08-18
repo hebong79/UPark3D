@@ -302,8 +302,6 @@ private:
 	void RelocateActionButtons();
 	/** VBox_Root 의 직계 자식 중 InChild 를 품은 것을 돌려준다(줄 단위 이동/구분선 삽입용). */
 	UWidget* FindRootRow(UWidget* InChild) const;
-	/** 그룹 사이에 넣을 1px 가로선. */
-	UWidget* MakeGroupDivider();
 	/** 카메라/프리셋/컨트롤/PTZ 묶음 사이에 구분선을 넣는다. */
 	void InsertGroupDividers();
 	/** 누르는 동안 이동을 시작한다(이미 다른 방향이면 교체). */

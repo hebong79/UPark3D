@@ -1497,17 +1497,6 @@ void UCameraControlWidget::RelocateActionButtons()
 	}
 }
 
-UWidget* UCameraControlWidget::MakeGroupDivider()
-{
-	UBorder* Line = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
-	// 카드가 어두운 회색이므로 밝은 선이어야 보인다(검정 28%로 그었더니 배경에 그대로 묻혔다).
-	Line->SetBrushColor(FLinearColor(1.f, 1.f, 1.f, 0.35f));
-	USizeBox* Box = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
-	Box->SetHeightOverride(1.f);
-	Box->AddChild(Line);
-	return Box;
-}
-
 void UCameraControlWidget::InsertGroupDividers()
 {
 	if (!VBox_Root || bGroupDividersInserted)
@@ -1515,38 +1504,10 @@ void UCameraControlWidget::InsertGroupDividers()
 		return;
 	}
 	bGroupDividersInserted = true;
-
-	// 묶음의 첫 줄 = 그 앞에 선이 들어갈 자리. 라벨(TextBlock)이 앞에 있으면 라벨 위에 긋는다.
-	auto AnchorIndex = [this](UWidget* FirstMember) -> int32
-	{
-		UWidget* RootRow = FindRootRow(FirstMember);
-		int32 Index = RootRow ? VBox_Root->GetChildIndex(RootRow) : INDEX_NONE;
-		if (Index > 0 && Cast<UTextBlock>(VBox_Root->GetChildAt(Index - 1)))
-		{
-			--Index;
-		}
-		return Index;
-	};
-
-	TArray<int32> Anchors;
-	// 프리셋 / 위치 슬라이더 / PTZ 패드 / 하단 버튼 줄 — 네 묶음의 경계에 긋는다.
-	for (UWidget* Member : { (UWidget*)Combo_Preset, (UWidget*)Field_H_Cur, (UWidget*)PtzSideColumn.Get(), (UWidget*)Btn_Save })
-	{
-		const int32 Index = AnchorIndex(Member);
-		if (Index > 0)
-		{
-			Anchors.AddUnique(Index);
-		}
-	}
-	// 뒤에서부터 넣어야 앞쪽 인덱스가 밀리지 않는다.
-	Anchors.Sort([](const int32& A, const int32& B) { return A > B; });
-	for (const int32 Index : Anchors)
-	{
-		if (UVerticalBoxSlot* VBSlot = Cast<UVerticalBoxSlot>(VBox_Root->InsertChildAt(Index, MakeGroupDivider())))
-		{
-			VBSlot->SetPadding(FMargin(0.f, 5.f, 0.f, 5.f));
-		}
-	}
+	// 프리셋 / 위치 슬라이더 / PTZ 패드 / 하단 버튼 줄 — 네 묶음의 경계.
+	// 선 생성과 삽입 규칙은 네 패널이 공유한다(Park3DPanelStyle).
+	Park3DPanelStyle::InsertGroupDividers(WidgetTree, VBox_Root,
+		{ (UWidget*)Combo_Preset, (UWidget*)Field_H_Cur, (UWidget*)PtzSideColumn.Get(), (UWidget*)Btn_Save });
 }
 
 void UCameraControlWidget::UpdatePtzReadout()

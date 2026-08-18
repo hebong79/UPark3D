@@ -5,6 +5,7 @@
 #include "CarActor.h"
 #include "CarColorComponent.h"
 #include "CarPlacementManager.h"
+#include "Park3DPanelStyle.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/CheckBox.h"
@@ -28,6 +29,15 @@ namespace
 void URenderPanelWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+
+	// 어두운 패널 위에서 컨트롤이 보이도록, 그리고 묶음 경계에 구분선(다른 패널과 같은 정리).
+	Park3DPanelStyle::ApplyToTree(WidgetTree);
+	if (!bGroupDividersInserted)
+	{
+		bGroupDividersInserted = true;
+		Park3DPanelStyle::InsertGroupDividers(WidgetTree, Park3DPanelStyle::FindContentColumn(WidgetTree),
+			{ (UWidget*)Field_HideCount, (UWidget*)Check_HideAll });
+	}
 
 	// 재-AddToViewport 마다 다시 도므로 중복 바인딩을 먼저 끊는다(다른 패널과 같은 규율).
 	if (Btn_Randomize)    { Btn_Randomize->OnClicked.RemoveAll(this);    Btn_Randomize->OnClicked.AddDynamic(this, &URenderPanelWidget::HandleRandomize); }

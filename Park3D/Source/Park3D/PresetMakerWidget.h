@@ -217,6 +217,9 @@ protected:
 	UFUNCTION() void HandleEntryClicked();
 
 private:
+	/** 묶음 구분선은 한 번만 넣는다 — NativeConstruct 는 패널을 다시 열 때마다 돈다. */
+	bool bGroupDividersInserted = false;
+
 	/** 동적으로 만든 프리셋 리스트 엔트리 버튼들. */
 	UPROPERTY(Transient)
 	TArray<UButton*> EntryButtons;

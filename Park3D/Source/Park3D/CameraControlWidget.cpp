@@ -454,7 +454,9 @@ void UCameraControlWidget::SetControlSlider(ECamCtrl Kind, float Value)
 	{
 		if (C->Slider)
 		{
-			// 프로그램적 SetValue는 OnValueChanged 미브로드캐스트(사용자 조작만 발생) → 재진입 없음.
+			// 주의: UE5.8 의 USlider::SetValue 는 값이 달라지면 OnValueChanged 를 브로드캐스트한다
+			// (Slider.cpp:41 — 프로그램적 세팅도 예외가 아니다). 여러 컨트롤을 이어서 채우는 경로는
+			// bFillingControls 로 이 되돌이를 막아야 한다.
 			C->Slider->SetValue(UCameraControlLibrary::ValueToSlider(Value, GetControlMin(Kind), GetControlMax(Kind)));
 		}
 	}
@@ -463,6 +465,13 @@ void UCameraControlWidget::SetControlSlider(ECamCtrl Kind, float Value)
 // ===== 슬라이더/필드 → 카메라 (§6.1) =====
 void UCameraControlWidget::OnSliderChanged(ECamCtrl Kind, float Slider01)
 {
+	if (bFillingControls)
+	{
+		// 프리셋 값을 컨트롤에 채우는 중이다. 여기서 카메라에 반영하면 아직 채우지 않은 컨트롤의
+		// 이전 값이 함께 실려 나가고, SyncCameraPosAcrossPresets 가 그 값을 프리셋에 써 버린다.
+		// 반영은 FillControlsFromDir 이 여섯 개를 다 채운 뒤 한 번에 한다.
+		return;
+	}
 	const float Value = UCameraControlLibrary::SliderToValue(Slider01, GetControlMin(Kind), GetControlMax(Kind));
 	SetControlCurText(Kind, Value);
 	ApplyControlToCamera(Kind);
@@ -775,10 +784,18 @@ void UCameraControlWidget::HandlePresetDelete()
 }
 
 // ===== 프리셋 ↔ 컨트롤 =====
-void UCameraControlWidget::FillControlsFromDir(const FCamDir& Dir)
+void UCameraControlWidget::FillControlsFromDir(const FCamDir& InDir)
 {
+	// 값을 복사해 둔다 — 호출자는 CamData 안의 원소를 그대로 넘기는데(CP.datas[0] 등),
+	// 채우는 도중 SyncCameraPosAcrossPresets 가 그 배열을 덮어쓰면 남은 항목을 이미 바뀐 값에서 읽게 된다.
+	const FCamDir Dir = InDir;
+
+	// 채우는 동안 슬라이더 콜백이 되돌아오지 못하게 막는다(USlider::SetValue 가 브로드캐스트한다).
+	TGuardValue<bool> FillGuard(bFillingControls, true);
+
 	// Pan/Tilt/Zoom 은 min/max 를 프리셋(ptzmin/ptzmax)에서 먼저 세팅 후 value 클램프.
-	// Height/X/Z 는 프리셋에 범위가 없으므로 현재 min/max(기본값) 유지, value(pos)만 세팅.
+	// Height/X/Z 는 프리셋에 범위가 없다 — 현재 min/max 를 유지하되, 파일값이 그 밖이면 범위를 넓혀
+	// 담는다(아래 ExpandRange). 넓히지 않으면 SetVal 의 클램프가 파일값을 조용히 잘라 버린다.
 	if (FSliderCtrl* CPan = FindControl(ECamCtrl::Pan))
 	{
 		if (CPan->Min) CPan->Min->SetText(NumText(Dir.ptzmin.p));
@@ -794,6 +811,33 @@ void UCameraControlWidget::FillControlsFromDir(const FCamDir& Dir)
 		if (CZoom->Min) CZoom->Min->SetText(NumText(Dir.ptzmin.z));
 		if (CZoom->Max) CZoom->Max->SetText(NumText(Dir.ptzmax.z));
 	}
+
+	// 위치 3종은 범위가 파일에 없어 이전 화면의 범위가 그대로 남는다. 그 밖의 값이 오면
+	// 잘라 내는 대신 경계를 그 값까지 넓힌다 — 파일에 적힌 자리는 언제나 그대로 서야 한다.
+	auto ExpandRange = [this](ECamCtrl Kind, float V)
+	{
+		FSliderCtrl* C = FindControl(Kind);
+		if (!C || !C->Min || !C->Max)
+		{
+			return;
+		}
+		const float MinV = GetControlMin(Kind);
+		const float MaxV = GetControlMax(Kind);
+		// 사용자가 두 칸을 뒤집어 적어 둔 경우까지 감안해 실제 아래/위 칸을 골라 넓힌다.
+		UEditableTextBox* LoField = (MinV <= MaxV) ? C->Min : C->Max;
+		UEditableTextBox* HiField = (MinV <= MaxV) ? C->Max : C->Min;
+		if (V < FMath::Min(MinV, MaxV))
+		{
+			LoField->SetText(NumText(V));
+		}
+		else if (V > FMath::Max(MinV, MaxV))
+		{
+			HiField->SetText(NumText(V));
+		}
+	};
+	ExpandRange(ECamCtrl::X, Dir.pos.x);
+	ExpandRange(ECamCtrl::Height, Dir.pos.z);
+	ExpandRange(ECamCtrl::Z, Dir.pos.y);
 
 	// value 세팅(min/max 기준 클램프) — OnCurCommitted 경로 재사용은 재진입 우려로 직접 세팅.
 	auto SetVal = [this](ECamCtrl Kind, float V)

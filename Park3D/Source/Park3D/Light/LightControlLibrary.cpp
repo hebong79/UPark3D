@@ -17,6 +17,9 @@ namespace
 	constexpr float ExposureMax = 20.0f;
 	constexpr float SunIntensityMax = 150.0f;
 	constexpr float SkyIntensityMax = 20.0f;
+	// 채움광은 태양을 보조하는 용도라 태양 상한까지 열어 둘 이유가 없다. 실측 조정 폭(0~수 lux)의
+	// 여유를 두고 20 에서 끊는다.
+	constexpr float FillIntensityMax = 20.0f;
 
 	const TCHAR* KeyExposure = TEXT("ExposureEV100");
 	const TCHAR* KeySunIntensity = TEXT("SunIntensity");
@@ -26,6 +29,8 @@ namespace
 	const TCHAR* KeyAltitude = TEXT("SunAltitudeDeg");
 	const TCHAR* KeyAzimuth = TEXT("SunAzimuthDeg");
 	const TCHAR* KeySkyIntensity = TEXT("SkyIntensity");
+	const TCHAR* KeyShadowFill = TEXT("ShadowFillIntensity");
+	const TCHAR* KeyCarFill = TEXT("CarFillIntensity");
 }
 
 void ULightControlLibrary::ClampSettings(FLightSettings& S)
@@ -33,6 +38,8 @@ void ULightControlLibrary::ClampSettings(FLightSettings& S)
 	S.ExposureEV100 = FMath::Clamp(S.ExposureEV100, ExposureMin, ExposureMax);
 	S.SunIntensity = FMath::Clamp(S.SunIntensity, 0.0f, SunIntensityMax);
 	S.SkyIntensity = FMath::Clamp(S.SkyIntensity, 0.0f, SkyIntensityMax);
+	S.ShadowFillIntensity = FMath::Clamp(S.ShadowFillIntensity, 0.0f, FillIntensityMax);
+	S.CarFillIntensity = FMath::Clamp(S.CarFillIntensity, 0.0f, FillIntensityMax);
 	S.SunAltitudeDeg = FMath::Clamp(S.SunAltitudeDeg, 0.0f, 90.0f);
 
 	// 방위는 잘라내지 않고 0~360 으로 감는다(359 → 361 이동이 자연스럽도록).
@@ -59,6 +66,8 @@ FString ULightControlLibrary::ToJson(const FLightSettings& S)
 	Root->SetNumberField(KeyAltitude, S.SunAltitudeDeg);
 	Root->SetNumberField(KeyAzimuth, S.SunAzimuthDeg);
 	Root->SetNumberField(KeySkyIntensity, S.SkyIntensity);
+	Root->SetNumberField(KeyShadowFill, S.ShadowFillIntensity);
+	Root->SetNumberField(KeyCarFill, S.CarFillIntensity);
 
 	FString Out;
 	const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Out);
@@ -96,6 +105,12 @@ bool ULightControlLibrary::FromJson(const FString& Json, FLightSettings& Out)
 	Parsed.SunAltitudeDeg = static_cast<float>(Root->GetNumberField(KeyAltitude));
 	Parsed.SunAzimuthDeg = static_cast<float>(Root->GetNumberField(KeyAzimuth));
 	Parsed.SkyIntensity = static_cast<float>(Root->GetNumberField(KeySkyIntensity));
+
+	// 채움광은 누락 시 0(끔) 유지 — 이 항목이 생기기 전에 저장된 파일을 그대로 읽을 수 있어야 한다.
+	// 필수 키 검사에 넣지 않은 것도 같은 이유다(넣으면 기존 파일이 전부 거절된다).
+	double F = 0.0;
+	Parsed.ShadowFillIntensity = Root->TryGetNumberField(KeyShadowFill, F) ? static_cast<float>(F) : 0.0f;
+	Parsed.CarFillIntensity = Root->TryGetNumberField(KeyCarFill, F) ? static_cast<float>(F) : 0.0f;
 
 	// 색은 누락 시 흰색 유지(구버전 파일 호환).
 	double C = 1.0;

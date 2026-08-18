@@ -3,6 +3,7 @@
 #include "LightControlManager.h"
 
 #include "Components/DirectionalLightComponent.h"
+#include "Components/LightComponent.h"
 #include "Components/SkyAtmosphereComponent.h"
 #include "Components/SkyLightComponent.h"
 #include "Engine/DirectionalLight.h"
@@ -11,6 +12,27 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "LightControlLibrary.h"
+#include "../CarActor.h"
+#include "Components/StaticMeshComponent.h"
+
+namespace
+{
+	/** 채움광 공통 태그. FindSun 이 이것을 태양으로 오인하지 않도록 걸러 내는 표식이기도 하다. */
+	static const FName GFillTag(TEXT("Park3D_FillLight"));
+	static const FName GShadowFillTag(TEXT("Park3D_ShadowFill"));
+	static const FName GCarFillTag(TEXT("Park3D_CarFill"));
+
+	/**
+	 * 채움광 방향. 위에서 비스듬히 내리쬐게 두어 차량 지붕·보닛이 고르게 받도록 한다.
+	 * 태양 방위를 따라가게 만들지 않았다 — UltraDynamicSky 의 태양은 시간대로 계속 도는데
+	 * 채움광까지 같이 돌면 "고정 밝기" 라는 목적이 무너진다.
+	 */
+	constexpr float GFillPitch = -60.0f;
+	constexpr float GFillYaw = 0.0f;
+
+	/** 차량 전용 채움광이 걸리는 라이팅 채널. 0 은 월드 전체가 쓰므로 1 을 쓴다. */
+	constexpr bool GCh0 = false, GCh1 = true, GCh2 = false;
+}
 
 ALightControlManager::ALightControlManager()
 {
@@ -49,6 +71,10 @@ UDirectionalLightComponent* ALightControlManager::FindSun() const
 	UDirectionalLightComponent* Fallback = nullptr;
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
+		if (It->ActorHasTag(GFillTag))
+		{
+			continue;   // 우리가 만든 채움광. 태양이 아니다(대기 태양 지정이 없는 레벨에서 오인 방지).
+		}
 		TArray<UDirectionalLightComponent*> Comps;
 		It->GetComponents<UDirectionalLightComponent>(Comps);
 		for (UDirectionalLightComponent* C : Comps)
@@ -218,14 +244,19 @@ void ALightControlManager::ApplySettings(const FLightSettings& Settings)
 	FLightSettings S = Settings;
 	ULightControlLibrary::ClampSettings(S);
 
+	// 채움광은 통합 하늘 시스템 판정보다 먼저 건다. 우리가 소유한 액터라 그 시스템이 덮어쓰지
+	// 않고 빛을 더하기만 하므로, UDS 레벨에서 그늘 밝기를 조절할 수 있는 유일한 수단이다.
+	ApplyFillLights(S);
+
 	// 통합 하늘 시스템이 있는 레벨에서는 적용하지 않는다 — 그 시스템이 자기 시간대로 태양·하늘·
 	// 노출을 계속 갱신하므로, 여기서 값을 넣어도 화면은 그쪽을 따른다(넣은 값만 되읽히고 그림은
 	// 안 바뀌어, 적용된 것처럼 보이는 상태가 된다). 밝기는 그 시스템의 시간대로 맞춘다.
 	if (HasExternalSkySystem())
 	{
 		UE_LOG(LogTemp, Log,
-			TEXT("[Light] 레벨이 자체 하늘 시스템을 갖고 있어 조명 설정을 적용하지 않습니다 "
-			     "(밝기는 그 시스템의 시간대 설정으로 조절하세요)."));
+			TEXT("[Light] 레벨이 자체 하늘 시스템을 갖고 있어 태양·하늘빛·노출은 적용하지 않습니다 "
+			     "(밝기는 그 시스템의 시간대 설정으로). 채움광 2종은 적용했습니다: 그늘 %.2f / 차량 %.2f"),
+			S.ShadowFillIntensity, S.CarFillIntensity);
 		LastApplied = S;
 		return;
 	}
@@ -272,6 +303,97 @@ void ALightControlManager::ApplySettings(const FLightSettings& Settings)
 	LastApplied = S;
 }
 
+ADirectionalLight* ALightControlManager::EnsureFillLight(FName Tag, bool bCarOnly)
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return nullptr;
+	}
+
+	for (TActorIterator<ADirectionalLight> It(World); It; ++It)
+	{
+		if (It->ActorHasTag(Tag))
+		{
+			return *It;
+		}
+	}
+
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	ADirectionalLight* Light = World->SpawnActor<ADirectionalLight>(
+		FVector::ZeroVector, FRotator(GFillPitch, GFillYaw, 0.0f), Params);
+	if (!Light)
+	{
+		return nullptr;
+	}
+
+	Light->Tags.Add(GFillTag);
+	Light->Tags.Add(Tag);
+	Light->SetMobility(EComponentMobility::Movable);
+	Light->SetActorRotation(FRotator(GFillPitch, GFillYaw, 0.0f));
+
+	if (UDirectionalLightComponent* C = Cast<UDirectionalLightComponent>(Light->GetLightComponent()))
+	{
+		// 그림자를 만들지 않는 것이 핵심이다 — 그림자를 만들면 그늘을 채우는 게 아니라
+		// 그늘을 하나 더 그린다.
+		C->SetCastShadows(false);
+		C->SetIntensity(0.0f);   // 세기는 ApplyFillLights 가 넣는다.
+		if (bCarOnly)
+		{
+			C->SetLightingChannels(GCh0, GCh1, GCh2);
+		}
+		// 대기 태양으로 승격되면 하늘색이 이 라이트를 따라가 버린다.
+		C->SetAtmosphereSunLight(false);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[Light] 채움광 생성: %s (차량전용=%s)"),
+		*Tag.ToString(), bCarOnly ? TEXT("예") : TEXT("아니오"));
+	return Light;
+}
+
+void ALightControlManager::ApplyFillLights(const FLightSettings& S)
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	if (ADirectionalLight* Fill = EnsureFillLight(GShadowFillTag, /*bCarOnly=*/false))
+	{
+		if (ULightComponent* C = Fill->GetLightComponent())
+		{
+			C->SetIntensity(S.ShadowFillIntensity);
+			C->SetVisibility(S.ShadowFillIntensity > 0.0f);
+		}
+	}
+
+	if (ADirectionalLight* CarFill = EnsureFillLight(GCarFillTag, /*bCarOnly=*/true))
+	{
+		if (ULightComponent* C = CarFill->GetLightComponent())
+		{
+			C->SetIntensity(S.CarFillIntensity);
+			C->SetVisibility(S.CarFillIntensity > 0.0f);
+		}
+	}
+
+	// 차량 메시를 채널 0+1 로 둔다. 0 을 빼면 차량이 태양·하늘빛을 못 받아 주변에서 떠 보인다 —
+	// 목적은 "그림자를 안 받는 것" 이 아니라 "그늘에서도 바닥 밝기를 갖는 것" 이다.
+	for (TActorIterator<ACarActor> It(World); It; ++It)
+	{
+		TArray<UStaticMeshComponent*> Meshes;
+		It->GetComponents<UStaticMeshComponent>(Meshes);
+		for (UStaticMeshComponent* M : Meshes)
+		{
+			if (M && !M->LightingChannels.bChannel1)
+			{
+				M->SetLightingChannels(true, true, false);
+			}
+		}
+	}
+}
+
 bool ALightControlManager::CaptureCurrent(FLightSettings& Out) const
 {
 	const UDirectionalLightComponent* Sun = FindSun();
@@ -298,6 +420,21 @@ bool ALightControlManager::CaptureCurrent(FLightSettings& Out) const
 		if (V->Settings.bOverride_AutoExposureMinBrightness)
 		{
 			S.ExposureEV100 = V->Settings.AutoExposureMinBrightness;
+		}
+	}
+
+	// 채움광은 우리 액터이므로 태그로 되찾는다(아직 만들어지지 않았으면 0 유지 = 꺼짐).
+	if (UWorld* World = GetWorld())
+	{
+		for (TActorIterator<ADirectionalLight> It(World); It; ++It)
+		{
+			const ULightComponent* C = It->GetLightComponent();
+			if (!C)
+			{
+				continue;
+			}
+			if (It->ActorHasTag(GShadowFillTag)) S.ShadowFillIntensity = C->Intensity;
+			else if (It->ActorHasTag(GCarFillTag)) S.CarFillIntensity = C->Intensity;
 		}
 	}
 

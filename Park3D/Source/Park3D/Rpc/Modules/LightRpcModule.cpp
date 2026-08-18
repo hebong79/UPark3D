@@ -33,6 +33,8 @@ namespace
 		O->SetNumberField(TEXT("sunAltitudeDeg"), S.SunAltitudeDeg);
 		O->SetNumberField(TEXT("sunAzimuthDeg"), S.SunAzimuthDeg);
 		O->SetNumberField(TEXT("skyIntensity"), S.SkyIntensity);
+		O->SetNumberField(TEXT("shadowFillIntensity"), S.ShadowFillIntensity);
+		O->SetNumberField(TEXT("carFillIntensity"), S.CarFillIntensity);
 		O->SetObjectField(TEXT("sunColor"), RpcDto::Vec3(S.SunColor.R, S.SunColor.G, S.SunColor.B));
 		return O;
 	}
@@ -45,6 +47,9 @@ namespace
 		if (RpcParam::Has(P, TEXT("sunAltitudeDeg"))) S.SunAltitudeDeg = RpcParam::GetFloat(P, TEXT("sunAltitudeDeg"), S.SunAltitudeDeg);
 		if (RpcParam::Has(P, TEXT("sunAzimuthDeg")))  S.SunAzimuthDeg = RpcParam::GetFloat(P, TEXT("sunAzimuthDeg"), S.SunAzimuthDeg);
 		if (RpcParam::Has(P, TEXT("skyIntensity")))   S.SkyIntensity = RpcParam::GetFloat(P, TEXT("skyIntensity"), S.SkyIntensity);
+		// 채움광 2종은 UltraDynamicSky 레벨에서도 실제로 화면에 반영되는 유일한 조명 값이다.
+		if (RpcParam::Has(P, TEXT("shadowFillIntensity"))) S.ShadowFillIntensity = RpcParam::GetFloat(P, TEXT("shadowFillIntensity"), S.ShadowFillIntensity);
+		if (RpcParam::Has(P, TEXT("carFillIntensity")))    S.CarFillIntensity = RpcParam::GetFloat(P, TEXT("carFillIntensity"), S.CarFillIntensity);
 		if (RpcParam::Has(P, TEXT("sunColor")))
 		{
 			const FVector C = RpcParam::GetVec3(P, TEXT("sunColor"), FVector(S.SunColor.R, S.SunColor.G, S.SunColor.B));

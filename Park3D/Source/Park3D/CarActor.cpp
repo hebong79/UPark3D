@@ -9,7 +9,9 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Engine/Font.h"
+#include "Engine/HitResult.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/World.h"
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Misc/Crc.h"
@@ -378,6 +380,61 @@ void ACarActor::ApplyTransformFromData(float MetersToUU)
 	Yaw = UCarPlacementLibrary::AddYawDeg(Yaw, 0.f);  // [0,360) 정규화.
 
 	SetActorLocationAndRotation(Loc, FRotator(0.f, Yaw, 0.f));
+
+	// 데이터의 z 는 노면 높이를 모른다. CarPos_Seoshin_2Cam.json 23건은 0 ~ −5cm 인데 LV_Park_01 의
+	// 노면은 Z=10cm 라 전부 10~15cm 묻혀 있었다(커서 피킹이 노면이 아니라 Landscape 를 맞힌 결과).
+	// 여기서 지면에 앉힌다 — 저장하면 고쳐진 z 가 파일에도 남는다.
+	SnapToGround(MetersToUU);
+}
+
+bool ACarActor::SnapToGround(float MetersToUU)
+{
+	UWorld* World = GetWorld();
+	if (!World || !MeshComp || !MeshComp->GetStaticMesh())
+	{
+		return false;
+	}
+
+	// 메시 로컬 바운즈의 바닥 = 바퀴 접지면. MeshComp 가 루트이고 스케일을 건드리지 않으며 회전이
+	// yaw 뿐이라, 이 값은 액터 원점에서 접지면까지의 월드 Z 차이와 그대로 같다.
+	// (차량 메시 23종 실측: 바닥 z 가 −0.4cm ~ 0cm 라 사실상 피벗이 접지면이다 — car.catalog boundsMin)
+	FVector LocalMin = FVector::ZeroVector;
+	FVector LocalMax = FVector::ZeroVector;
+	MeshComp->GetLocalBounds(LocalMin, LocalMax);
+
+	const FVector ActorLoc = GetActorLocation();
+	const double BottomZ = ActorLoc.Z + LocalMin.Z;
+
+	// ⚠ 채널이 아니라 **정적 오브젝트 질의**로 찾는다. 프로젝트의 다른 트레이스(view.pick·measure.*)가
+	//   쓰는 ECC_Visibility 로는 노면을 못 찾는다 — LV_Park_01 의 아스팔트(BP_SplineMeshPlane)는
+	//   Visibility 응답이 Ignore 라 트레이스가 그대로 통과해 10cm 아래 Landscape 를 맞힌다.
+	//   실측(SnapDiag): 통로 (13.0, 4.0) 에서 Visibility=0.00cm(Landscape) / 정적질의=10.00cm(노면).
+	//   주차면 위에서만 Visibility 가 10.10cm 를 주는데, 그건 노면이 아니라 BP_ParkingSlot 의 콜리전이다.
+	// 정적 질의는 런타임 스폰된 차량(Movable=WorldDynamic)을 걸러 주기도 한다 — 주행 시뮬에서 차가
+	// 겹치는 순간 남의 지붕에 올라타는 일이 없다(실측: 차량 위에서도 노면 10.00cm 를 반환).
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(CarSnapToGround), /*bTraceComplex=*/true, this);
+	if (!World->LineTraceSingleByObjectType(Hit,
+		FVector(ActorLoc.X, ActorLoc.Y, BottomZ + GroundTraceUpCm),
+		FVector(ActorLoc.X, ActorLoc.Y, BottomZ - GroundTraceDownCm),
+		FCollisionObjectQueryParams(FCollisionObjectQueryParams::AllStaticObjects), Params))
+	{
+		// 못 찾으면 높이를 지어내지 않고 데이터 값을 그대로 둔다(view.pick 의 hit=false 규약과 같은 태도).
+		UE_LOG(LogTemp, Verbose, TEXT("[Car] %s 접지 실패 — 아래 %.0fcm 안에 지면이 없어 z=%.2f 를 유지합니다."),
+			*CarData.id, GroundTraceDownCm, ActorLoc.Z);
+		return false;
+	}
+
+	const double NewZ = Hit.ImpactPoint.Z - LocalMin.Z;
+	if (FMath::IsNearlyEqual(NewZ, ActorLoc.Z, GroundSnapToleranceCm))
+	{
+		return false;   // 이미 앉아 있다.
+	}
+
+	const FVector NewLoc(ActorLoc.X, ActorLoc.Y, NewZ);
+	SetActorLocation(NewLoc);
+	CarData.pos.z = UCarPlacementLibrary::WorldToUnrealMeters(NewLoc, MetersToUU).z;
+	return true;
 }
 
 FCarPos ACarActor::ToCarPos(float MetersToUU) const

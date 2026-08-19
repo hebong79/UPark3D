@@ -658,6 +658,8 @@ void UCarPlacementWidget::ApplyGroupTranslation(const FVector& DeltaMove)
 		if (ACarActor* C = Mgr->GetCar(Idx))
 		{
 			C->SetActorLocation(C->GetActorLocation() + DeltaMove);
+			// 옮긴 자리의 지면에 다시 앉힌다(ApplyTransformFromData 를 거치지 않는 유일한 이동 경로다).
+			C->SnapToGround(MetersToUU);
 			CarData.datas[Idx] = C->ToCarPos(MetersToUU);
 		}
 	}

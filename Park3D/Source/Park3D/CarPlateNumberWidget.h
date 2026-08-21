@@ -32,6 +32,15 @@ protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 
 private:
+	// 여백 단위는 DrawSize(520×110 px)의 픽셀이고, 이 위젯은 판(52×11cm)을 1:1 로 덮으므로 10px = 1cm 다.
+	// 파란 KOR 스트립은 판 왼쪽 2cm 지점에서 4cm 폭(ACarActor 생성자) → 스트립 오른쪽 끝이 60px.
+	/** 번호 영역의 왼쪽 여백(px). 스트립 끝(60) + 번호가 스트립에서 떨어질 간격 2cm. */
+	static constexpr float NumberAreaLeft = 80.f;
+	/** 번호 영역의 오른쪽 여백(px). 판 오른쪽 테두리에서 2cm. */
+	static constexpr float NumberAreaRight = 20.f;
+	/** 위아래 여백(px). 이전(판 높이의 82%)과 글자 크기가 같아지도록 1cm 씩. */
+	static constexpr float NumberAreaVertical = 10.f;
+
 	UPROPERTY(Transient) UTextBlock* NumberText = nullptr;
 	FString PendingText;
 };

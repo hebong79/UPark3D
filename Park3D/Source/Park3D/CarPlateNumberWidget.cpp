@@ -4,6 +4,8 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/TextBlock.h"
 #include "Components/ScaleBox.h"
+#include "Components/Overlay.h"
+#include "Components/OverlaySlot.h"
 #include "Engine/Font.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -23,7 +25,18 @@ TSharedRef<SWidget> UCarPlateNumberWidget::RebuildWidget()
 		UScaleBox* Fit = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(), TEXT("PlateNumberFit"));
 		Fit->SetStretch(EStretch::ScaleToFit);
 		Fit->AddChild(NumberText);
-		WidgetTree->RootWidget = Fit;
+
+		// 번호가 놓이는 영역. 위젯은 판 전체를 1:1 로 덮으므로(ACarActor::AlignPlateAndText)
+		// 좌측 파란 KOR 스트립을 여백으로 빼면 그 오른쪽이 곧 "번호 영역"이고,
+		// ScaleBox 가 그 영역 안에서 글자를 가운데 정렬한다.
+		UOverlay* Area = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("PlateNumberArea"));
+		if (UOverlaySlot* AreaSlot = Cast<UOverlaySlot>(Area->AddChild(Fit)))
+		{
+			AreaSlot->SetPadding(FMargin(NumberAreaLeft, NumberAreaVertical, NumberAreaRight, NumberAreaVertical));
+			AreaSlot->SetHorizontalAlignment(HAlign_Fill);
+			AreaSlot->SetVerticalAlignment(VAlign_Fill);
+		}
+		WidgetTree->RootWidget = Area;
 
 		// 한글이 필요하므로 Content 의 Pretendard 를 쓴다(엔진 기본 Roboto 에는 한글 글리프가 없다).
 		// ⚠ FObjectFinder 는 생성자 전용이다 — RebuildWidget 은 런타임이라 여기서 쓰면 즉시 크래시한다

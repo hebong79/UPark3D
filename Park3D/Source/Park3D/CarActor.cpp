@@ -234,8 +234,9 @@ void ACarActor::InitializePlateNumberOnce()
 
 FString ACarActor::MakePlateDisplayText(const FString& CanonicalNumber)
 {
+	// 실제 번호판은 "672우 3269" 처럼 앞 세 자리와 한글이 붙고 뒤 네 자리만 떨어진다.
 	return CanonicalNumber.Len() == 8
-		? CanonicalNumber.Left(3) + TEXT(" ") + CanonicalNumber.Mid(3, 1) + TEXT(" ") + CanonicalNumber.Right(4)
+		? CanonicalNumber.Left(3) + CanonicalNumber.Mid(3, 1) + TEXT(" ") + CanonicalNumber.Right(4)
 		: CanonicalNumber;
 }
 
@@ -281,8 +282,9 @@ void ACarActor::AlignPlateAndText(UStaticMeshComponent* Plate, UTextRenderCompon
 		Widget->SetRelativeLocation(BoundsOrigin + OutwardLocal * (ThinExtent + PlateWidgetSurfaceGap));
 		Widget->SetRelativeRotation(FRotationMatrix::MakeFromXZ(OutwardLocal, MeshWide ^ OutwardLocal).Rotator());
 		// DrawSize(520×110 px) → 실제 판 크기(긴 축 지름 = 넓은 축 extent×2 cm)에 맞춘 스케일.
+		// 위젯은 판 전체를 1:1 로 덮고, 번호가 놓이는 영역은 위젯 안쪽 여백이 정한다.
 		const double PlateWidthCm = Ext[WideAxis] * 2.0;
-		const float Scale = static_cast<float>(PlateWidthCm / 520.0) * PlateWidgetFill;
+		const float Scale = static_cast<float>(PlateWidthCm / PlateWidgetDrawWidth);
 		Widget->SetRelativeScale3D(FVector(Scale));
 		if (UCarPlateNumberWidget* PlateWidget = Cast<UCarPlateNumberWidget>(Widget->GetUserWidgetObject()))
 		{

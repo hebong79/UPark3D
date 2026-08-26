@@ -143,9 +143,9 @@ namespace Park3DCamStream
 		OutHolders.Sort();
 	}
 
-	float ResolveChannelFps(float TotalFps, int32 Slots, bool bShare)
+	float ResolveChannelFps(float TotalFps, int32 ActiveChannels, bool bShare)
 	{
-		const float Base = bShare ? (TotalFps / static_cast<float>(FMath::Max(1, Slots))) : TotalFps;
+		const float Base = bShare ? (TotalFps / static_cast<float>(FMath::Max(1, ActiveChannels))) : TotalFps;
 		return FMath::Clamp(Base, 0.1f, 60.f);
 	}
 

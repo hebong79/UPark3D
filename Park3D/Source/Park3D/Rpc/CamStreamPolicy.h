@@ -72,10 +72,16 @@ namespace Park3DCamStream
 
 	/**
 	 * 총 fps 예산 → 채널당 목표 fps(설계 §15.4).
-	 * bShare=true 면 슬롯 수로 나눈다 → 슬롯을 늘려도 게임 스레드 부하가 일정하다.
-	 * bShare=false 면 채널당 고정(부하가 슬롯 수에 비례).
+	 *
+	 * bShare=true 면 **지금 실제로 캡처 중인 채널 수**로 나눈다 → 총 캡처량이 항상 TotalFps 로
+	 * 묶이므로 게임 스레드 부하가 일정하다. 슬롯 수로 나누지 않는 이유: 슬롯을 10 으로 열어 둔
+	 * 상태에서 혼자 보는 사람이 5/10 = 0.5fps 를 받게 되어, 아무도 슬롯 상한을 못 올리게 된다.
+	 * ActiveChannels 는 0 일 수 있고(아무도 안 볼 때) 그때는 1 로 취급한다 — 다음 시청자 1명이
+	 * 받게 될 값이라 조회 응답으로도 그게 맞다.
+	 *
+	 * bShare=false 면 채널당 고정(부하가 캡처 중인 채널 수에 비례).
 	 */
-	float ResolveChannelFps(float TotalFps, int32 Slots, bool bShare);
+	float ResolveChannelFps(float TotalFps, int32 ActiveChannels, bool bShare);
 
 	/** 진단용 채널 상태 한 줄(로그·cam.streamStatus 표시). */
 	FString FormatChannelStatus(int32 CamId, int32 Port, int32 ClientCount, bool bHoldsSlot, float MeasuredFps);

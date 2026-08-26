@@ -20,7 +20,9 @@ public class Park3D : ModuleRules
 		//                 FRHICommandListImmediate, ENQUEUE_RENDER_COMMAND 를 직접 쓴다. 모놀리식
 		//                 게임 빌드는 한 실행 파일로 링크돼 없어도 넘어가지만, 모듈러 에디터 빌드
 		//                 (UAT 쿠킹이 요구한다)는 여기서 선언하지 않으면 LNK2019 로 죽는다.
-		PrivateDependencyModuleNames.AddRange(new string[] { "HTTPServer", "ImageWrapper", "Sockets", "Networking", "RHI", "RenderCore" });
+		// Text3D: 번호판 번호를 압출 지오메트리(양각)로 만든다. 런타임 모듈이며 폰트 아웃라인을
+		//         읽어 글자 메시를 굽고 (Font+GlyphIndex+압출값) 단위로 엔진 전역 캐시에 공유한다.
+		PrivateDependencyModuleNames.AddRange(new string[] { "HTTPServer", "ImageWrapper", "Sockets", "Networking", "RHI", "RenderCore", "Text3D" });
 
 		PrivateDependencyModuleNames.AddRange(new string[] {  });
 

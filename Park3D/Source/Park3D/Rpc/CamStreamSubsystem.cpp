@@ -73,6 +73,34 @@ void UCamStreamSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 			BasePort + 1, BasePort + MaxCameras, MaxCameras);
 	}
 
+	// 슬롯·예산도 config 로 덮는다(포트와 같은 규약). ini 는 pak 안에 쿠킹돼 인스턴스별로 바꿀 수
+	// 없으므로, 배포된 PC 마다 다르게 줘야 하는 값은 재쿡 없이 여기서 바뀌어야 한다.
+	//
+	// 순서가 중요하다 — 상한을 먼저 올려야 슬롯이 옛 상한에 잘리지 않는다.
+	if (bHasConfig && AppConfig.StreamHardMaxSlots > 0 && AppConfig.StreamHardMaxSlots != HardMaxSlots)
+	{
+		UE_LOG(LogCamStreamSub, Log, TEXT("[CamStream] 슬롯 상한 %d → %d (출처: config_pmaker.json stream_hard_max_slots)"),
+			HardMaxSlots, AppConfig.StreamHardMaxSlots);
+		HardMaxSlots = AppConfig.StreamHardMaxSlots;
+	}
+	if (bHasConfig && AppConfig.StreamSlots > 0)
+	{
+		// 상한을 넘겨 적으면 조용히 깎지 않고 두 값을 함께 남긴다 — "설정했는데 안 먹는다"의
+		// 원인이 상한임을 로그 한 줄로 알 수 있어야 한다(cam.setStreamSlots 의 clamp-and-report 와 같은 취지).
+		const int32 Applied = FMath::Clamp(AppConfig.StreamSlots, 1, FMath::Max(1, HardMaxSlots));
+		UE_LOG(LogCamStreamSub, Log, TEXT("[CamStream] 동시 캡처 슬롯 %d → %d (요청 %d, 상한 %d, 출처: config_pmaker.json stream_slots)"),
+			ActiveSlots, Applied, AppConfig.StreamSlots, HardMaxSlots);
+		ActiveSlots = Applied;
+	}
+	if (bHasConfig && AppConfig.StreamTotalFps > 0.f && !FMath::IsNearlyEqual(AppConfig.StreamTotalFps, TotalFps))
+	{
+		// ini 프로퍼티의 ClampMax 는 config 경로에 적용되지 않으므로 같은 범위를 여기서 지킨다.
+		const float Applied = FMath::Clamp(AppConfig.StreamTotalFps, 0.1f, 60.f);
+		UE_LOG(LogCamStreamSub, Log, TEXT("[CamStream] 총 캡처 예산 %.2f → %.2f fps (출처: config_pmaker.json stream_total_fps)"),
+			TotalFps, Applied);
+		TotalFps = Applied;
+	}
+
 	// 채널 개설은 Tick 에서 한다 — 카메라 매니저 스폰(GameMode BeginPlay)과의 순서에
 	// 의존하지 않기 위해서다. 카메라가 생기는 순간 자동으로 포트가 열린다.
 }

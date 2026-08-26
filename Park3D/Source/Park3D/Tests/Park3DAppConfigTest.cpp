@@ -185,6 +185,48 @@ bool FPark3DAppConfigCamPortTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// ===== T9-b 스트림 슬롯·예산 — ini 를 config 로 덮는 길 =====
+// ini 는 pak 안에 쿠킹돼 exe 교체로 못 바꾼다. 이 세 키가 그 우회로이므로
+// "미지정은 미지정으로 남는다"(= ini 값이 살아난다)가 핵심 성질이다.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPark3DAppConfigStreamSlotsTest,
+	"Park3D.AppConfig.StreamSlots",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FPark3DAppConfigStreamSlotsTest::RunTest(const FString& Parameters)
+{
+	FPark3DAppConfig Ok;
+	TestTrue(TEXT("파싱 성공"), UPark3DAppConfigLibrary::FromJson(
+		TEXT(R"({"stream_slots":10,"stream_hard_max_slots":16,"stream_total_fps":12.5})"), Ok));
+	TestEqual(TEXT("slots"), Ok.StreamSlots, 10);
+	TestEqual(TEXT("hard max"), Ok.StreamHardMaxSlots, 16);
+	TestEqual(TEXT("total fps"), Ok.StreamTotalFps, 12.5f);
+
+	// 키가 없으면 0 = 미지정. 이게 깨지면 config 에 안 적은 항목까지 ini 를 덮어 버린다.
+	FPark3DAppConfig None;
+	UPark3DAppConfigLibrary::FromJson(TEXT(R"({"rpc_port":13510})"), None);
+	TestEqual(TEXT("미지정 slots"), None.StreamSlots, 0);
+	TestEqual(TEXT("미지정 hard max"), None.StreamHardMaxSlots, 0);
+	TestEqual(TEXT("미지정 total fps"), None.StreamTotalFps, 0.f);
+
+	// 0·음수는 미지정 취급 — 그대로 적용하면 슬롯 0(아무도 못 봄)/fps 0(0 나눗셈)이 된다.
+	FPark3DAppConfig Zero, Neg;
+	UPark3DAppConfigLibrary::FromJson(TEXT(R"({"stream_slots":0,"stream_hard_max_slots":0,"stream_total_fps":0})"), Zero);
+	UPark3DAppConfigLibrary::FromJson(TEXT(R"({"stream_slots":-3,"stream_hard_max_slots":-1,"stream_total_fps":-2.5})"), Neg);
+	TestEqual(TEXT("0 slots 은 미지정"), Zero.StreamSlots, 0);
+	TestEqual(TEXT("0 fps 는 미지정"), Zero.StreamTotalFps, 0.f);
+	TestEqual(TEXT("음수 slots 은 미지정"), Neg.StreamSlots, 0);
+	TestEqual(TEXT("음수 hard max 는 미지정"), Neg.StreamHardMaxSlots, 0);
+	TestEqual(TEXT("음수 fps 는 미지정"), Neg.StreamTotalFps, 0.f);
+
+	// 세 키는 서로를 요구하지 않는다(포트 대역과 달리 각자 완결되는 스칼라다).
+	FPark3DAppConfig OnlyCap;
+	UPark3DAppConfigLibrary::FromJson(TEXT(R"({"stream_hard_max_slots":10})"), OnlyCap);
+	TestEqual(TEXT("상한만 적어도 적용"), OnlyCap.StreamHardMaxSlots, 10);
+	TestEqual(TEXT("나머지는 미지정 유지"), OnlyCap.StreamSlots, 0);
+
+	return true;
+}
+
 // ===== T10 포트 대역 갱신 — 다른 키를 보존하는가 =====
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPark3DAppConfigUpdateCamPortTest,
 	"Park3D.AppConfig.UpdateCamPortRange",

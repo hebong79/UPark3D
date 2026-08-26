@@ -297,19 +297,31 @@ bool FCamStreamSelectedNoMonopolyTest::RunTest(const FString& Parameters)
 }
 
 // ===== U7: fps 예산 배분 =====
-// 슬롯을 늘려도 게임 스레드 부하가 일정해야 한다 — 이 나눗셈이 그 보장이다.
+// 나눗수는 슬롯 수가 아니라 "지금 캡처 중인 채널 수"다. 총 부하는 그대로 일정하되,
+// 열어만 두고 아무도 안 보는 슬롯이 보는 사람의 fps 를 깎지 않는 것이 이 나눗셈의 요지다.
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCamStreamFpsBudgetTest,
 	"Park3D.Rpc.CamStream.FpsBudget",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
 bool FCamStreamFpsBudgetTest::RunTest(const FString& Parameters)
 {
-	TestEqual(TEXT("슬롯1 = 총예산"), Park3DCamStream::ResolveChannelFps(5.f, 1, true), 5.f);
-	TestEqual(TEXT("슬롯2 = 절반"), Park3DCamStream::ResolveChannelFps(5.f, 2, true), 2.5f);
+	TestEqual(TEXT("캡처 채널 1 = 총예산"), Park3DCamStream::ResolveChannelFps(5.f, 1, true), 5.f);
+	TestEqual(TEXT("캡처 채널 2 = 절반"), Park3DCamStream::ResolveChannelFps(5.f, 2, true), 2.5f);
 	TestEqual(TEXT("공유 끄면 고정"), Park3DCamStream::ResolveChannelFps(5.f, 2, false), 5.f);
-	TestEqual(TEXT("슬롯 0 방어(1로 취급)"), Park3DCamStream::ResolveChannelFps(5.f, 0, true), 5.f);
+	TestEqual(TEXT("0 방어 = 다음 시청자 1명이 받을 값"), Park3DCamStream::ResolveChannelFps(5.f, 0, true), 5.f);
 	TestTrue(TEXT("하한 클램프(0 나눗셈/무한 루프 방지)"), Park3DCamStream::ResolveChannelFps(0.f, 4, true) > 0.f);
 	TestEqual(TEXT("상한 클램프"), Park3DCamStream::ResolveChannelFps(999.f, 1, true), 60.f);
+
+	// 요청 #313 의 핵심 회귀: 슬롯을 10 으로 열어도 혼자 보는 사람은 5fps 를 받아야 한다.
+	// (예전 모델은 여기서 5/10 = 0.5fps 였고, 그래서 아무도 슬롯 상한을 못 올렸다.)
+	TestEqual(TEXT("슬롯 10 이어도 시청자 1명이면 총예산"), Park3DCamStream::ResolveChannelFps(5.f, 1, true), 5.f);
+
+	// 총 캡처량은 시청자 수와 무관하게 TotalFps 로 묶인다 — 이게 슬롯을 늘려도 안전한 이유다.
+	for (int32 Active = 1; Active <= 10; ++Active)
+	{
+		const float Total = Park3DCamStream::ResolveChannelFps(5.f, Active, true) * Active;
+		TestTrue(TEXT("채널당 fps × 채널 수 = 총예산"), FMath::IsNearlyEqual(Total, 5.f, 1e-3f));
+	}
 
 	return true;
 }

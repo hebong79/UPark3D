@@ -152,7 +152,10 @@ public:
 	UPROPERTY(config, EditAnywhere, Category = "CamStream", meta = (ClampMin = "1"))
 	int32 MaxCameras = 10;
 
-	/** 동시에 프레임을 만드는 카메라 수. 1 = 한 대씩 돌아가며(기본). 런타임 변경 가능. */
+	/**
+	 * 동시에 프레임을 만드는 카메라 수. 런타임 변경 가능(cam.setStreamSlots).
+	 * Save/Config/config_pmaker.json 의 stream_slots 가 있으면 기동 시 그 값으로 덮인다.
+	 */
 	UPROPERTY(config, EditAnywhere, Category = "CamStream", meta = (ClampMin = "1"))
 	int32 ActiveSlots = 1;
 
@@ -163,6 +166,9 @@ public:
 	 * 이제 두 겹으로 사라졌다: ① 채널 fps 를 슬롯 수가 아니라 **실제로 캡처 중인 채널 수**로
 	 * 나눠 총 캡처량이 항상 TotalFps 로 묶이고 ② MaxCapturesPerTick 이 한 틱에 몰리는 것을 막는다.
 	 * 그래서 슬롯을 늘려도 게임 스레드 비용은 늘지 않는다(늘어나는 건 동시 시청 가능 대수뿐).
+	 *
+	 * config_pmaker.json 의 stream_hard_max_slots 가 있으면 기동 시 그 값으로 덮인다 —
+	 * ini 는 pak 안에 쿠킹돼 exe 교체로는 못 바꾸므로, 배포본별 조정은 config 쪽이 정본이다.
 	 */
 	UPROPERTY(config, EditAnywhere, Category = "CamStream", meta = (ClampMin = "1"))
 	int32 HardMaxSlots = 10;
@@ -179,6 +185,7 @@ public:
 	 * 총 캡처 예산(fps). bShareFpsBudget 이면 **지금 실제로 캡처 중인 채널 수**로 나눠 배분한다
 	 * (슬롯 수가 아니다 — 아무도 안 보는 슬롯이 보는 사람의 fps 를 깎으면 안 된다).
 	 * 시청자 1명 = 5fps, 2명 = 2.5fps 씩. 슬롯 상한을 올리는 것 자체는 공짜다.
+	 * config_pmaker.json 의 stream_total_fps 가 있으면 기동 시 그 값으로 덮인다.
 	 */
 	UPROPERTY(config, EditAnywhere, Category = "CamStream", meta = (ClampMin = "0.1", ClampMax = "60"))
 	float TotalFps = 5.f;

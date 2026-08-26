@@ -113,6 +113,29 @@ struct FPark3DAppConfig
 	int32 MainPort = 0;
 
 	/**
+	 * 동시 캡처 슬롯 수(= 동시에 볼 수 있는 카메라 수). 0 = 미지정(ini 의 ActiveSlots 를 쓴다).
+	 *
+	 * main_port 와 같은 이유로 여기에 있다 — ini 는 pak 안에 쿠킹돼 인스턴스별로 바꿀 수 없고,
+	 * 이 값은 배포된 PC 의 성능·용도에 따라 달라져야 한다. exe 를 갈아끼워도 ini 는 옛 값이
+	 * 그대로 이기므로, 재쿡 없이 바꿀 수 있는 길이 여기여야 한다.
+	 * 런타임 변경은 cam.setStreamSlots 가 계속 담당한다(이 값은 기동 시 기본값).
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = "Config")
+	int32 StreamSlots = 0;
+
+	/** StreamSlots 가 넘을 수 없는 상한. 0 = 미지정(ini 의 HardMaxSlots). */
+	UPROPERTY(BlueprintReadWrite, Category = "Config")
+	int32 StreamHardMaxSlots = 0;
+
+	/**
+	 * 총 캡처 예산(fps). 0 이하 = 미지정(ini 의 TotalFps).
+	 * 채널당 fps 는 이 값을 "지금 보고 있는 채널 수"로 나눈 것이다 — 시청자가 많은 현장에서
+	 * 화질(프레임)과 동시 채널 수를 맞바꾸는 손잡이가 이것뿐이라 config 로 연다.
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = "Config")
+	float StreamTotalFps = 0.f;
+
+	/**
 	 * RPC 리스너 바인드 주소. "any" = 모든 인터페이스, "localhost" = 루프백 전용. 빈 문자열 = 기본값("any").
 	 * 이 값이 곧 [HTTPServer.Listeners] 의 포트별 override 로 런타임에 등록된다 —
 	 * ini 에 포트를 박아 두면 rpc_port 를 바꿀 때마다 목록이 빗나가 조용히 루프백으로 떨어지기 때문이다.

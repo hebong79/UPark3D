@@ -79,6 +79,25 @@ bool UPark3DAppConfigLibrary::FromJson(const FString& Json, FPark3DAppConfig& Ou
 		Parsed.MainPort = (MainValue > 0 && MainValue <= 65535) ? MainValue : 0;
 	}
 
+	// 스트림 슬롯·예산. 세 키는 각자 의미가 완결되는 스칼라라 서로를 요구하지 않는다(camera 와 같은 규칙).
+	// 0 이하·음수는 "미지정"으로 두고 ini 값을 살린다 — 0 을 그대로 적용하면 슬롯 0(아무도 못 봄)이나
+	// fps 0(0 나눗셈)이 되는데, 오타 한 글자로 스트림이 통째로 죽는 쪽이 훨씬 나쁘다.
+	if (Root->TryGetNumberField(TEXT("stream_slots"), Num))
+	{
+		const int32 V = static_cast<int32>(Num);
+		Parsed.StreamSlots = (V > 0) ? V : 0;
+	}
+	if (Root->TryGetNumberField(TEXT("stream_hard_max_slots"), Num))
+	{
+		const int32 V = static_cast<int32>(Num);
+		Parsed.StreamHardMaxSlots = (V > 0) ? V : 0;
+	}
+	if (Root->TryGetNumberField(TEXT("stream_total_fps"), Num))
+	{
+		const float V = static_cast<float>(Num);
+		Parsed.StreamTotalFps = (V > 0.f) ? V : 0.f;
+	}
+
 	bool bFlag = false;
 	if (Root->TryGetBoolField(TEXT("map_floor"), bFlag)) { Parsed.bMapFloor = bFlag; }
 

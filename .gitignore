@@ -6,6 +6,11 @@
 
 # ===== Unreal Engine 생성물 (Park3D/) =====
 Park3D/Binaries/
+# 플러그인도 같은 규칙 — 소스(uplugin/Source/Resources)만 추적하고 빌드 산출물은 뺀다.
+# Park3D/Binaries/ 규칙은 플러그인 하위까지 덮지 않아 따로 적어야 한다
+# (EasyFileDialog 는 Source 35KB 인데 Binaries 가 60MB 다).
+Park3D/Plugins/*/Binaries/
+Park3D/Plugins/*/Intermediate/
 # 패키징(UAT BuildCookRun) 산출물 — 수 GB, SVN/재생성 대상
 /Package/
 

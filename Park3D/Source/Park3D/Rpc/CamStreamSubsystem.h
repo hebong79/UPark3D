@@ -156,9 +156,16 @@ public:
 	UPROPERTY(config, EditAnywhere, Category = "CamStream", meta = (ClampMin = "1"))
 	int32 ActiveSlots = 1;
 
-	/** ActiveSlots 가 넘을 수 없는 상한. 동기 캡처(P1)에서 2 초과는 앱 틱이 붕괴한다. */
+	/**
+	 * ActiveSlots 가 넘을 수 없는 상한.
+	 *
+	 * 예전엔 2 였다 — 동기 캡처(P1)라 슬롯을 늘리면 앱 틱이 붕괴한다는 이유였다. 그 이유는
+	 * 이제 두 겹으로 사라졌다: ① 채널 fps 를 슬롯 수가 아니라 **실제로 캡처 중인 채널 수**로
+	 * 나눠 총 캡처량이 항상 TotalFps 로 묶이고 ② MaxCapturesPerTick 이 한 틱에 몰리는 것을 막는다.
+	 * 그래서 슬롯을 늘려도 게임 스레드 비용은 늘지 않는다(늘어나는 건 동시 시청 가능 대수뿐).
+	 */
 	UPROPERTY(config, EditAnywhere, Category = "CamStream", meta = (ClampMin = "1"))
-	int32 HardMaxSlots = 2;
+	int32 HardMaxSlots = 10;
 
 	/** 슬롯 최소 점유 시간(초). 짧으면 순환 시 각 화면이 정지화면처럼 보인다. */
 	UPROPERTY(config, EditAnywhere, Category = "CamStream", meta = (ClampMin = "0"))
@@ -168,13 +175,32 @@ public:
 	UPROPERTY(config, EditAnywhere, Category = "CamStream", meta = (ClampMin = "0"))
 	float PtzRecentSeconds = 3.f;
 
-	/** 총 캡처 예산(fps). bShareFpsBudget 이면 슬롯 수로 나눠 채널에 배분한다. */
+	/**
+	 * 총 캡처 예산(fps). bShareFpsBudget 이면 **지금 실제로 캡처 중인 채널 수**로 나눠 배분한다
+	 * (슬롯 수가 아니다 — 아무도 안 보는 슬롯이 보는 사람의 fps 를 깎으면 안 된다).
+	 * 시청자 1명 = 5fps, 2명 = 2.5fps 씩. 슬롯 상한을 올리는 것 자체는 공짜다.
+	 */
 	UPROPERTY(config, EditAnywhere, Category = "CamStream", meta = (ClampMin = "0.1", ClampMax = "60"))
 	float TotalFps = 5.f;
 
-	/** false = 채널당 TotalFps 고정(부하가 슬롯 수에 비례). */
+	/** false = 채널당 TotalFps 고정(부하가 캡처 중인 채널 수에 비례). */
 	UPROPERTY(config, EditAnywhere, Category = "CamStream")
 	bool bShareFpsBudget = true;
+
+	/**
+	 * 한 틱에 캡처할 채널 수 상한.
+	 *
+	 * PTZ 캡처는 동기다(ReadPixels + JPEG 인코딩이 게임 스레드를 그대로 잡는다 — 실측 약 33ms/장).
+	 * 예산(TotalFps)은 초당 총량만 묶을 뿐이라, 여러 채널의 만기가 같은 틱에 겹치면 그 틱 하나가
+	 * 통째로 길어진다 — 슬롯 10 이면 최악 10배(≈330ms). 밀린 채널은 Accum 을 그대로 들고 다음 틱에
+	 * 잡히므로 초당 총량은 그대로다(틱 30fps 면 초당 30장까지 소화 — 예산 5fps 를 훨씬 웃돈다).
+	 *
+	 * ⚠ 이 값은 상한이 아니라 **하한 보장이 붙은 상한**이다. 한 틱에 1장이면 초당 처리량의 천장이
+	 * 곧 틱 fps 라, 창이 뒤로 가 틱이 예산보다 느려지면(실측 2.5fps) 예산을 영영 못 채운다.
+	 * 그래서 실효 상한은 max(이 값, ceil(TotalFps / 실측 틱fps)) 이다 — 느린 구간에서만 자동으로 풀린다.
+	 */
+	UPROPERTY(config, EditAnywhere, Category = "CamStream", meta = (ClampMin = "1"))
+	int32 MaxCapturesPerTick = 1;
 
 	/** 스트림 JPEG 품질(1~100). 메인 뷰 채널도 같은 값을 쓴다. */
 	UPROPERTY(config, EditAnywhere, Category = "CamStream", meta = (ClampMin = "1", ClampMax = "100"))
@@ -344,6 +370,12 @@ private:
 	/** 슬롯 재평가(초당 1회). bHoldsSlot / LastServedTime 갱신. */
 	void UpdateSlots(ACameraControlManager* Mgr, double Now);
 
+	/**
+	 * 지금 실제로 프레임을 만들고 있는 채널 수 — 슬롯을 쥐었고 보는 사람도 있는 채널.
+	 * fps 예산의 나눗수다(슬롯 수가 아니다). 0 일 수 있다(아무도 안 볼 때).
+	 */
+	int32 CountCapturingChannels() const;
+
 	/** 카메라 1대 캡처 → JPEG. 실패 시 false(렌더타깃 없음, -nullrhi 등). */
 	bool ProduceJpeg(APTZCameraActor* Cam, TArray<uint8>& OutJpeg) const;
 
@@ -470,6 +502,12 @@ private:
 
 	/** 마지막 슬롯 재평가 시각(초). */
 	double LastSlotEvalTime = -1.0e9;
+
+	/**
+	 * MaxCapturesPerTick 로 캡처를 밀 때 다음 틱이 시작할 채널 인덱스.
+	 * 항상 0 번부터 훑으면 앞 채널만 캡처되고 뒤 채널이 굶는다.
+	 */
+	int32 CaptureCursor = 0;
 
 	/** -NoCamStream 또는 bEnabled=false 로 비활성화됐는가(로그 1회용). */
 	bool bDisabled = false;

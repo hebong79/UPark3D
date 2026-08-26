@@ -341,12 +341,33 @@ void UCamStreamSubsystem::Tick(float DeltaTime)
 		UpdateSlots(Mgr, Now);
 	}
 
-	const int32 Slots = FMath::Clamp(ActiveSlots, 1, FMath::Max(1, HardMaxSlots));
-	const float ChannelFps = Park3DCamStream::ResolveChannelFps(TotalFps, Slots, bShareFpsBudget);
+	// 나눗수는 슬롯 수가 아니라 이 틱에 실제로 캡처할 채널 수다 — 안 보는 슬롯이 보는 사람의
+	// fps 를 깎으면 슬롯 상한을 올릴 수 없게 된다(요청 #313).
+	const int32 ActiveChannels = CountCapturingChannels();
+	const float ChannelFps = Park3DCamStream::ResolveChannelFps(TotalFps, ActiveChannels, bShareFpsBudget);
 	const float Interval = 1.f / ChannelFps;
 
-	for (FCamStreamChannel& Ch : Channels)
+	// 만기가 겹친 채널이 한 틱에 몰리는 것만 막는다(동기 캡처라 겹치는 만큼 틱이 길어진다).
+	//
+	// 다만 이 상한이 예산 자체를 깎아서는 안 된다. 한 틱에 1장이면 초당 처리량의 천장이 곧 틱 fps 라,
+	// 창이 뒤로 가 틱이 2.5fps 로 떨어지면 TotalFps=5 를 영영 못 채운다(실측: sum(fps)=2.5=tickFps).
+	// 틱이 예산보다 느린 구간에서는 여러 장을 한 틱에 하는 수밖에 없으므로 그만큼 바닥을 올린다.
+	// 틱이 충분히 빠르면(30fps ≫ 5fps) 이 항은 1 이라 설정값이 그대로 쓰인다.
+	const int32 BudgetFloor = FMath::CeilToInt(TotalFps / FMath::Max(1.f, MeasuredTickFps));
+	int32 CapturesLeft = FMath::Max(FMath::Max(1, MaxCapturesPerTick), BudgetFloor);
+	const int32 ChannelNum = Channels.Num();
+
+	// 훑는 시작점은 이 틱 동안 고정해야 한다 — 루프 안에서 CaptureCursor 를 바로 갱신하면
+	// 남은 Step 의 인덱스가 함께 밀려 어떤 채널은 두 번 방문되고 어떤 채널은 아예 빠진다
+	// (빠진 채널은 Accum += DeltaTime 조차 못 받아 목표 fps 에 계속 미달한다 — 실측으로 드러난 결함).
+	const int32 ScanStart = CaptureCursor;
+	int32 NextCursor = CaptureCursor;
+
+	for (int32 Step = 0; Step < ChannelNum; ++Step)
 	{
+		const int32 Index = (ScanStart + Step) % ChannelNum;
+		FCamStreamChannel& Ch = Channels[Index];
+
 		// 슬롯이 없거나 보는 사람이 없으면 캡처하지 않는다 → 렌더 비용 0.
 		// (연결은 유지된다. 클라이언트 화면엔 마지막 프레임이 남는다.)
 		if (!Ch.Server || !Ch.bHoldsSlot || !Ch.Server->HasClients())
@@ -357,8 +378,13 @@ void UCamStreamSubsystem::Tick(float DeltaTime)
 		Ch.Accum += DeltaTime;
 		Ch.FpsWindowAccum += DeltaTime;
 
-		if (Ch.Accum >= Interval)
+		// 만기지만 이 틱의 몫이 다 찼으면 Accum 을 그대로 두고 넘긴다 — 다음 틱에 잡힌다.
+		if (Ch.Accum >= Interval && CapturesLeft > 0)
 		{
+			--CapturesLeft;
+			// 다음 틱은 이 채널 다음부터 훑는다(항상 0번부터면 뒤 채널이 굶는다).
+			NextCursor = (Index + 1) % ChannelNum;
+
 			// 잔여 시간을 보존해야 실효 fps 가 목표에 수렴한다(0 리셋은 틱 경계로 양자화되어 항상 미달).
 			// 게임 fps < 목표인 구간에서 부채가 무한 누적되지 않도록 한 프레임치로 클램프.
 			Ch.Accum = FMath::Min(Ch.Accum - Interval, Interval);
@@ -379,6 +405,22 @@ void UCamStreamSubsystem::Tick(float DeltaTime)
 			Ch.FpsWindowFrames = 0;
 		}
 	}
+
+	CaptureCursor = NextCursor;
+}
+
+int32 UCamStreamSubsystem::CountCapturingChannels() const
+{
+	int32 N = 0;
+	for (const FCamStreamChannel& Ch : Channels)
+	{
+		// Tick 의 캡처 조건과 같은 식이어야 한다 — 다르면 나눈 fps 와 실제로 도는 채널 수가 어긋난다.
+		if (Ch.Server && Ch.bHoldsSlot && Ch.Server->HasClients())
+		{
+			++N;
+		}
+	}
+	return N;
 }
 
 //======================================================================================
@@ -1211,6 +1253,7 @@ void UCamStreamSubsystem::NotifyPtzCommand(int32 CamId)
 TSharedPtr<FJsonObject> UCamStreamSubsystem::BuildStatusJson() const
 {
 	const int32 Slots = FMath::Clamp(ActiveSlots, 1, FMath::Max(1, HardMaxSlots));
+	const int32 ActiveChannels = CountCapturingChannels();
 
 	TArray<TSharedPtr<FJsonValue>> Arr;
 	for (const FCamStreamChannel& Ch : Channels)
@@ -1231,7 +1274,11 @@ TSharedPtr<FJsonObject> UCamStreamSubsystem::BuildStatusJson() const
 	Root->SetNumberField(TEXT("slots"), Slots);
 	Root->SetNumberField(TEXT("hardMaxSlots"), HardMaxSlots);
 	Root->SetNumberField(TEXT("totalFps"), TotalFps);
-	Root->SetNumberField(TEXT("channelFps"), Park3DCamStream::ResolveChannelFps(TotalFps, Slots, bShareFpsBudget));
+	// channelFps 의 나눗수는 슬롯 수가 아니라 지금 캡처 중인 채널 수다. 0 이면(아무도 안 봄)
+	// 1 로 취급되어 "다음 시청자 1명이 받을 값"이 나온다 — 호출자가 나눗수를 볼 수 있도록
+	// activeChannels 를 함께 낸다(안 그러면 channelFps 가 왜 그 값인지 밖에서 알 수 없다).
+	Root->SetNumberField(TEXT("activeChannels"), ActiveChannels);
+	Root->SetNumberField(TEXT("channelFps"), Park3DCamStream::ResolveChannelFps(TotalFps, ActiveChannels, bShareFpsBudget));
 	Root->SetNumberField(TEXT("basePort"), BasePort);
 	Root->SetNumberField(TEXT("maxCameras"), MaxCameras);
 

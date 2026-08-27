@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "CarRpcModule.h"
+#include "CarFilePaths.h"
 #include "../RpcDispatcher.h"
 #include "../RpcParamUtil.h"
 #include "../../CarPlacementManager.h"
@@ -11,6 +12,7 @@
 #include "../../Park3DDataPaths.h"
 #include "Engine/StaticMesh.h"
 #include "Misc/Paths.h"
+#include "HAL/FileManager.h"
 
 namespace
 {
@@ -543,6 +545,57 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetBoolField(TEXT("ok"), true);
 		O->SetStringField(TEXT("path"), Path);
 		O->SetStringField(TEXT("fileName"), FPaths::GetCleanFilename(Path));
+		return RpcDto::MakeObject(O);
+	});
+
+	/**
+	 * 저장한 배치 파일을 **지운다** — `car.save` 의 짝.
+	 *
+	 * ## 왜 생겼나 (SettingManager/TourAgent 요청 2026-08-27)
+	 *
+	 * TourAgent 의 「연출 레시피」는 저장할 때마다 `car.save` 로 이 기계의 디스크에
+	 * `touragent-scene-<날짜>-<시각>.json` 을 하나씩 남긴다. 그런데 지울 길이 없어서, 사람이
+	 * 레시피를 지워도 저쪽 파일은 남았고 화면이 *"지울 RPC 가 없어 그 기계에서 사람이 지워야
+	 * 합니다"* 라고 말할 수밖에 없었다. 만들기만 하고 못 지우는 비대칭이 원인이다.
+	 *
+	 * ## 세 가지 규율
+	 *
+	 * 1. **월드를 요구하지 않는다.** 파일 조작뿐이라 `GetCarManager` 를 부르지 않는다 —
+	 *    청소는 맵이 안 올라온 상태에서도 되어야 한다(다른 car.* 와 다른 점).
+	 * 2. **자리를 가둔다.** 경로는 `CarFilePaths` 가 검문한다(폴더·확장자). 이 서버는
+	 *    AllowAnonymous 라, fullPath 를 그대로 믿으면 삭제가 임의 파일 삭제가 된다.
+	 * 3. **없는 파일은 실패가 아니다.** 청소는 여러 번 불려도 같은 결과여야 한다(멱등).
+	 *    「없었다」와 「지웠다」는 `existed`·`deleted` 두 칸으로 구분해 사실대로 말한다 —
+	 *    이미 지워진 파일 때문에 부른 쪽의 삭제 흐름이 실패로 끝나면 안 된다.
+	 */
+	Dispatcher.Register(TEXT("car.deleteFile"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		// 경로 해석은 car.save/car.load 와 **같은 함수**다 — 저장할 때 쓴 파라미터
+		// (fullPath 또는 path+fileName)를 그대로 보내면 그 파일이 지워진다.
+		const FString Requested = ResolveCarPath(P);
+
+		FString Path, Reason;
+		if (!CarFilePaths::CanDelete(Requested, CarFilePaths::DefaultRoots(), Path, Reason))
+		{
+			E.FailDomain(Reason);
+			return nullptr;
+		}
+
+		const bool bExisted = IFileManager::Get().FileExists(*Path);
+		if (bExisted && !IFileManager::Get().Delete(*Path, /*RequireExists=*/false, /*EvenReadOnly=*/true, /*Quiet=*/true))
+		{
+			E.FailDomain(FString::Printf(TEXT("배치 파일 삭제 실패: %s"), *Path));
+			return nullptr;
+		}
+
+		UE_LOG(LogTemp, Log, TEXT("[Car] 배치 파일 삭제: %s (있었나=%s)"), *Path, bExisted ? TEXT("예") : TEXT("아니오"));
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetStringField(TEXT("path"), Path);
+		O->SetStringField(TEXT("fileName"), FPaths::GetCleanFilename(Path));
+		O->SetBoolField(TEXT("existed"), bExisted);
+		O->SetBoolField(TEXT("deleted"), bExisted);
 		return RpcDto::MakeObject(O);
 	});
 

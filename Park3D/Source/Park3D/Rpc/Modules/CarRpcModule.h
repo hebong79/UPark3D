@@ -1,5 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
-// CarRpcModule : car.* (22) 핸들러. Unity CCarRpcModule 포팅.
+// CarRpcModule : car.* (23) 핸들러. Unity CCarRpcModule 포팅.
+// car.deleteFile 은 Unity 에 없던 추가분이다 — car.save 의 짝(자리 검문은 CarFilePaths.h).
 // 백엔드: ACarPlacementManager + DT_CarCatalog.
 // car.setMetallic 은 UCarColorComponent::SetMetallic(glTF MetallicFactor/RoughnessFactor)에 결선되어 있다.
 

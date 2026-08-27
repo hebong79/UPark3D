@@ -52,3 +52,6 @@ Desktop.ini
 # ===== 주차 시뮬레이션 주행 기록(실행 산출물) =====
 # *.log 는 위에서 이미 제외됨. 리플레이용 프레임 json 도 실행마다 새로 생기므로 제외한다.
 Park3D/Save/3D/Sim/
+
+# ContentDelivery 의 백업(적용 시 자동 생성)은 배포물이 아니다.
+ContentDelivery/_backup/

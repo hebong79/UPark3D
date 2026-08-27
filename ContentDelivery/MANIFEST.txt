@@ -1,0 +1,4 @@
+# 배포 스냅샷 목록 — sha256 앞 16자 / 경로 / 크기 / 원본(Park3D/...) 수정시각 / 원본과 일치 여부
+# 이 파일이 낡았는지 보려면 `python ContentDelivery/make_manifest.py` 를 다시 돌려
+# 마지막 칸이 전부 '일치' 인지 확인한다.
+43a540ae6d769492  Content/Actors/Car/Plates/Materials/M_PlateFront.uasset       37166 B  원본수정 2026-08-27 18:00:41  일치

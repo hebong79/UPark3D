@@ -55,3 +55,10 @@ Park3D/Save/3D/Sim/
 
 # ContentDelivery 의 백업(적용 시 자동 생성)은 배포물이 아니다.
 ContentDelivery/_backup/
+
+# 빌드 실행 기록(_workspace/*.out)은 실행마다 새로 생기는 산출물이다. *.log 와 같은 취지.
+_workspace/*.out
+
+# 에셋을 고치기 전에 떠 두는 로컬 백업. Content 가 git 밖이라 되돌릴 유일한 사본이지만,
+# 저장소에 넣을 것은 ContentDelivery/ 쪽이고 이건 각 PC 의 안전망이다.
+_workspace/*_backup_*/

@@ -1,0 +1,322 @@
+{
+ "font": "Suseong Dotum",
+ "fontFile": "suseong.ttf",
+ "fontSize": 166,
+ "cell": 256,
+ "cols": 6,
+ "rows": 8,
+ "baseline": 200,
+ "spread": 8.0,
+ "spaceAdvance": 49.75,
+ "atlas": "suseong_sdf.png",
+ "glyphs": [
+  {
+   "char": "0",
+   "col": 0,
+   "row": 0,
+   "advance": 115.5,
+   "boxX0": 70.25
+  },
+  {
+   "char": "1",
+   "col": 1,
+   "row": 0,
+   "advance": 115.5,
+   "boxX0": 70.25
+  },
+  {
+   "char": "2",
+   "col": 2,
+   "row": 0,
+   "advance": 115.5,
+   "boxX0": 70.25
+  },
+  {
+   "char": "3",
+   "col": 3,
+   "row": 0,
+   "advance": 115.5,
+   "boxX0": 70.25
+  },
+  {
+   "char": "4",
+   "col": 4,
+   "row": 0,
+   "advance": 115.5,
+   "boxX0": 70.25
+  },
+  {
+   "char": "5",
+   "col": 5,
+   "row": 0,
+   "advance": 115.5,
+   "boxX0": 70.25
+  },
+  {
+   "char": "6",
+   "col": 0,
+   "row": 1,
+   "advance": 115.5,
+   "boxX0": 70.25
+  },
+  {
+   "char": "7",
+   "col": 1,
+   "row": 1,
+   "advance": 115.5,
+   "boxX0": 70.25
+  },
+  {
+   "char": "8",
+   "col": 2,
+   "row": 1,
+   "advance": 115.5,
+   "boxX0": 70.25
+  },
+  {
+   "char": "9",
+   "col": 3,
+   "row": 1,
+   "advance": 115.5,
+   "boxX0": 70.25
+  },
+  {
+   "char": "가",
+   "col": 4,
+   "row": 1,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "나",
+   "col": 5,
+   "row": 1,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "다",
+   "col": 0,
+   "row": 2,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "라",
+   "col": 1,
+   "row": 2,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "마",
+   "col": 2,
+   "row": 2,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "바",
+   "col": 3,
+   "row": 2,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "사",
+   "col": 4,
+   "row": 2,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "거",
+   "col": 5,
+   "row": 2,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "너",
+   "col": 0,
+   "row": 3,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "더",
+   "col": 1,
+   "row": 3,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "러",
+   "col": 2,
+   "row": 3,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "머",
+   "col": 3,
+   "row": 3,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "버",
+   "col": 4,
+   "row": 3,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "서",
+   "col": 5,
+   "row": 3,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "어",
+   "col": 0,
+   "row": 4,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "저",
+   "col": 1,
+   "row": 4,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "고",
+   "col": 2,
+   "row": 4,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "노",
+   "col": 3,
+   "row": 4,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "도",
+   "col": 4,
+   "row": 4,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "로",
+   "col": 5,
+   "row": 4,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "모",
+   "col": 0,
+   "row": 5,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "보",
+   "col": 1,
+   "row": 5,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "소",
+   "col": 2,
+   "row": 5,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "오",
+   "col": 3,
+   "row": 5,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "조",
+   "col": 4,
+   "row": 5,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "구",
+   "col": 5,
+   "row": 5,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "누",
+   "col": 0,
+   "row": 6,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "두",
+   "col": 1,
+   "row": 6,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "루",
+   "col": 2,
+   "row": 6,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "무",
+   "col": 3,
+   "row": 6,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "부",
+   "col": 4,
+   "row": 6,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "수",
+   "col": 5,
+   "row": 6,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "우",
+   "col": 0,
+   "row": 7,
+   "advance": 157.75,
+   "boxX0": 49.125
+  },
+  {
+   "char": "주",
+   "col": 1,
+   "row": 7,
+   "advance": 157.75,
+   "boxX0": 49.125
+  }
+ ]
+}

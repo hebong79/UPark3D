@@ -15,7 +15,7 @@ class UWidgetComponent;
 class UCarColorComponent;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
-class UText3DComponent;
+class UTexture2D;
 
 /**
  * 번호판 메시에서 읽어 낸 로컬 기준틀. 축을 코드에 박으면 콘텐츠(판 메시)가 바뀌는 순간
@@ -91,20 +91,23 @@ public:
 	UWidgetComponent* BackPlateWidget;
 
 	/**
-	 * 번호를 **압출 지오메트리**로 그리는 양각(앞/뒤). 실물 번호판은 문자가 1.3~1.6mm 양각이고
-	 * (「자동차 등록번호판 등의 기준에 관한 고시」), 화면에서 양각으로 읽히는 것은 색이 아니라
-	 * 그 측벽에 생기는 명암이다. 위의 위젯은 Unlit 이라 조명을 아예 받지 못한다.
-	 * 빌드가 실제로 됐는지 확인되기 전까지 위젯을 폴백으로 남긴다(HandlePlateEmbossBuilt).
+	 * 번호를 담은 **거리장(SDF) 텍스처**. 판 앞면 전체(52.10×11.00cm)를 1024×256 으로 덮고,
+	 * 판 머티리얼(`M_PlateFront` 의 `NumberSDF` 파라미터)이 여기서 색·노멀·거칠기·가림을 함께 낸다.
+	 *
+	 * 앞판과 뒤판이 같은 번호이므로 **한 장을 둘이 공유**한다.
+	 * 이전 구현(Text3D 압출 지오메트리)을 대체한 이유는 `PlateGlyphAtlas.h` 머리말에 있다 —
+	 * 요약하면 ① 검은 알베도가 디퓨즈를 0 으로 깎아 측벽 명암이 안 생겼고
+	 * ② 원거리에서 획이 0.7px 이 되면 지오메트리는 밉이 없어 통째로 사라졌다.
 	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Car|Plate")
-	UText3DComponent* FrontPlateEmboss;
+	TObjectPtr<UTexture2D> PlateNumberSdf;
+
+	/** 앞/뒤 판 머티리얼 인스턴스. `NumberSDF` 를 차량마다 다르게 넣기 위해 필요하다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Car|Plate")
+	TObjectPtr<UMaterialInstanceDynamic> FrontPlateMid;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Car|Plate")
-	UText3DComponent* BackPlateEmboss;
-
-	/** 양각 글자의 검은 도색면. 앞/뒤가 같은 색이라 하나를 공유한다. */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Car|Plate")
-	UMaterialInstanceDynamic* PlateEmbossMaterial;
+	TObjectPtr<UMaterialInstanceDynamic> BackPlateMid;
 
 	/** 이 actor 수명 동안 유지되는 결정적 한국 일반 승용차 형식(123다4567) 번호. JSON에는 저장하지 않는다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Car|Plate")
@@ -193,21 +196,13 @@ private:
 	void AlignPlateAndText(UStaticMeshComponent* Plate, UTextRenderComponent* Text, bool bFront);
 
 	/**
-	 * 양각 번호를 판 면 위에 놓는다. 축은 `AlignPlateAndText` 와 같은 규약(메시 바운즈에서 읽는다)이고,
-	 * 번호가 놓이는 영역은 위젯(`UCarPlateNumberWidget`)의 여백과 같은 비율을 쓴다 — 두 경로가
-	 * 어긋나면 폴백으로 위젯이 켜지는 순간 번호가 옆으로 튄다.
+	 * 번호 SDF 를 만들어 앞/뒤 판 머티리얼에 물린다. 판 크기는 메시 바운즈에서 읽어 넘긴다 —
+	 * 판을 갈아 끼워도 글자 종횡비가 따라가야 하기 때문이다.
+	 *
+	 * 성공하면 폴백 위젯을 끈다. **실패하면 위젯을 켠 채로 둔다** — 번호가 통째로 사라지는 것보다
+	 * 예전 평면 표시가 남는 편이 낫다(아틀라스 에셋이나 메트릭 JSON 이 없는 경우).
 	 */
-	void AlignPlateEmboss(UText3DComponent* Emboss, const FCarPlateFrame& Frame);
-
-	/** 양각이 실제로 만들어졌는지 확인하고, 됐으면 폴백 위젯을 끈다. Text3D 빌드 완료 시 호출된다. */
-	void HandlePlateEmbossBuilt();
-
-	/** 빌드가 만든 글자 메시 컴포넌트의 머티리얼 슬롯을 전부 검게 칠한다(구현부 주석에 근거). */
-	void PaintPlateEmboss(UText3DComponent* Emboss);
-
-
-	/** 양각 메시가 실제로 생겼는가(바운즈가 0이면 폰트 아웃라인을 못 읽은 것이다). */
-	static bool IsEmbossBuilt(const UText3DComponent* Emboss);
+	void ApplyPlateNumberSdf(const FCarPlateFrame& Frame);
 
 	/** 글자를 판 표면에서 얼마나 띄울지(cm). z-fighting 만 피하면 되므로 작게. */
 	static constexpr float PlateTextSurfaceGap = 0.3f;
@@ -223,60 +218,10 @@ private:
 	static constexpr float PlateWidgetDrawWidth = 520.f;
 
 	/**
-	 * 양각 돌출 높이(cm). 고시 규격 1.3~1.6mm 의 중앙값이다. 임의로 키우면 근접 캡처에서
-	 * 장난감처럼 보인다 — 규격대로 두고, 부족하다는 판단이 서면 그때 올린다.
+	 * 번호가 놓이는 영역·글자 크기는 **`UPlateGlyphAtlasSubsystem` 이 실물 실측값으로 정한다**
+	 * (좌 6.79cm ~ 우 50.19cm, 글자 높이 7.08cm, 가로 압축 0.853).
+	 * 여기 상수로 중복해 두면 두 곳이 어긋나므로 두지 않는다 — 폴백 위젯의 여백만 남는다.
 	 */
-	static constexpr float PlateEmbossReliefCm = 0.15f;
-	/**
-	 * Text3D 에 넣는 압출값(cm). 규격값을 그대로 넣는다.
-	 *
-	 * **완성된 메시의 두께는 0.1cm 단위로만 나온다** — 실측 세 점 `0.150 → 0.100`,
-	 * `0.1875 → 0.100`, `0.225 → 0.200` 이 전부 `내림(입력, 0.1cm)` 에 맞는다(베벨 0.02·세그먼트 2).
-	 * 그래서 1.3~1.6mm 를 정확히 맞출 수단이 없고, 실효 두께는 1.0mm 다(규격보다 얇은 쪽).
-	 * 처음엔 두 점만 보고 `두께 = 4/3 × 입력 − 0.1` 로 읽어 0.1875 를 넣었는데 세 번째 점이
-	 * 그 직선을 반증했다 — **두 점으로 직선을 긋지 말 것.**
-	 * 로그의 `양각 … 크기=X=` 가 실측 두께이고, 차량이 축에 정렬된 것만 읽어야 한다
-	 * (비스듬한 차량은 월드 AABB 라 폭이 섞여 들어온다).
-	 */
-	static constexpr float PlateEmbossExtrudeInput = PlateEmbossReliefCm;
-	/** 압인 모서리는 칼각이 아니라 둥글다. 돌출의 1/7 정도만 준다(Extrude/2 를 넘으면 엔진이 클램프한다). */
-	static constexpr float PlateEmbossBevel = 0.02f;
-	/** 베벨 분할 수. 1.5mm 짜리 모서리라 2면 충분하고, 늘리면 글자 수만큼 삼각형이 곱해진다. */
-	static constexpr int32 PlateEmbossBevelSegments = 2;
-	/** 글자 밑면을 판 표면 **안쪽**으로 이만큼 묻는다(cm). 면과 정확히 맞추면 z-fighting 이 난다. */
-	static constexpr float PlateEmbossSurfaceSink = 0.02f;
-	/**
-	 * Pretendard Bold 로 "123가 4567"(8자+간격)을 그렸을 때 **폰트 크기 1 당 가로 폭(cm)**.
-	 * 실측 근거: FontSize 24 + 영역 맞춤 축소 0.04 에서 폭 9.585cm → 축소 전 239.6cm → 24로 나눈 값.
-	 * 번호에 따라 ±1% 흔들린다(9.49~9.66/24 범위) — 판 오른쪽 여백 2cm 가 흡수한다.
-	 *
-	 * **Text3D 의 자동 영역 맞춤(SetHasMaxWidth/Height)은 쓰지 않는다.** 두 가지 이유다 —
-	 *  ① 그 축소는 가로·세로뿐 아니라 **압출 축까지** 줄여 규격 1.5mm 를 깎는다
-	 *     (`Text3DDefaultLayoutExtension::CalculateTextScale` 의 `Scale.X = Scale.Y`).
-	 *  ② Max 값이 월드 cm 가 아니라 레이아웃 단위로 비교된다 — 영역 폭 42cm 를 그대로 넣고 폰트를
-	 *     키웠더니 글자가 커지기는커녕 2.2cm 로 쪼그라들고 메모리가 21GB 까지 치솟았다(실측).
-	 * 그래서 처음부터 영역에 맞는 크기로 그리고, 축소는 아예 타지 않는다(TextScale = 1 → 압출 정확).
-	 * 최종 보정: 9.98 로 그렸을 때 폭이 35.2cm(목표 42.08)여서 42.08/35.2 만큼 낮췄다.
-	 */
-	static constexpr float PlateEmbossWidthPerFontSize = 9.98f * 35.16f / 42.08f;
-
-	// 번호가 놓이는 영역. 위젯(`UCarPlateNumberWidget`)의 DrawSize(520×110px) 여백과 같은 비율이라
-	// 양각과 폴백 위젯이 같은 자리를 쓴다. 좌측 여백이 큰 것은 파란 KOR 스트립을 피하기 때문이다.
-	/** 번호 영역 왼쪽 여백(판 폭 대비). 위젯 80/520. */
-	static constexpr float PlateNumberAreaLeftFrac = 80.f / 520.f;
-	/** 번호 영역 오른쪽 여백(판 폭 대비). 위젯 20/520. */
-	static constexpr float PlateNumberAreaRightFrac = 20.f / 520.f;
-	/** 번호 영역 위아래 여백(판 높이 대비). 위젯 10/110. */
-	static constexpr float PlateNumberAreaVerticalFrac = 10.f / 110.f;
-
-	/**
-	 * Text3D 의 **읽는 면이 로컬 -X 를 본다**는 규약. 근거는 엔진 소스다 — 글리프는 YZ 평면에 놓이고
-	 * 압출이 +X 로 나간다(`Text3DGlyphMeshBuilder.cpp` 가 Front 를 X=0, Back 을 X=Extrude 에 미러로
-	 * 놓으므로 X=0 면의 법선은 -X 다).
-	 * **글자가 좌우로 뒤집혀 보이면(뒷면을 보고 있는 것이다) 이 값을 +1 로 바꾼다** — 여기 한 곳만
-	 * 고치면 회전·글자 흐름·번호 영역 오프셋이 함께 따라온다(세로 방향은 영향받지 않는다).
-	 */
-	static constexpr float PlateEmbossFaceSign = -1.f;
 
 	/**
 	 * 접지 트레이스 구간(cm). 차량 바닥에서 위/아래로 이만큼만 본다.
@@ -294,6 +239,6 @@ private:
 	bool bSelected = false;
 	bool bSelectionMarkVisible = true;
 
-	/** 양각 빌드 완료 델리게이트를 이미 걸었는가(정렬은 재초기화 때 다시 도는데 델리게이트는 한 번만 건다). */
-	bool bPlateEmbossHooked = false;
+	/** 번호 SDF 를 이미 만들었는가. 정렬은 재초기화 때마다 도는데 합성은 한 번이면 된다. */
+	bool bPlateNumberSdfBuilt = false;
 };

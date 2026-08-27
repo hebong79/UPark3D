@@ -15,8 +15,10 @@
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Misc/Crc.h"
-#include "Text3DComponent.h"
-#include "Text3DTypes.h"
+#include "Engine/GameInstance.h"
+#include "Engine/Texture.h"
+#include "Engine/Texture2D.h"
+#include "Plate/PlateGlyphAtlas.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace
@@ -32,21 +34,6 @@ namespace
 		return FString::Printf(TEXT("%d|%d|%d|%d|%.3f|%.3f|%.3f|%.3f|%d"),
 			Pos.type, Pos.presetId, Pos.slotId, Pos.prefabId,
 			Pos.pos.x, Pos.pos.y, Pos.pos.z, Pos.rotY, Pos.isFront ? 1 : 0);
-	}
-
-	/**
-	 * 양각 글자 덩어리의 실제 크기(cm). Text3D 는 `FBox GetBounds()` 도 갖고 있지만 그쪽은
-	 * export 되지 않아 모듈 밖에서 링크되지 않는다 — out 파라미터 버전만 TEXT3D_API 다.
-	 */
-	FVector MeasureEmbossSize(const UText3DComponent* Emboss)
-	{
-		FVector Origin = FVector::ZeroVector;
-		FVector Extent = FVector::ZeroVector;
-		if (Emboss)
-		{
-			Emboss->GetBounds(Origin, Extent);
-		}
-		return Extent * 2.0;
 	}
 
 	void ConfigurePlateVisual(UPrimitiveComponent* Component)
@@ -127,12 +114,6 @@ ACarActor::ACarActor()
 		PlateWidget->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		PlateWidget->SetCastShadow(false);
 	}
-	// 번호 양각(압출 지오메트리). 위치·자세·크기는 AlignPlateEmboss 가 판 메시 축에서 잡는다.
-	FrontPlateEmboss = CreateDefaultSubobject<UText3DComponent>(TEXT("FrontPlateEmboss"));
-	FrontPlateEmboss->SetupAttachment(FrontPlateComp);
-	BackPlateEmboss = CreateDefaultSubobject<UText3DComponent>(TEXT("BackPlateEmboss"));
-	BackPlateEmboss->SetupAttachment(BackPlateComp);
-
 	ConfigurePlateVisual(FrontPlateText);
 	ConfigurePlateVisual(BackPlateText);
 	for (UTextRenderComponent* PlateText : { FrontPlateText, BackPlateText })
@@ -155,9 +136,6 @@ ACarActor::ACarActor()
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> PlateDetailCubeFinder(TEXT("/Engine/BasicShapes/Cube"));
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> WhitePlateBaseMatFinder(TEXT("/Engine/BasicShapes/BasicShapeMaterial"));
 	static ConstructorHelpers::FObjectFinder<UFont> PlateFontFinder(TEXT("/Game/Actors/Car/Plates/Font/수성돋움체"));
-	// 양각은 위젯과 **같은** 폰트를 쓴다. TextRender 가 못 그리던 Runtime 캐시 폰트라도 Text3D 는
-	// 폰트 아웃라인(FreeType)을 읽어 압출하므로 제약이 다르다.
-	static ConstructorHelpers::FObjectFinder<UFont> PlateEmbossFontFinder(TEXT("/Game/Widgets/Fonts/Pretendard/Pretendard"));
 	// 프로젝트 사본이던 DefaultTextMaterialTranslucent1 이 사라져 엔진 원본을 쓴다(내용 동일).
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> PlateTextMatFinder(TEXT("/Engine/EngineMaterials/DefaultTextMaterialTranslucent"));
 	if (FrontPlateFinder.Succeeded()) FrontPlateComp->SetStaticMesh(FrontPlateFinder.Object);
@@ -200,36 +178,6 @@ ACarActor::ACarActor()
 			ApplyColoredPlateDetail(SecurityStrip, KoreaSecurityBlue);
 		}
 
-		// 양각 글자의 도색면. 앞/베벨/측벽/뒷면을 같은 검정으로 칠한다 — 실물도 압인 후 한 색으로 도색한다.
-		// **Lit 머티리얼이어야 한다.** 양각이 눈에 보이는 이유가 측벽에 생기는 명암이므로, 위젯이 쓰는
-		// Unlit 패스스루로는 두께를 만들어 놓고도 평면으로 보인다.
-		// 실제 대입은 AlignPlateEmboss(런타임)에서 한다 — 생성자에서 걸면 Text3D 가 빌드하며
-		// 자기 기본 머티리얼로 덮어 글자가 흰색으로 나온다(실측).
-		PlateEmbossMaterial = UMaterialInstanceDynamic::Create(WhitePlateBaseMaterial, this);
-		if (PlateEmbossMaterial)
-		{
-			PlateEmbossMaterial->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.015f, 0.015f, 0.015f, 1.f));
-		}
-	}
-	for (UText3DComponent* Emboss : { FrontPlateEmboss, BackPlateEmboss })
-	{
-		Emboss->SetVisibility(false, true); // 판과 같이 UpdatePlatePresentation 에서 켠다.
-		Emboss->SetCastShadow(false);       // 1.5mm 자기 그림자는 그림자맵 해상도 아래다 — 비용만 든다.
-		if (PlateEmbossFontFinder.Succeeded())
-		{
-			Emboss->SetFont(PlateEmbossFontFinder.Object);
-			Emboss->SetTypeface(TEXT("Bold")); // 번호판 글자는 굵다. 없는 타입페이스면 기본으로 떨어진다.
-		}
-		Emboss->SetExtrude(PlateEmbossExtrudeInput);
-		Emboss->SetBevel(PlateEmbossBevel);
-		Emboss->SetBevelType(EText3DBevelType::Convex);
-		Emboss->SetBevelSegments(PlateEmbossBevelSegments);
-		// 번호 영역 안에서 가운데 정렬. 크기 맞춤은 폰트 크기로 직접 한다 — 자동 영역 맞춤을
-		// 쓰지 않는 이유는 PlateEmbossWidthPerFontSize 주석에 있다.
-		Emboss->SetHorizontalAlignment(EText3DHorizontalTextAlignment::Center);
-		Emboss->SetVerticalAlignment(EText3DVerticalTextAlignment::Center);
-		Emboss->SetHasMaxWidth(false);
-		Emboss->SetHasMaxHeight(false);
 	}
 	for (UTextRenderComponent* PlateText : { FrontPlateText, BackPlateText })
 	{
@@ -360,7 +308,7 @@ void ACarActor::AlignPlateAndText(UStaticMeshComponent* Plate, UTextRenderCompon
 		}
 	}
 
-	AlignPlateEmboss((Plate == FrontPlateComp) ? FrontPlateEmboss : BackPlateEmboss, Frame);
+	ApplyPlateNumberSdf(Frame);
 
 	// 판·글자가 어디에 어떤 자세로 놓였는지 한 줄로 남긴다. "로그에는 vis=1 인데 화면에 없다"를
 	// 다시 만나면 이 값(법선·간격·월드 위치)이 원인을 바로 가리킨다.
@@ -370,125 +318,72 @@ void ACarActor::AlignPlateAndText(UStaticMeshComponent* Plate, UTextRenderCompon
 		*BoundsOrigin.ToString(), *TextLocal.ToString(), *Text->GetComponentLocation().ToString());
 }
 
-void ACarActor::AlignPlateEmboss(UText3DComponent* Emboss, const FCarPlateFrame& Frame)
+void ACarActor::ApplyPlateNumberSdf(const FCarPlateFrame& Frame)
 {
-	if (!Emboss)
+	if (bPlateNumberSdfBuilt || Frame.WidthCm <= 0.0 || Frame.HeightCm <= 0.0)
 	{
 		return;
 	}
 
-	// 판의 세로 축. 읽는 면이 어느 쪽이든 이 방향은 변하지 않는다(TextRender·위젯과 같은 값).
-	const FVector Up = Frame.Wide ^ Frame.Outward;
-	// 컴포넌트 +X 를 어디로 보낼지는 "읽는 면이 -X" 규약이 정한다(PlateEmbossFaceSign 주석).
-	const FVector AxisX = Frame.Outward * PlateEmbossFaceSign;
-	Emboss->SetRelativeRotation(FRotationMatrix::MakeFromXZ(AxisX, Up).Rotator());
-	// 글자가 흐르는 방향은 컴포넌트 +Y 이고, MakeFromXZ 규약상 Y = Z ^ X 다.
-	const FVector Flow = Up ^ AxisX;
-
-	// 번호가 놓이는 영역(좌측 파란 KOR 스트립을 뺀 나머지)의 중심으로 옮긴다. 여백 비율이 위젯과
-	// 같으므로, 양각이 실패해 폴백 위젯이 켜져도 번호가 옆으로 튀지 않는다.
-	const double AreaCenterFrac = 0.5 * (PlateNumberAreaLeftFrac - PlateNumberAreaRightFrac);
-	Emboss->SetRelativeLocation(Frame.Origin
-		+ Frame.Outward * (Frame.HalfThickness - PlateEmbossSurfaceSink)
-		+ Flow * (AreaCenterFrac * Frame.WidthCm));
-
-	// 영역을 넘치면 줄인다(위젯의 ScaleBox ScaleToFit 과 같은 규약). 판 크기에서 매번 계산하므로
-	// 판 메시가 바뀌어도 글자가 판 밖으로 나가지 않는다.
-	const float AreaWidth = static_cast<float>(Frame.WidthCm * (1.0 - PlateNumberAreaLeftFrac - PlateNumberAreaRightFrac));
-	const float AreaHeight = static_cast<float>(Frame.HeightCm * (1.0 - 2.0 * PlateNumberAreaVerticalFrac));
-	// 영역 폭에 맞는 크기로 **처음부터** 그린다. 판 크기에서 매번 계산하므로 판 메시가 바뀌어도 따라간다.
-	Emboss->SetFontSize(AreaWidth / PlateEmbossWidthPerFontSize);
-
-	// 검은 도색면. 생성자에서 걸면 빌드가 기본 머티리얼로 덮으므로 여기서 매번 건다.
-	if (PlateEmbossMaterial)
+	const UGameInstance* GameInstance = GetGameInstance();
+	UPlateGlyphAtlasSubsystem* Atlas = GameInstance ? GameInstance->GetSubsystem<UPlateGlyphAtlasSubsystem>() : nullptr;
+	if (Atlas == nullptr)
 	{
-		Emboss->SetFrontMaterial(PlateEmbossMaterial);
-		Emboss->SetBevelMaterial(PlateEmbossMaterial);
-		Emboss->SetExtrudeMaterial(PlateEmbossMaterial);
-		Emboss->SetBackMaterial(PlateEmbossMaterial);
+		return;
 	}
 
-	// 판에서 읽은 수치를 남긴다 — 글자가 작거나 옆으로 치우치면 이 줄만으로 원인이 갈린다
-	// (판 크기를 잘못 읽었나 / 영역 계산이 틀렸나 / 축이 뒤바뀌었나).
-	UE_LOG(LogTemp, Display, TEXT("[CarPlate] 양각배치 판=%.2f×%.2fcm 영역=%.2f×%.2fcm 두께반경=%.2f 흐름=%s 위치=%s"),
-		Frame.WidthCm, Frame.HeightCm, AreaWidth, AreaHeight, Frame.HalfThickness,
-		*Flow.ToString(), *Emboss->GetRelativeLocation().ToString());
+	bPlateNumberSdfBuilt = true;   // 실패해도 매 정렬마다 다시 시도하지 않는다(로그만 쌓인다).
 
-	// 같은 값을 다시 넣으면 압출 빌드가 한 번 더 걸린다 — 값이 달라질 때만 넣는다.
-	const FText Number = FText::FromString(MakePlateDisplayText(PlateNumber));
-	if (!Emboss->GetText().EqualTo(Number))
-	{
-		Emboss->SetText(Number);
-	}
+	const FString Display = MakePlateDisplayText(PlateNumber);
+	PlateNumberSdf = Atlas->BuildNumberSdf(this, Display, Frame.WidthCm / Frame.HeightCm);
 
-	// 빌드는 프레임 예산(기본 2ms)으로 쪼개져 나중에 끝나므로, 끝난 시점을 받아 폴백을 정리하고
-	// 글자 메시를 칠한다. **앞·뒤 각각 걸어야 한다** — 앞판에만 걸었더니 뒤판은 빌드가 끝나도
-	// 폴백 위젯이 켜진 채로 남았다(실측).
-	if (!bPlateEmbossHooked)
+	// 앞/뒤 판이 같은 머티리얼(M_PlateFront)을 쓰므로 인스턴스를 각각 만들어 같은 SDF 를 물린다.
+	//
+	// **슬롯 번호를 박으면 안 된다.** SM_Plate_F/B 는 슬롯 0 이 M_PlateFrame(테두리)이고
+	// **슬롯 1 이 M_PlateFront(판 앞면)** 다 — 0 을 쓰면 테두리 머티리얼의 MID 를 만들어
+	// `NumberSDF` 를 조용히 아무 데도 안 넣는다(실측: 판정 로그가 front=0 back=0 으로 나왔다).
+	// 그래서 **파라미터가 있는 슬롯을 찾는다** — 메시 슬롯 순서가 바뀌어도 따라간다.
+	auto Bind = [this](UStaticMeshComponent* Plate, TObjectPtr<UMaterialInstanceDynamic>& OutMid)
 	{
-		bPlateEmbossHooked = true;
-		for (UText3DComponent* Hook : { FrontPlateEmboss, BackPlateEmboss })
+		if (Plate == nullptr || PlateNumberSdf == nullptr)
 		{
-			if (Hook)
-			{
-				Hook->OnTextGenerated().AddUObject(this, &ACarActor::HandlePlateEmbossBuilt);
-			}
+			return false;
 		}
-	}
-}
-
-void ACarActor::PaintPlateEmboss(UText3DComponent* Emboss)
-{
-	if (!Emboss || !PlateEmbossMaterial)
-	{
-		return;
-	}
-
-	// 컴포넌트의 Front/Bevel/Extrude/Back 머티리얼 지정만으로는 **측벽이 흰색으로 남는다**(실측:
-	// 글자 앞면은 검은데 아래·오른쪽 측벽만 희게 떴다). 빌드가 만든 글자 메시 컴포넌트의 슬롯을
-	// 전부 직접 칠해야 확실하다 — 메시가 몇 개 슬롯으로 나뉘든 남는 슬롯이 없다.
-	// 지역명을 `Children` 으로 두면 `AActor::Children` 을 가려 C4458 이 에러로 승격된다.
-	TArray<USceneComponent*> EmbossParts;
-	Emboss->GetChildrenComponents(/*bIncludeAllDescendants=*/true, EmbossParts);
-	for (USceneComponent* Child : EmbossParts)
-	{
-		if (UStaticMeshComponent* Glyph = Cast<UStaticMeshComponent>(Child))
+		if (OutMid == nullptr)
 		{
-			const int32 SlotCount = Glyph->GetNumMaterials();
+			const int32 SlotCount = Plate->GetNumMaterials();
 			for (int32 Slot = 0; Slot < SlotCount; ++Slot)
 			{
-				Glyph->SetMaterial(Slot, PlateEmbossMaterial);
+				UMaterialInterface* const Mat = Plate->GetMaterial(Slot);
+				UTexture* Existing = nullptr;
+				if (Mat != nullptr && Mat->GetTextureParameterValue(FHashedMaterialParameterInfo(FMaterialParameterInfo(TEXT("NumberSDF"))), Existing))
+				{
+					OutMid = Plate->CreateDynamicMaterialInstance(Slot);
+					break;
+				}
 			}
 		}
-	}
-}
+		if (OutMid == nullptr)
+		{
+			return false;
+		}
+		OutMid->SetTextureParameterValue(TEXT("NumberSDF"), PlateNumberSdf);
+		return true;
+	};
 
-bool ACarActor::IsEmbossBuilt(const UText3DComponent* Emboss)
-{
-	return Emboss && !Emboss->GetText().IsEmpty() && !MeasureEmbossSize(Emboss).IsNearlyZero();
-}
+	const bool bFront = Bind(FrontPlateComp, FrontPlateMid);
+	const bool bBack = Bind(BackPlateComp, BackPlateMid);
 
-void ACarActor::HandlePlateEmbossBuilt()
-{
-	PaintPlateEmboss(FrontPlateEmboss);
-	PaintPlateEmboss(BackPlateEmboss);
+	// 성공한 판만 폴백 위젯을 끈다. 아틀라스 에셋이나 메트릭 JSON 이 없으면 여기서 실패하는데,
+	// 그때 위젯까지 꺼 버리면 번호가 통째로 사라진다.
+	if (FrontPlateWidget) FrontPlateWidget->SetVisibility(!bFront, true);
+	if (BackPlateWidget) BackPlateWidget->SetVisibility(!bBack, true);
 
-	const bool bFrontBuilt = IsEmbossBuilt(FrontPlateEmboss);
-	const bool bBackBuilt = IsEmbossBuilt(BackPlateEmboss);
-
-	// 양각이 실제로 생긴 판에서만 평면 위젯을 끈다. 못 만들었으면(폰트 아웃라인을 못 읽는 경우 등)
-	// 번호가 통째로 사라지는 대신 예전 표시가 그대로 남는다.
-	if (FrontPlateWidget) FrontPlateWidget->SetVisibility(!bFrontBuilt, true);
-	if (BackPlateWidget) BackPlateWidget->SetVisibility(!bBackBuilt, true);
-
-	// 크기를 같이 남긴다 — 축이 뒤바뀌면 "폭이 판 높이만 하다" 같은 형태로 로그 한 줄에 드러난다.
-	// 겹쳐 보이는 번호를 다시 만나면 폴백(위젯)·레거시(TextRender) 가시성이 여기서 갈린다.
-	UE_LOG(LogTemp, Display, TEXT("[CarPlate] 양각 id=%s number=%s front(생성=%d 크기=%s) back(생성=%d 크기=%s) 폴백위젯=%d/%d 레거시글자=%d/%d"),
-		*CarData.id, *PlateNumber,
-		bFrontBuilt, *MeasureEmbossSize(FrontPlateEmboss).ToString(),
-		bBackBuilt, *MeasureEmbossSize(BackPlateEmboss).ToString(),
-		FrontPlateWidget && FrontPlateWidget->IsVisible(), BackPlateWidget && BackPlateWidget->IsVisible(),
-		FrontPlateText && FrontPlateText->IsVisible(), BackPlateText && BackPlateText->IsVisible());
+	UE_LOG(LogTemp, Display,
+		TEXT("[CarPlate] SDF id=%s number=%s 판=%.2fx%.2fcm rt=%s front=%d back=%d 폴백위젯=%d/%d"),
+		*CarData.id, *PlateNumber, Frame.WidthCm, Frame.HeightCm,
+		PlateNumberSdf ? TEXT("있음") : TEXT("없음"), bFront, bBack,
+		FrontPlateWidget && FrontPlateWidget->IsVisible(), BackPlateWidget && BackPlateWidget->IsVisible());
 }
 
 void ACarActor::UpdatePlatePresentation()
@@ -568,9 +463,13 @@ void ACarActor::UpdatePlatePresentation()
 	LogPlateState(TEXT("Front"), FrontPlateComp, FrontPlateText);
 	LogPlateState(TEXT("Back"), BackPlateComp, BackPlateText);
 
-	// 위 가시성 루프가 판을 켤 때 자식인 위젯도 같이 켜진다. 이미 양각이 만들어져 있었다면
-	// (재초기화) 여기서 다시 접어야 번호가 겹쳐 보이지 않는다.
-	HandlePlateEmbossBuilt();
+	// 위 가시성 루프가 판을 켤 때 자식인 위젯도 같이 켜진다. SDF 가 이미 붙어 있다면(재초기화)
+	// 여기서 다시 접어야 번호가 겹쳐 보이지 않는다.
+	if (PlateNumberSdf != nullptr)
+	{
+		if (FrontPlateWidget && FrontPlateMid) FrontPlateWidget->SetVisibility(false, true);
+		if (BackPlateWidget && BackPlateMid) BackPlateWidget->SetVisibility(false, true);
+	}
 }
 
 void ACarActor::ApplyTransformFromData(float MetersToUU)

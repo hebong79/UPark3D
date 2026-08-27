@@ -1,0 +1,15 @@
+[Unit]
+Description=Park3D 번호판 글리프 SDF 베이크 서비스 (FastAPI :8090)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/park3d_plate_bake
+ExecStart=%h/park3d_plate_bake/venv/bin/python -m uvicorn server:app --host 0.0.0.0 --port 8090
+Restart=on-failure
+RestartSec=3
+StandardOutput=append:%h/park3d_plate_bake/service.log
+StandardError=append:%h/park3d_plate_bake/service.log
+
+[Install]
+WantedBy=default.target

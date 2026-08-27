@@ -17,6 +17,13 @@ set "UE_ROOT=C:\Program Files\Epic Games\UE_5.8"
 set "RUNUAT=%UE_ROOT%\Engine\Build\BatchFiles\RunUAT.bat"
 set "PROJECT=%~dp0Park3D\Park3D.uproject"
 set "ARCHIVE=%~dp0Package"
+rem Optional argument 1: archive subfolder under Package\ (default: Package -> Package\Windows).
+rem Pass a name to build a SECOND copy without touching the one that is currently running,
+rem e.g. "BuildPackage.bat Work13550" -> Package\Work13550\Windows. With a custom name the
+rem running-process guard below is skipped on purpose: the files it protects are in
+rem Package\Windows and are not written in that case.
+set "ALTNAME=%~1"
+if not "%ALTNAME%"=="" set "ARCHIVE=%~dp0Package\%ALTNAME%"
 set "LOG=%~dp0_workspace\package_build.log"
 
 if not exist "%RUNUAT%" (
@@ -26,17 +33,20 @@ if not exist "%RUNUAT%" (
 )
 
 rem A running package locks the staged files: staging then fails or leaves a stale exe.
-tasklist /FI "IMAGENAME eq Park3D.exe" 2>nul | find /I "Park3D.exe" > nul
-if not errorlevel 1 (
-    echo [FAILED] Park3D.exe is running. Close it and run again.
-    exit /b 1
+rem Only relevant when archiving over Package\Windows - a custom folder writes elsewhere.
+if "%ALTNAME%"=="" (
+    tasklist /FI "IMAGENAME eq Park3D.exe" 2>nul | find /I "Park3D.exe" > nul
+    if not errorlevel 1 (
+        echo [FAILED] Park3D.exe is running. Close it and run again.
+        exit /b 1
+    )
 )
 
 rem The staging step below (robocopy /MIR) overwrites the packaged config with the repo
 rem one. Values tweaked in place - ports, level, light file - vanish silently. Show the
 rem difference BEFORE the long build so it can be carried over to the repo config first.
 rem Korean text lives in the .ps1: a .bat cannot control its own code page (see header).
-if exist "%~dp0CheckStagedConfig.ps1" (
+if "%ALTNAME%"=="" if exist "%~dp0CheckStagedConfig.ps1" (
     powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0CheckStagedConfig.ps1" ^
         -RepoConfig "%~dp0Park3D\Save\Config\config_pmaker.json" ^
         -StagedConfig "%ARCHIVE%\Windows\Save\Config\config_pmaker.json"

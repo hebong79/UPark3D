@@ -36,6 +36,22 @@ namespace
 			Pos.pos.x, Pos.pos.y, Pos.pos.z, Pos.rotY, Pos.isFront ? 1 : 0);
 	}
 
+	/**
+	 * 32비트 값 1개 → 한국 일반 승용차 번호(123다4567).
+	 * 결정적 번호(id 해시)와 랜덤 번호(난수)가 이 한 곳을 공유한다 — 형식이 갈라지면
+	 * 랜덤으로 갈아낀 번호만 SDF 아틀라스에 없는 글자를 요구할 수 있다.
+	 */
+	FString PlateNumberFromHash(uint32 Hash)
+	{
+		// 일반 비사업용 승용차: 세 자리(100~699) + 일반용 한글 + 네 자리.
+		// rental 하/허/호 및 commercial 계열은 의도적으로 이 pool에 넣지 않는다.
+		static const FString AllowedPassengerChars = TEXT("가나다라마바사거너더러머버서어저고노도로모보소오조구누두루무부수우주");
+		const uint32 Prefix = 100u + (Hash % 600u);
+		const TCHAR UsageChar = AllowedPassengerChars[(Hash / 601u) % static_cast<uint32>(AllowedPassengerChars.Len())];
+		const uint32 Serial = (Hash / 997u) % 10000u;
+		return FString::Printf(TEXT("%03u%c%04u"), Prefix, UsageChar, Serial);
+	}
+
 	void ConfigurePlateVisual(UPrimitiveComponent* Component)
 	{
 		if (!Component)
@@ -215,14 +231,12 @@ void ACarActor::InitFromPos(const FCarPos& Pos, UStaticMesh* InMesh, float Meter
 
 FString ACarActor::MakeDeterministicPlateNumber(const FCarPos& Pos)
 {
-	const uint32 Hash = FCrc::StrCrc32(*MakePlateSeed(Pos));
-	// 일반 비사업용 승용차: 세 자리(100~699) + 일반용 한글 + 네 자리.
-	// rental 하/허/호 및 commercial 계열은 의도적으로 이 pool에 넣지 않는다.
-	static const FString AllowedPassengerChars = TEXT("가나다라마바사거너더러머버서어저고노도로모보소오조구누두루무부수우주");
-	const uint32 Prefix = 100u + (Hash % 600u);
-	const TCHAR UsageChar = AllowedPassengerChars[(Hash / 601u) % static_cast<uint32>(AllowedPassengerChars.Len())];
-	const uint32 Serial = (Hash / 997u) % 10000u;
-	return FString::Printf(TEXT("%03u%c%04u"), Prefix, UsageChar, Serial);
+	return PlateNumberFromHash(FCrc::StrCrc32(*MakePlateSeed(Pos)));
+}
+
+FString ACarActor::MakeRandomPlateNumber(FRandomStream& Stream)
+{
+	return PlateNumberFromHash(Stream.GetUnsignedInt());
 }
 
 void ACarActor::InitializePlateNumberOnce()
@@ -235,6 +249,57 @@ void ACarActor::InitializePlateNumberOnce()
 	const FText Text = FText::FromString(MakePlateDisplayText(PlateNumber));
 	if (FrontPlateText) FrontPlateText->SetText(Text);
 	if (BackPlateText) BackPlateText->SetText(Text);
+}
+
+void ACarActor::SetPlateNumber(const FString& InCanonicalNumber)
+{
+	if (InCanonicalNumber.IsEmpty() || InCanonicalNumber == PlateNumber)
+	{
+		return;
+	}
+	PlateNumber = InCanonicalNumber;
+
+	const FString Display = MakePlateDisplayText(PlateNumber);
+	const FText Text = FText::FromString(Display);
+	if (FrontPlateText) FrontPlateText->SetText(Text);
+	if (BackPlateText) BackPlateText->SetText(Text);
+
+	// 폴백 위젯도 같이 갈아 준다 — SDF 를 못 만든 차량은 화면에 나오는 번호가 이쪽이다.
+	for (UWidgetComponent* Widget : { FrontPlateWidget, BackPlateWidget })
+	{
+		if (UCarPlateNumberWidget* PlateWidget = Widget ? Cast<UCarPlateNumberWidget>(Widget->GetUserWidgetObject()) : nullptr)
+		{
+			PlateWidget->SetPlateNumber(Display);
+		}
+	}
+
+	RefreshPlateNumberSdf();
+}
+
+void ACarActor::RefreshPlateNumberSdf()
+{
+	if (!bPlateNumberSdfBuilt || PlateSdfAspect <= 0.0)
+	{
+		return;
+	}
+
+	const UGameInstance* GameInstance = GetGameInstance();
+	UPlateGlyphAtlasSubsystem* Atlas = GameInstance ? GameInstance->GetSubsystem<UPlateGlyphAtlasSubsystem>() : nullptr;
+	UTexture2D* NewSdf = Atlas ? Atlas->BuildNumberSdf(this, MakePlateDisplayText(PlateNumber), PlateSdfAspect) : nullptr;
+	if (NewSdf == nullptr)
+	{
+		// 실패하면 옛 텍스처를 그대로 둔다 — 파라미터에 null 을 넣으면 번호가 통째로 사라진다.
+		UE_LOG(LogTemp, Warning, TEXT("[CarPlate] 번호 교체 실패 id=%s number=%s — 화면은 이전 번호를 유지한다"),
+			*CarData.id, *PlateNumber);
+		return;
+	}
+
+	PlateNumberSdf = NewSdf;
+	if (FrontPlateMid) FrontPlateMid->SetTextureParameterValue(TEXT("NumberSDF"), PlateNumberSdf);
+	if (BackPlateMid) BackPlateMid->SetTextureParameterValue(TEXT("NumberSDF"), PlateNumberSdf);
+
+	UE_LOG(LogTemp, Display, TEXT("[CarPlate] 번호 교체 id=%s number=%s front=%d back=%d"),
+		*CarData.id, *PlateNumber, FrontPlateMid != nullptr, BackPlateMid != nullptr);
 }
 
 FString ACarActor::MakePlateDisplayText(const FString& CanonicalNumber)
@@ -335,7 +400,8 @@ void ACarActor::ApplyPlateNumberSdf(const FCarPlateFrame& Frame)
 	bPlateNumberSdfBuilt = true;   // 실패해도 매 정렬마다 다시 시도하지 않는다(로그만 쌓인다).
 
 	const FString Display = MakePlateDisplayText(PlateNumber);
-	PlateNumberSdf = Atlas->BuildNumberSdf(this, Display, Frame.WidthCm / Frame.HeightCm);
+	PlateSdfAspect = Frame.WidthCm / Frame.HeightCm;   // 번호만 바꿔 다시 구울 때 재사용한다.
+	PlateNumberSdf = Atlas->BuildNumberSdf(this, Display, PlateSdfAspect);
 
 	// 앞/뒤 판이 같은 머티리얼(M_PlateFront)을 쓰므로 인스턴스를 각각 만들어 같은 SDF 를 물린다.
 	//

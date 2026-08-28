@@ -147,6 +147,9 @@ namespace RpcDto
 		O->SetObjectField(TEXT("pos"), Vec3(D.pos.x, D.pos.y, D.pos.z)); // 내부 Unreal 미터 규약
 		O->SetNumberField(TEXT("rotY"), D.rotY);
 		O->SetNumberField(TEXT("prefabId"), D.prefabId);
+		// 번호판 번호(canonical "123다4567"). 저장 파일에는 없는 런타임 값이고,
+		// 이게 없으면 car.randomizePlates 의 결과를 로그 grep 말고는 확인할 방법이 없다.
+		O->SetStringField(TEXT("plate"), Car->GetPlateNumber());
 		return O;
 	}
 

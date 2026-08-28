@@ -574,6 +574,49 @@ void ACarPlacementManager::SetRandomColorOfCarList(int32 Seed)
 	}
 }
 
+int32 ACarPlacementManager::RandomizeVisiblePlateNumbers(int32 Seed)
+{
+	FRandomStream Stream = MakeStream(Seed);
+
+	// 숨긴 차의 번호까지 모아 둔다 — 나중에 전체 표시로 되돌렸을 때 같은 번호가 두 대 나오면 안 된다.
+	TSet<FString> Used;
+	for (const TObjectPtr<ACarActor>& Car : Cars)
+	{
+		if (Car)
+		{
+			Used.Add(Car->GetPlateNumber());
+		}
+	}
+
+	int32 Changed = 0;
+	for (const TObjectPtr<ACarActor>& Car : Cars)
+	{
+		if (!Car || Car->IsHidden())
+		{
+			continue;
+		}
+
+		Used.Remove(Car->GetPlateNumber());   // 자기 자신의 옛 번호는 중복이 아니다.
+
+		// 번호 공간(600×30×10000)에 비해 차량 수가 극히 적어 사실상 한 번에 끝나지만,
+		// 중복이 나오면 다시 뽑되 무한 루프는 만들지 않는다(겹친 채로 두는 편이 멈추는 것보다 낫다).
+		FString Number;
+		for (int32 Try = 0; Try < 16; ++Try)
+		{
+			Number = ACarActor::MakeRandomPlateNumber(Stream);
+			if (!Used.Contains(Number))
+			{
+				break;
+			}
+		}
+
+		Car->SetPlateNumber(Number);
+		Used.Add(Car->GetPlateNumber());
+		++Changed;
+	}
+	return Changed;
+}
+
 int32 ACarPlacementManager::ResetRandomPlacement(
 	ERandomResetMode Mode, const TArray<FCarPresetEntry>& Catalog, int32 RequestedCount, int32 Seed)
 {
@@ -608,6 +651,10 @@ int32 ACarPlacementManager::ResetRandomPlacement(
 		}
 
 		SetRandomColorOfCarList(Seed);
+
+		// 이번에 보이는 대수만큼 번호판 번호도 새로 뽑는다. 재생성만으로는 절대 안 바뀐다 —
+		// 번호는 FCarPos.id 에서 결정적으로 나오고 RebuildAllRandomMesh 는 id 를 그대로 옮긴다.
+		RandomizeVisiblePlateNumbers(Seed);
 	}
 
 	int32 Visible = 0;

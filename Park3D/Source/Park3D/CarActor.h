@@ -6,6 +6,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Math/RandomStream.h"
 #include "ParkingCarTypes.h"
 #include "CarActor.generated.h"
 
@@ -178,6 +179,17 @@ public:
 	/** 동일 차량 데이터에서 같은 pseudo-random 번호를 만드는 순수 규약(Automation/재로드 검증용). */
 	static FString MakeDeterministicPlateNumber(const FCarPos& Pos);
 
+	/** 스트림에서 번호 1개를 뽑는다. 형식은 MakeDeterministicPlateNumber 와 같고 근거만 다르다(해시 → 난수). */
+	static FString MakeRandomPlateNumber(FRandomStream& Stream);
+
+	/**
+	 * 번호를 갈아 끼우고 앞/뒤 판(SDF·폴백 위젯·레거시 텍스트)에 다시 그린다.
+	 * 기본 번호는 FCarPos.id 에서 결정적으로 나오므로(MakeDeterministicPlateNumber) 차량을 재생성해도
+	 * 절대 바뀌지 않는다 — "랜덤 배치할 때마다 번호도 새로"가 필요하면 이 창구를 거쳐야 한다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Car|Plate")
+	void SetPlateNumber(const FString& InCanonicalNumber);
+
 private:
 	/** 최초 InitFromPos에서만 PlateNumber와 앞/뒤 텍스트를 설정한다. */
 	void InitializePlateNumberOnce();
@@ -203,6 +215,14 @@ private:
 	 * 예전 평면 표시가 남는 편이 낫다(아틀라스 에셋이나 메트릭 JSON 이 없는 경우).
 	 */
 	void ApplyPlateNumberSdf(const FCarPlateFrame& Frame);
+
+	/**
+	 * 이미 붙어 있는 SDF 를 현재 PlateNumber 로 다시 구워 끼운다(번호 교체 전용).
+	 * 정렬(UpdatePlatePresentation)을 다시 돌리지 않는 이유: 판 자세는 그대로이고 바뀐 것은 글자뿐이라
+	 * 판·글자 정렬 로그만 65대분 다시 쌓인다. 대신 아직 한 번도 굽지 않았으면 아무것도 하지 않는다 —
+	 * 판 종횡비를 아직 모르고, 어차피 다음 정렬이 새 번호로 굽는다.
+	 */
+	void RefreshPlateNumberSdf();
 
 	/** 글자를 판 표면에서 얼마나 띄울지(cm). z-fighting 만 피하면 되므로 작게. */
 	static constexpr float PlateTextSurfaceGap = 0.3f;
@@ -241,4 +261,7 @@ private:
 
 	/** 번호 SDF 를 이미 만들었는가. 정렬은 재초기화 때마다 도는데 합성은 한 번이면 된다. */
 	bool bPlateNumberSdfBuilt = false;
+
+	/** SDF 를 구울 때 쓴 판 종횡비(가로/세로). 번호만 바꿔 다시 구울 때 판 크기를 다시 재지 않기 위해 남긴다. */
+	double PlateSdfAspect = 0.0;
 };

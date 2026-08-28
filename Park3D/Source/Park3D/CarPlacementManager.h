@@ -124,6 +124,19 @@ public:
 	void SetRandomColorOfCarList(int32 Seed = 0);
 
 	/**
+	 * 지금 보이는 차량의 번호판 번호만 새로 뽑는다.
+	 * 번호는 FCarPos.id 에서 결정적으로 나오고(ACarActor::MakeDeterministicPlateNumber) 재생성이 id 를
+	 * 그대로 옮기므로, 이 창구를 거치지 않으면 몇 번을 랜덤 배치해도 번호는 한 번도 바뀌지 않는다.
+	 *
+	 * 숨긴 차량은 건드리지 않는다 — 이번 장면에 없는 차의 번호를 바꿀 이유가 없고, 다시 표시했을 때
+	 * 원래(id 기준) 번호로 남아 있는 편이 추적하기 쉽다.
+	 * 같은 장면에 같은 번호가 두 대 나오지 않도록 이미 쓰인 번호(숨긴 차 포함)는 피해서 뽑는다.
+	 * @return 번호를 새로 뽑은 차량 수(= 가시 차량 수).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Car|Random")
+	int32 RandomizeVisiblePlateNumbers(int32 Seed = 0);
+
+	/**
 	 * UI(리셋랜덤 버튼)와 RPC(car.resetRandom)가 공유하는 랜덤 리셋 진입점.
 	 * Unity CCarPlacementDlg.ResetRandomPlacement(:1081) 포팅 — 단, 배치 기준은 Unity 의 "프리셋 주차면"이
 	 * 아니라 이 포트의 기존 계약대로 "현재 차량 위치"다(ToCarPosDatas 로 현 상태를 원본 삼아 재생성).
@@ -133,6 +146,9 @@ public:
 	 *                          RequestedCount <= 0 이면 [1, 전체]에서 랜덤 추첨(Unity 원본 규약),
 	 *                          전체 대수 이상이면 전원 표시. 차량 액터는 지우지 않고 숨기므로
 	 *                          다음 호출에서 다시 늘릴 수 있다(RebuildAllRandomMesh 가 전원 복원).
+	 *
+	 * 재생성 두 모드(ObjectAndColor·CountObjectAndColor)는 마지막에 가시 차량의 번호판 번호도 새로 뽑는다
+	 * (RandomizeVisiblePlateNumbers). ColorOnly 는 이름대로 색만 바꾸므로 번호를 건드리지 않는다.
 	 * @return 처리 후 가시(비숨김) 차량 수 = 실제 배치 대수.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Car|Random")

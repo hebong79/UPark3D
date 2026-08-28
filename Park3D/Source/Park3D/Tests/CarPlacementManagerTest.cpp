@@ -473,6 +473,95 @@ bool FCarManagerResetRandomTest::RunTest(const FString& Parameters)
 		Mgr->ClearAll(); Mgr->Destroy();
 	}
 
+	// --- 번호판: 보이는 차만 새 번호, 숨긴 차는 id 기준 결정적 번호 그대로 ---
+	{
+		ACarPlacementManager* Mgr = World->SpawnActor<ACarPlacementManager>();
+		if (!TestNotNull(TEXT("Mgr plate"), Mgr)) { return false; }
+		SpawnSix(Mgr);
+
+		TestEqual(TEXT("6대 중 2대만 표시"),
+			Mgr->ResetRandomPlacement(ERandomResetMode::CountObjectAndColor, Catalog, 2, Seed), 2);
+
+		int32 VisibleChanged = 0, HiddenKept = 0;
+		TSet<FString> Numbers;
+		for (int32 i = 0; i < Mgr->GetCarCount(); ++i)
+		{
+			ACarActor* Car = Mgr->GetCar(i);
+			if (!Car) { continue; }
+			const FString Deterministic = ACarActor::MakeDeterministicPlateNumber(Car->CarData);
+			// 재생성은 id 를 그대로 옮기므로, 번호를 새로 뽑지 않으면 가시 차량도 이 값 그대로다.
+			if (Car->IsHidden())
+			{
+				if (Car->GetPlateNumber() == Deterministic) { ++HiddenKept; }
+			}
+			else if (Car->GetPlateNumber() != Deterministic)
+			{
+				++VisibleChanged;
+			}
+			Numbers.Add(Car->GetPlateNumber());
+		}
+		TestEqual(TEXT("가시 2대는 번호가 새로 뽑힌다"), VisibleChanged, 2);
+		TestEqual(TEXT("숨긴 4대는 id 기준 번호 유지"), HiddenKept, 4);
+		TestEqual(TEXT("장면 안 번호는 서로 다르다"), Numbers.Num(), 6);
+
+		Mgr->ClearAll(); Mgr->Destroy();
+	}
+
+	return true;
+}
+
+// ===== RandomizeVisiblePlateNumbers: 단독 호출 계약 =====
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCarManagerPlateRandomTest,
+	"Park3D.CarPlacement.RandomizeVisiblePlateNumbers",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCarManagerPlateRandomTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = (GEngine && GEngine->GetWorldContexts().Num() > 0) ? GWorld : nullptr;
+	if (!World)
+	{
+		AddWarning(TEXT("에디터 월드 없음 — 번호 랜덤 테스트 건너뜀."));
+		return true;
+	}
+
+	TArray<FCarPresetEntry> Catalog;
+	FCarPresetEntry A; A.Idx = 1; A.PrefabName = TEXT("A"); Catalog.Add(A);
+
+	ACarPlacementManager* Mgr = World->SpawnActor<ACarPlacementManager>();
+	if (!TestNotNull(TEXT("Mgr"), Mgr)) { return false; }
+
+	FCarPosDatas Data;
+	for (int32 i = 0; i < 4; ++i)
+	{
+		FCarPos P; P.id = FString::Printf(TEXT("p-%d"), i); P.prefabId = 1; P.pos = { (float)i, 0.f, 0.f };
+		Data.datas.Add(P);
+	}
+	Mgr->RebuildAll(Data, Catalog, {});
+
+	// 같은 시드는 같은 번호를 준다(재현성) — 배치 결과를 시드로 되살릴 수 있어야 한다.
+	TestEqual(TEXT("가시 4대 전부 처리"), Mgr->RandomizeVisiblePlateNumbers(4242), 4);
+	TArray<FString> First;
+	for (int32 i = 0; i < Mgr->GetCarCount(); ++i) { First.Add(Mgr->GetCar(i)->GetPlateNumber()); }
+
+	Mgr->RebuildAll(Data, Catalog, {});
+	Mgr->RandomizeVisiblePlateNumbers(4242);
+	bool bSame = true;
+	for (int32 i = 0; i < Mgr->GetCarCount(); ++i)
+	{
+		bSame &= (Mgr->GetCar(i)->GetPlateNumber() == First[i]);
+	}
+	TestTrue(TEXT("같은 시드 → 같은 번호"), bSame);
+
+	// 시드 0 은 비결정이다(랜덤 배치 버튼의 기본 경로) — 4대가 모두 그대로일 확률은 사실상 0.
+	Mgr->RandomizeVisiblePlateNumbers(0);
+	bool bAnyChanged = false;
+	for (int32 i = 0; i < Mgr->GetCarCount(); ++i)
+	{
+		bAnyChanged |= (Mgr->GetCar(i)->GetPlateNumber() != First[i]);
+	}
+	TestTrue(TEXT("시드 0 은 매번 새 번호"), bAnyChanged);
+
+	Mgr->ClearAll(); Mgr->Destroy();
 	return true;
 }
 

@@ -528,6 +528,39 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		return RpcDto::MakeObject(O);
 	});
 
+	/**
+	 * 지금 보이는 차량의 번호판 번호만 새로 뽑는다. car.resetRandom 이 마지막에 하는 일과 같은 백엔드지만,
+	 * 이쪽은 차종·색·표시상태를 건드리지 않는다 — 같은 장면을 그대로 두고 번호만 바꿔 여러 벌 찍기 위한 것이다.
+	 * seed>0 이면 재현, 0 이면 매번 새 번호(HideRandomCars 등 다른 랜덤 메서드와 같은 규약).
+	 */
+	Dispatcher.Register(TEXT("car.randomizePlates"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
+		const int32 Seed = RpcParam::GetInt(P, TEXT("seed"), 0);
+
+		const int32 Changed = Mgr->RandomizeVisiblePlateNumbers(Seed);
+
+		// 바뀐 번호를 그대로 돌려준다 — 호출자가 car.list 를 한 번 더 부르지 않아도 되고,
+		// 무엇이 바뀌었는지가 응답 하나로 확정된다.
+		TArray<TSharedPtr<FJsonValue>> Plates;
+		for (ACarActor* Car : Mgr->GetCars())
+		{
+			if (!Car || Car->IsHidden()) continue;
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("carNameId"), Car->CarData.id);
+			Row->SetStringField(TEXT("plate"), Car->GetPlateNumber());
+			Plates.Add(MakeShared<FJsonValueObject>(Row));
+		}
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetNumberField(TEXT("changedCount"), Changed);       // = 가시 차량 수(숨긴 차는 대상이 아니다)
+		O->SetNumberField(TEXT("carCount"), Mgr->GetCarCount());
+		O->SetArrayField(TEXT("plates"), Plates);
+		O->SetBoolField(TEXT("seedHonored"), true);
+		return RpcDto::MakeObject(O);
+	});
+
 	// ---- 저장 · 로드 ----
 	Dispatcher.Register(TEXT("car.save"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{

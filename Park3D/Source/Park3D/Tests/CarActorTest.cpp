@@ -14,6 +14,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/Material.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -142,7 +143,8 @@ bool FCarActorPlateNumberTest::RunTest(const FString& Parameters)
 	Source.isFront = true;
 
 	const FString Expected = ACarActor::MakeDeterministicPlateNumber(Source);
-	const FString ExpectedDisplay = Expected.Left(3) + TEXT(" ") + Expected.Mid(3, 1) + TEXT(" ") + Expected.Right(4);
+	// 표시 규약(2026-08-21): 앞 세 자리와 한글은 붙고 뒤 네 자리만 떨어진다 — "672우 3269".
+	const FString ExpectedDisplay = Expected.Left(3) + Expected.Mid(3, 1) + TEXT(" ") + Expected.Right(4);
 	TestFalse(TEXT("결정적 번호는 비어있지 않음"), Expected.IsEmpty());
 	TestEqual(TEXT("한국 일반 번호판 형식 길이 123다4567"), Expected.Len(), 8);
 	const FString AllowedPassengerChars = TEXT("가나다라마바사거너더러머버서어저고노도로모보소오조구누두루무부수우주");
@@ -198,9 +200,10 @@ bool FCarActorPlateNumberTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("재 Init 번호 불변"), Car->GetPlateNumber(), Expected);
 
 	// 실제 차량 메시에서 번호판이 차량 외측에 장착되고 렌더 가능한 상태인지 확인한다.
-	// (일반차_번호판 메시의 표면 법선은 local +Y: 전면은 -Y를 보도록 yaw 180, 후면은 yaw 0.)
+	// 경로 주의: 차량 메시는 2026-08-16 콘텐츠 정리로 /Game/Cars/... 에서 /Game/Actors/Car/Meshs 로 옮겨졌다.
+	// 옛 경로를 그대로 두면 LoadObject 가 null 을 주고 아래 블록이 통째로 건너뛰어진다(= 조용히 안 도는 테스트).
 	UStaticMesh* VehicleMesh = LoadObject<UStaticMesh>(nullptr,
-		TEXT("/Game/Cars/Car_no_plate/현대_쏘나타.현대_쏘나타"));
+		TEXT("/Game/Actors/Car/Meshs/기아_K5.기아_K5"));
 	TestTrue(TEXT("실차 메시 로드"), VehicleMesh != nullptr);
 	if (VehicleMesh)
 	{
@@ -215,6 +218,17 @@ bool FCarActorPlateNumberTest::RunTest(const FString& Parameters)
 		const float ExpectedMountY = MeshExtent.Y + 1.f;
 		const float ExpectedMountZ = MeshOrigin.Z - MeshExtent.Z * 0.4f;
 
+		// 판 메시의 가장 얇은 축 = 면 법선. 판 자세는 이 축이 차량 바깥을 향하는가로 판정한다 —
+		// 고정 yaw 를 기대하면 판 메시를 갈아 끼울 때마다 틀린다(2026-08-16 교체로 실제로 그렇게 됐고,
+		// 그때 글자가 모서리로 서서 화면에서 사라졌다).
+		auto FaceNormalOf = [](const UStaticMeshComponent* Plate)
+		{
+			const FVector Ext = Plate->GetStaticMesh()->GetBounds().BoxExtent;
+			const int32 ThinAxis = (Ext.X <= Ext.Y && Ext.X <= Ext.Z) ? 0 : ((Ext.Y <= Ext.Z) ? 1 : 2);
+			const FVector Axes[3] = { FVector::XAxisVector, FVector::YAxisVector, FVector::ZAxisVector };
+			return Plate->GetRelativeRotation().RotateVector(Axes[ThinAxis]).GetSafeNormal();
+		};
+
 		if (Car->FrontPlateComp && Car->BackPlateComp)
 		{
 			TestTrue(TEXT("앞 번호판 registered"), Car->FrontPlateComp->IsRegistered());
@@ -224,60 +238,31 @@ bool FCarActorPlateNumberTest::RunTest(const FString& Parameters)
 			TestEqual(TEXT("앞 번호판 외측 Y"), Car->FrontPlateComp->GetRelativeLocation().Y, MeshOrigin.Y - ExpectedMountY, 1e-3);
 			TestEqual(TEXT("뒤 번호판 외측 Y"), Car->BackPlateComp->GetRelativeLocation().Y, MeshOrigin.Y + ExpectedMountY, 1e-3);
 			TestEqual(TEXT("번호판 장착 Z"), Car->FrontPlateComp->GetRelativeLocation().Z, static_cast<double>(ExpectedMountZ), 1e-3);
-			TestEqual(TEXT("앞 번호판 외측 방향"), FRotator::NormalizeAxis(Car->FrontPlateComp->GetRelativeRotation().Yaw), 180.0, 1e-3);
-			TestEqual(TEXT("뒤 번호판 외측 방향"), FRotator::NormalizeAxis(Car->BackPlateComp->GetRelativeRotation().Yaw), 0.0, 1e-3);
+			TestTrue(TEXT("앞 번호판 면이 차량 앞(-Y)을 향한다"), FaceNormalOf(Car->FrontPlateComp).Equals(FVector(0.f, -1.f, 0.f), 1e-3f));
+			TestTrue(TEXT("뒤 번호판 면이 차량 뒤(+Y)를 향한다"), FaceNormalOf(Car->BackPlateComp).Equals(FVector(0.f, 1.f, 0.f), 1e-3f));
 
+			// 슬롯 0=테두리(M_PlateFrame) 1=판 앞면(M_PlateFront). 번호 SDF 는 슬롯 1 의
+			// NumberSDF 파라미터에 물리므로 이 순서가 뒤집히면 번호가 조용히 안 나온다.
+			// 런타임에 MID 가 씌워질 수 있어 이름은 베이스 머티리얼에서 본다.
 			for (UStaticMeshComponent* PlateComp : { Car->FrontPlateComp, Car->BackPlateComp })
 			{
-				TestTrue(TEXT("번호판 Content bezel material M_Plate"), PlateComp->GetMaterial(0) != nullptr
-					&& PlateComp->GetMaterial(0)->GetPathName().Contains(TEXT("/Game/Cars/번호판/M_Plate")));
-				TestTrue(TEXT("번호판 Content KOR background M_Num"), PlateComp->GetMaterial(1) != nullptr
-					&& PlateComp->GetMaterial(1)->GetPathName().Contains(TEXT("/Game/Cars/번호판/M_Num")));
+				UMaterialInterface* Slot0 = PlateComp->GetMaterial(0);
+				UMaterialInterface* Slot1 = PlateComp->GetMaterial(1);
+				TestTrue(TEXT("번호판 슬롯0 = M_PlateFrame"),
+					Slot0 && Slot0->GetBaseMaterial() && Slot0->GetBaseMaterial()->GetName() == TEXT("M_PlateFrame"));
+				TestTrue(TEXT("번호판 슬롯1 = M_PlateFront"),
+					Slot1 && Slot1->GetBaseMaterial() && Slot1->GetBaseMaterial()->GetName() == TEXT("M_PlateFront"));
 			}
 		}
-		if (Car->FrontPlateFrameComp && Car->BackPlateFrameComp && Car->FrontPlateSecurityStripComp && Car->BackPlateSecurityStripComp)
+
+		// 레거시 표시 경로(TextRender·런타임 테두리/KOR 큐브)는 전부 접혀 있어야 한다.
+		// 하나라도 켜지면 판 머티리얼이 그리는 번호 위에 옛 표시가 겹친다(2026-08-26 실측).
+		for (UPrimitiveComponent* Legacy : {
+			static_cast<UPrimitiveComponent*>(Car->FrontPlateText), static_cast<UPrimitiveComponent*>(Car->BackPlateText),
+			static_cast<UPrimitiveComponent*>(Car->FrontPlateFrameComp), static_cast<UPrimitiveComponent*>(Car->BackPlateFrameComp),
+			static_cast<UPrimitiveComponent*>(Car->FrontPlateSecurityStripComp), static_cast<UPrimitiveComponent*>(Car->BackPlateSecurityStripComp) })
 		{
-			const FLinearColor KoreaSecurityBlue(0.02f, 0.18f, 0.78f, 1.f);
-			for (UStaticMeshComponent* PlateFrame : { Car->FrontPlateFrameComp, Car->BackPlateFrameComp })
-			{
-				TestTrue(TEXT("frame cube mesh"), PlateFrame->GetStaticMesh() != nullptr
-					&& PlateFrame->GetStaticMesh()->GetPathName().Contains(TEXT("/Engine/BasicShapes/Cube")));
-				TestTrue(TEXT("frame registered but Content bezel을 위해 hidden"), PlateFrame->IsRegistered() && !PlateFrame->IsVisible());
-				UMaterialInstanceDynamic* FrameMID = Cast<UMaterialInstanceDynamic>(PlateFrame->GetMaterial(0));
-				TestTrue(TEXT("frame black MID"), FrameMID != nullptr
-					&& FrameMID->K2_GetVectorParameterValue(TEXT("Color")).Equals(FLinearColor::Black, 1e-4f));
-				TestEqual(TEXT("frame body 뒤 Y"), PlateFrame->GetRelativeLocation().Y, -1.7, 1e-3);
-				TestEqual(TEXT("frame 폭 54cm"), PlateFrame->GetRelativeScale3D().X, 0.54, 1e-3);
-				TestEqual(TEXT("frame 높이 13cm"), PlateFrame->GetRelativeScale3D().Z, 0.13, 1e-3);
-			}
-			for (UStaticMeshComponent* SecurityStrip : { Car->FrontPlateSecurityStripComp, Car->BackPlateSecurityStripComp })
-			{
-				TestTrue(TEXT("KOR strip cube mesh"), SecurityStrip->GetStaticMesh() != nullptr
-					&& SecurityStrip->GetStaticMesh()->GetPathName().Contains(TEXT("/Engine/BasicShapes/Cube")));
-				TestTrue(TEXT("KOR strip registered but Content field를 위해 hidden"), SecurityStrip->IsRegistered() && !SecurityStrip->IsVisible());
-				UMaterialInstanceDynamic* StripMID = Cast<UMaterialInstanceDynamic>(SecurityStrip->GetMaterial(0));
-				TestTrue(TEXT("KOR strip blue MID"), StripMID != nullptr
-					&& StripMID->K2_GetVectorParameterValue(TEXT("Color")).Equals(KoreaSecurityBlue, 1e-4f));
-				TestEqual(TEXT("KOR strip 좌측 X"), SecurityStrip->GetRelativeLocation().X, -22.0, 1e-3);
-				TestEqual(TEXT("KOR strip exterior Y"), SecurityStrip->GetRelativeLocation().Y, 1.35, 1e-3);
-				TestEqual(TEXT("KOR strip 폭 4cm"), SecurityStrip->GetRelativeScale3D().X, 0.04, 1e-3);
-			}
-		}
-		if (Car->FrontPlateText && Car->BackPlateText)
-		{
-			TestTrue(TEXT("앞 텍스트 registered"), Car->FrontPlateText->IsRegistered());
-			TestTrue(TEXT("뒤 텍스트 registered"), Car->BackPlateText->IsRegistered());
-			TestTrue(TEXT("앞 텍스트 visible"), Car->FrontPlateText->IsVisible());
-			TestTrue(TEXT("뒤 텍스트 visible"), Car->BackPlateText->IsVisible());
-			TestTrue(TEXT("앞 텍스트 font"), Car->FrontPlateText->Font != nullptr);
-			TestTrue(TEXT("앞 텍스트 material"), Car->FrontPlateText->TextMaterial != nullptr);
-			TestTrue(TEXT("텍스트 검정"), Car->FrontPlateText->TextRenderColor == FColor::Black);
-			TestEqual(TEXT("텍스트 Content blue field 뒤 text field 중심 X"), Car->FrontPlateText->GetRelativeLocation().X, 4.0, 1e-3);
-			TestEqual(TEXT("텍스트 plate 바깥 오프셋"), Car->FrontPlateText->GetRelativeLocation().Y, 1.55, 1e-3);
-			TestEqual(TEXT("텍스트 plate normal yaw"), FRotator::NormalizeAxis(Car->FrontPlateText->GetRelativeRotation().Yaw), 90.0, 1e-3);
-			TestEqual(TEXT("텍스트 수평 roll"), FRotator::NormalizeAxis(Car->FrontPlateText->GetRelativeRotation().Roll), 0.0, 1e-3);
-			TestEqual(TEXT("텍스트 1.2배 확대 world size"), static_cast<double>(Car->FrontPlateText->WorldSize), 10.8, 1e-3);
-			TestEqual(TEXT("텍스트 remaining field horizontal scale"), static_cast<double>(Car->FrontPlateText->XScale), 0.80, 1e-3);
+			TestTrue(TEXT("레거시 번호판 표시 컴포넌트는 숨김"), Legacy && Legacy->IsRegistered() && !Legacy->IsVisible());
 		}
 	}
 

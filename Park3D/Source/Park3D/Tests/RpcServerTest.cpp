@@ -23,6 +23,7 @@
 #include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/Base64.h"
+#include "HAL/FileManager.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -465,9 +466,25 @@ bool FRpcCamModuleTest::RunTest(const FString& Parameters)
 	TSharedPtr<FJsonValue> CapR; FRpcError CapE;
 	TestFalse(TEXT("cam.captureJPG 헤드리스 캡처 불가"), D->Dispatch(TEXT("cam.captureJPG"), PtzP, CapR, CapE));
 	TestEqual(TEXT("captureJPG -32000"), CapE.Code, Park3DRpc::Domain);
-	// savePreset → 미구현(-32000)
+	// savePreset: 2026-08-11 에 구현됐다 — 옛 기대값("미구현")은 그때부터 틀린 값이었다.
+	// 실제로 파일을 쓰므로 테스트 전용 이름으로 저장하고 지운다(테스트가 Save/ 에 잔해를 남기면 안 된다).
+	TSharedPtr<FJsonObject> SpP = MakeShared<FJsonObject>();
+	SpP->SetNumberField(TEXT("camId"), CamId);
+	SpP->SetNumberField(TEXT("presetId"), 1);
+	SpP->SetStringField(TEXT("fileName"), TEXT("_AutomationTest_CamPreset"));
 	TSharedPtr<FJsonValue> SpR; FRpcError SpE;
-	TestFalse(TEXT("cam.savePreset 미구현"), D->Dispatch(TEXT("cam.savePreset"), PtzP, SpR, SpE));
+	TestTrue(TEXT("cam.savePreset 성공"), D->Dispatch(TEXT("cam.savePreset"), SpP, SpR, SpE));
+	if (SpR.IsValid() && SpR->Type == EJson::Object)
+	{
+		// 저장되는 것은 "지금 카메라 상태"다 — 바로 위에서 넣은 zoom 2 가 그대로 들어가야 한다.
+		double SavedZoom = 0; SpR->AsObject()->TryGetNumberField(TEXT("zoom"), SavedZoom);
+		TestTrue(TEXT("저장된 zoom≈2"), FMath::IsNearlyEqual(SavedZoom, 2.0, 0.1));
+
+		FString SavedPath;
+		SpR->AsObject()->TryGetStringField(TEXT("path"), SavedPath);
+		TestTrue(TEXT("저장 파일 생성"), !SavedPath.IsEmpty() && IFileManager::Get().FileExists(*SavedPath));
+		if (!SavedPath.IsEmpty()) { IFileManager::Get().Delete(*SavedPath, /*RequireExists=*/false); }
+	}
 
 	// delete: 1대뿐이면 ok=false(최소 1 유지)
 	TSharedPtr<FJsonObject> DelP = MakeShared<FJsonObject>(); DelP->SetNumberField(TEXT("camId"), CamId);

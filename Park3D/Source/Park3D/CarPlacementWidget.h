@@ -238,6 +238,13 @@ private:
 	/** 좌클릭(선택/배치)의 클릭 에지(Slate 경유 입력까지 본다). */
 	Park3DPickInput::FLeftClickEdge PickClickEdge;
 
+	/**
+	 * 배치 모드 입력 진단용 마지막 상태 비트(변할 때만 로그를 남긴다).
+	 * UPROPERTY 로 두지 않는다(쿠킹된 WBP 베이스 — Check_SelMark 주석 참고).
+	 * 0xff = 아직 한 번도 기록하지 않음.
+	 */
+	uint8 PickDiagState = 0xff;
+
 	// 패널 드래그 상태
 	bool bDraggingPanel = false;
 	FVector2D DragStartLocal = FVector2D::ZeroVector;

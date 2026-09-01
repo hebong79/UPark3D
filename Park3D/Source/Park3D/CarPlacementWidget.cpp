@@ -483,6 +483,37 @@ void UCarPlacementWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaT
 		|| (FSlateApplication::IsInitialized() && FSlateApplication::Get().GetModifierKeys().IsLeftAltDown());
 	const bool bOverPanel = (RootBorder && RootBorder->IsHovered());
 	const bool bClickJustPressed = PickClickEdge.Poll(PC);
+
+	// [진단] 배치 모드에서 Ctrl+좌클릭이 안 먹는다는 신고(2026-09-01) — 어느 조건에서 걸리는지
+	// 코드만으로는 못 가른다(패널 hover / 클릭 에지 / Ctrl 감지 / 트레이스 / 히트 대상 5중).
+	// 매 틱이 아니라 상태가 바뀔 때만 한 줄 남긴다.
+	if (bPlacing)
+	{
+		const bool bPcLmb = PC->IsInputKeyDown(EKeys::LeftMouseButton);
+		const bool bSlateLmb = FSlateApplication::IsInitialized()
+			&& FSlateApplication::Get().GetPressedMouseButtons().Contains(EKeys::LeftMouseButton);
+		const bool bPcCtrl = PC->IsInputKeyDown(EKeys::LeftControl) || PC->IsInputKeyDown(EKeys::RightControl);
+		const bool bSlateCtrl = FSlateApplication::IsInitialized()
+			&& FSlateApplication::Get().GetModifierKeys().IsControlDown();
+		const uint8 State = (bPcLmb ? 1 : 0) | (bSlateLmb ? 2 : 0) | (bPcCtrl ? 4 : 0)
+			| (bSlateCtrl ? 8 : 0) | (bOverPanel ? 16 : 0);
+		if (State != PickDiagState)
+		{
+			PickDiagState = State;
+			UE_LOG(LogTemp, Log, TEXT("[PickDiag] LMB pc=%d slate=%d | Ctrl pc=%d slate=%d | overPanel=%d"),
+				bPcLmb, bSlateLmb, bPcCtrl, bSlateCtrl, bOverPanel);
+		}
+		if (bClickJustPressed)
+		{
+			FHitResult DiagHit;
+			const bool bDiagHit = PC->GetHitResultUnderCursor(ECC_Visibility, false, DiagHit) && DiagHit.bBlockingHit;
+			UE_LOG(LogTemp, Log, TEXT("[PickDiag] 클릭 에지 — ctrl=%d overPanel=%d hit=%d actor=%s class=%s"),
+				bCtrl, bOverPanel, bDiagHit,
+				bDiagHit && DiagHit.GetActor() ? *DiagHit.GetActor()->GetName() : TEXT("(없음)"),
+				bDiagHit && DiagHit.GetActor() ? *DiagHit.GetActor()->GetClass()->GetName() : TEXT("-"));
+		}
+	}
+
 	if (!bOverPanel && bClickJustPressed)
 	{
 		FHitResult Hit;

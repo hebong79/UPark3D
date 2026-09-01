@@ -20,6 +20,8 @@
 #include "Blueprint/UserWidget.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/InputComponent.h"
+#include "Components/WidgetComponent.h" // 주차면 아이콘(BP_ParkingSlot 의 Widget 컴포넌트)을 끈다.
+#include "EngineUtils.h"                // TActorIterator
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
@@ -125,6 +127,9 @@ void APark3DGameMode::BeginPlay()
 	// config 의 hide_actors 적용 — 레벨의 나무·간판처럼 시야를 가리는 물체를 치운다.
 	// 숨김은 런타임 상태라 실행할 때마다 다시 걸어야 한다(env.hide 와 같은 처리를 여기서 한 번).
 	ApplyConfigHiddenActors();
+
+	// 프리셋 주차면 위에 떠 있던 표시 아이콘을 끈다.
+	HideParkingSlotIcons();
 
 	// 카메라(초기) 시점 설정 — bOverrideCameraStart=true 면 PlayerStart 대신 지정 위치/회전 사용.
 	ApplyCameraStart();
@@ -368,6 +373,35 @@ void APark3DGameMode::ApplyConfigHiddenActors()
 	UE_LOG(LogTemp, Log, TEXT("[Env] config hide_actors 적용: %d/%d 숨김%s"),
 		Changed.Num(), Config.HideActors.Num(),
 		Missing.Num() > 0 ? *FString::Printf(TEXT(" — 못 찾음: %s"), *FString::Join(Missing, TEXT(", "))) : TEXT(""));
+}
+
+void APark3DGameMode::HideParkingSlotIcons()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	int32 Hidden = 0;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		// 클래스 이름으로 고른다 — 주차면은 C++ 타입이 없는 레벨 블루프린트 액터라 Cast 로 못 잡고,
+		// 위젯 클래스(WBP_ActorIcon)로 고르면 같은 아이콘을 쓰는 다른 액터까지 함께 꺼진다.
+		if (!It->GetClass()->GetName().StartsWith(TEXT("BP_ParkingSlot")))
+		{
+			continue;
+		}
+
+		TInlineComponentArray<UWidgetComponent*> Icons(*It);
+		for (UWidgetComponent* Icon : Icons)
+		{
+			Icon->SetVisibility(false);
+			++Hidden;
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[Env] 주차면 표시 아이콘 %d개를 껐습니다."), Hidden);
 }
 
 void APark3DGameMode::ApplyStartupLighting()

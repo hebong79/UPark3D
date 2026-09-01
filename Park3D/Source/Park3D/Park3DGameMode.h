@@ -131,6 +131,14 @@ protected:
 	/** config 의 hide_actors 목록을 숨긴다(env.hide 와 같은 공용 로직). 실행마다 한 번 적용한다. */
 	void ApplyConfigHiddenActors();
 
+	/**
+	 * 레벨의 프리셋 주차면(BP_ParkingSlot)이 화면에 띄우는 아이콘 위젯을 끈다.
+	 * 아이콘은 블루프린트의 WidgetComponent(WBP_ActorIcon, Screen 스페이스)라 액터를 통째로 숨기면
+	 * 주차면 지오메트리까지 사라진다 → 액터는 두고 위젯 컴포넌트만 끈다.
+	 * 카메라 아이콘(BP_Camera 의 WBP_CameraIcon)은 대상이 아니다.
+	 */
+	void HideParkingSlotIcons();
+
 private:
 	/** 메뉴 위젯을 생성(최초 1회)하고 뷰포트에 표시한다. */
 	void ShowMenu();

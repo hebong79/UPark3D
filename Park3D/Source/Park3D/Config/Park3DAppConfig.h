@@ -9,6 +9,32 @@
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "Park3DAppConfig.generated.h"
 
+class UWorld;
+
+/**
+ * 주차장 선택 메뉴의 한 항목(JSON `levels[]`). `name` 이 콤보에 뜨고, 고르면 `level` 로 이동한다.
+ * 데이터 파일 셋은 **키가 있을 때만** 최상위 `*_file` 을 덮는다(TOptional) — 주차장마다 차량·카메라 파일이
+ * 다른데, 키를 빼먹은 항목이 최상위 값을 조용히 지우면 안 되고, 빈 문자열은 "이 주차장은 그 파일을 안 쓴다"는 뜻이다.
+ */
+USTRUCT(BlueprintType)
+struct FPark3DLevelOption
+{
+	GENERATED_BODY()
+
+	/** 콤보에 표시할 이름(예: "서신지구대"). */
+	UPROPERTY(BlueprintReadWrite, Category = "Config")
+	FString Name;
+
+	/** 이동할 레벨. FPark3DAppConfig::Level 과 같은 세 표기를 받는다. */
+	UPROPERTY(BlueprintReadWrite, Category = "Config")
+	FString Level;
+
+	/** 이 주차장에 들어갔을 때 쓸 데이터 파일(Save/3D/<종류>/ 기준). 키가 없으면 최상위 값 유지. */
+	TOptional<FString> PresetFile;
+	TOptional<FString> CarPosFile;
+	TOptional<FString> CameraPosFile;
+};
+
 /** config_pmaker.json 한 벌. 값이 없는 항목은 "미지정"(0/빈 문자열)으로 남겨 호출부가 건너뛴다. */
 USTRUCT(BlueprintType)
 struct FPark3DAppConfig
@@ -41,6 +67,14 @@ struct FPark3DAppConfig
 	 */
 	UPROPERTY(BlueprintReadWrite, Category = "Config")
 	FString Level;
+
+	/**
+	 * 화면 오른쪽 "주차장 선택" 콤보에 올릴 주차장 목록(JSON `levels`). 비어 있으면 콤보를 띄우지 않는다.
+	 * `level` 이 기동 레벨을 정하는 것과 별개로, 실행 중에 다른 주차장으로 옮겨 가는 길이다.
+	 * ⚠ 여기 적는 레벨도 쿡에 포함돼 있어야 한다(DefaultGame.ini 의 MapsToCook).
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = "Config")
+	TArray<FPark3DLevelOption> Levels;
 
 	/**
 	 * Save/3D/Light 기준 조명 설정 파일명. 빈 문자열 = 기존 동작(_default.txt 가 가리키는 파일).
@@ -188,4 +222,20 @@ public:
 	 * 빈 문자열이면 빈 문자열을 돌려준다(= 미지정).
 	 */
 	static FString ResolveDataPath(const TCHAR* SubDir, const FString& FileNameOrPath);
+
+	/**
+	 * 레벨 표기를 패키지 이름으로 정규화한다: "LV_Park_01" · "Levels/LV_Park_01" · "/Game/Levels/LV_Park_01"(.umap 허용)
+	 * → "/Game/Levels/LV_Park_01". 빈 문자열은 빈 문자열. 기동 이동(config `level`)과 주차장 선택 콤보가 같은 규칙을 쓴다.
+	 */
+	static FString NormalizeLevelPath(const FString& LevelSpec);
+
+	/** 지금 떠 있는 월드의 패키지 이름(PIE 접두어 제거). World 가 없으면 빈 문자열. NormalizeLevelPath 결과와 비교할 수 있다. */
+	static FString GetCurrentLevelPath(const UWorld* World);
+
+	/**
+	 * `levels[]` 중 CurrentLevelPath 와 같은 레벨의 항목을 찾아 그 데이터 파일(키가 있는 것만)로 Config 의 최상위
+	 * `*_file` 을 덮는다. 주차장 선택으로 옮겨 온 레벨에서 시작 자동 로딩이 그 주차장의 파일을 쓰게 하려는 것.
+	 * @return 적용한 항목(없으면 nullptr — Config 는 그대로).
+	 */
+	static const FPark3DLevelOption* ApplyLevelOverrides(FPark3DAppConfig& Config, const FString& CurrentLevelPath);
 };

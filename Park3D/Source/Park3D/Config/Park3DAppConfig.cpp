@@ -3,6 +3,7 @@
 #include "Park3DAppConfig.h"
 #include "../Park3DDataPaths.h"
 #include "Dom/JsonObject.h"
+#include "Engine/World.h"   // GetCurrentLevelPath: 월드 패키지 이름(PIE 접두어 제거)
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
@@ -109,6 +110,35 @@ bool UPark3DAppConfigLibrary::FromJson(const FString& Json, FPark3DAppConfig& Ou
 	if (Root->TryGetStringField(TEXT("level"), Str))          { Parsed.Level = Str.TrimStartAndEnd(); }
 	if (Root->TryGetStringField(TEXT("light_file"), Str))     { Parsed.LightFile = Str.TrimStartAndEnd(); }
 
+	// 주차장 선택 목록. name·level 이 둘 다 있는 오브젝트만 항목이 된다 — 한쪽이 빠진 항목은 콤보에
+	// 이름 없는 줄이나 갈 곳 없는 줄이 되므로 경고만 남기고 버린다. 데이터 파일 키는 있을 때만 담는다(TOptional).
+	const TArray<TSharedPtr<FJsonValue>>* LevelArr = nullptr;
+	if (Root->TryGetArrayField(TEXT("levels"), LevelArr) && LevelArr)
+	{
+		Parsed.Levels.Reset();
+		for (const TSharedPtr<FJsonValue>& V : *LevelArr)
+		{
+			const TSharedPtr<FJsonObject>* Obj = nullptr;
+			if (!V.IsValid() || !V->TryGetObject(Obj) || !Obj || !Obj->IsValid())
+			{
+				continue;
+			}
+			FPark3DLevelOption Opt;
+			if ((*Obj)->TryGetStringField(TEXT("name"), Str))  { Opt.Name = Str.TrimStartAndEnd(); }
+			if ((*Obj)->TryGetStringField(TEXT("level"), Str)) { Opt.Level = Str.TrimStartAndEnd(); }
+			if (Opt.Name.IsEmpty() || Opt.Level.IsEmpty())
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[Config] levels 항목에 name 또는 level 이 없어 건너뜁니다(name=\"%s\", level=\"%s\")."),
+					*Opt.Name, *Opt.Level);
+				continue;
+			}
+			if ((*Obj)->TryGetStringField(TEXT("preset_file"), Str))    { Opt.PresetFile = Str.TrimStartAndEnd(); }
+			if ((*Obj)->TryGetStringField(TEXT("carpos_file"), Str))    { Opt.CarPosFile = Str.TrimStartAndEnd(); }
+			if ((*Obj)->TryGetStringField(TEXT("camerapos_file"), Str)) { Opt.CameraPosFile = Str.TrimStartAndEnd(); }
+			Parsed.Levels.Add(MoveTemp(Opt));
+		}
+	}
+
 	// 숨길 액터 목록. 문자열 배열만 받고, 빈 문자열은 버린다(오타로 전부를 숨기는 사고가 없게).
 	const TArray<TSharedPtr<FJsonValue>>* HideArr = nullptr;
 	if (Root->TryGetArrayField(TEXT("hide_actors"), HideArr) && HideArr)
@@ -193,4 +223,46 @@ FString UPark3DAppConfigLibrary::ResolveDataPath(const TCHAR* SubDir, const FStr
 	}
 
 	return Park3DDataPaths::GetDataFilePath(SubDir, *FileNameOrPath);
+}
+
+FString UPark3DAppConfigLibrary::NormalizeLevelPath(const FString& LevelSpec)
+{
+	// "LV_Park_01" · "Levels/LV_Park_01" · "/Game/Levels/LV_Park_01" 을 모두 같은 것으로 본다.
+	FString Target = LevelSpec.TrimStartAndEnd().Replace(TEXT("\\"), TEXT("/"));
+	Target.RemoveFromEnd(TEXT(".umap"));
+	if (!Target.IsEmpty() && !Target.StartsWith(TEXT("/")))
+	{
+		Target = TEXT("/Game/") + Target;
+	}
+	return Target;
+}
+
+FString UPark3DAppConfigLibrary::GetCurrentLevelPath(const UWorld* World)
+{
+	if (!World)
+	{
+		return FString();
+	}
+	// PIE 는 패키지명에 UEDPIE_0_ 접두어를 붙인다. 떼고 비교하지 않으면 영원히 같지 않다고 판정한다.
+	return UWorld::StripPIEPrefixFromPackageName(World->GetOutermost()->GetName(), World->StreamingLevelsPrefix);
+}
+
+const FPark3DLevelOption* UPark3DAppConfigLibrary::ApplyLevelOverrides(FPark3DAppConfig& Config, const FString& CurrentLevelPath)
+{
+	if (CurrentLevelPath.IsEmpty())
+	{
+		return nullptr;
+	}
+	for (const FPark3DLevelOption& Opt : Config.Levels)
+	{
+		if (!NormalizeLevelPath(Opt.Level).Equals(CurrentLevelPath, ESearchCase::IgnoreCase))
+		{
+			continue;
+		}
+		if (Opt.PresetFile.IsSet())    { Config.PresetFile = Opt.PresetFile.GetValue(); }
+		if (Opt.CarPosFile.IsSet())    { Config.CarPosFile = Opt.CarPosFile.GetValue(); }
+		if (Opt.CameraPosFile.IsSet()) { Config.CameraPosFile = Opt.CameraPosFile.GetValue(); }
+		return &Opt; // 같은 레벨이 두 번 적혀 있으면 첫 항목이 이긴다(콤보도 첫 항목을 고른다).
+	}
+	return nullptr;
 }

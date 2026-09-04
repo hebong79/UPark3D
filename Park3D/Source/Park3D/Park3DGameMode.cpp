@@ -6,6 +6,7 @@
 #include "CameraControlWidget.h"
 #include "CameraViewerWidget.h"
 #include "CarPlacementWidget.h"
+#include "LevelSelectWidget.h"
 #include "MainMenuWidget.h"
 #include "PresetMakerWidget.h"
 #include "Config/Park3DAppConfig.h"
@@ -75,23 +76,14 @@ bool APark3DGameMode::TravelToConfigLevel()
 		return false; // 지정이 없으면 부팅맵 그대로 쓴다.
 	}
 
-	// "LV_Park_01" · "Levels/LV_Park_01" · "/Game/Levels/LV_Park_01" 을 모두 같은 것으로 본다.
-	FString Target = Config.Level.Replace(TEXT("\\"), TEXT("/"));
-	Target.RemoveFromEnd(TEXT(".umap"));
-	if (!Target.StartsWith(TEXT("/")))
-	{
-		Target = TEXT("/Game/") + Target;
-	}
-
-	UWorld* World = GetWorld();
-	if (!World)
+	// 표기 정규화·현재 레벨 판정은 주차장 선택 콤보(LevelSelectWidget)와 같은 규칙을 쓴다.
+	const FString Target = UPark3DAppConfigLibrary::NormalizeLevelPath(Config.Level);
+	const FString Current = UPark3DAppConfigLibrary::GetCurrentLevelPath(GetWorld());
+	if (Current.IsEmpty())
 	{
 		bAttempted = true;
 		return false;
 	}
-	// PIE 는 패키지명에 UEDPIE_0_ 접두어를 붙인다. 떼고 비교하지 않으면 영원히 같지 않다고 판정한다.
-	const FString Current = UWorld::StripPIEPrefixFromPackageName(
-		World->GetOutermost()->GetName(), World->StreamingLevelsPrefix);
 
 	bAttempted = true;
 	if (Current.Equals(Target, ESearchCase::IgnoreCase))
@@ -184,6 +176,9 @@ void APark3DGameMode::BeginPlay()
 
 	// 카메라 뷰어 표시(상시 노출). 카메라 컨트롤 패널을 한 번도 열지 않아도 존재한다.
 	ShowCameraViewer();
+
+	// 주차장 선택 패널(오른쪽 위). config 의 levels 가 비어 있으면 뜨지 않는다.
+	ShowLevelSelect();
 
 	// 시작 설정 파일(Save/Config/config_pmaker.json) 적용 — 메뉴/패널·카메라 매니저가 준비된 뒤여야 한다.
 	ApplyStartupConfig();
@@ -457,6 +452,15 @@ void APark3DGameMode::ApplyStartupConfig()
 		return;
 	}
 
+	// 0) 주차장 선택(levels[])으로 들어온 레벨이면 그 항목의 데이터 파일이 최상위 *_file 을 덮는다 —
+	//    주차장마다 차량·카메라 파일이 다르므로, 안 덮으면 서신 차량 23대가 다른 주차장 위에 그대로 얹힌다.
+	if (const FPark3DLevelOption* Lot = UPark3DAppConfigLibrary::ApplyLevelOverrides(
+			Config, UPark3DAppConfigLibrary::GetCurrentLevelPath(GetWorld())))
+	{
+		UE_LOG(LogTemp, Log, TEXT("[Config] 주차장 '%s' 의 데이터 파일 적용: preset=\"%s\" carpos=\"%s\" camerapos=\"%s\""),
+			*Lot->Name, *Config.PresetFile, *Config.CarPosFile, *Config.CameraPosFile);
+	}
+
 	// 1) 카메라 광학 규격(최대 줌 → 기준 화각 순) — 아래 카메라위치 로딩이 카메라를 새로 스폰하므로
 	//    반드시 먼저 반영한다. 메뉴 캐스트(조기 반환)보다도 앞이라 -game/헤드리스에서도 적용된다.
 	//    호출 순서 고정: SetCameraDefaultHFov 만 기존 카메라에 SetZoom 재적용을 하므로 뒤에 두어야
@@ -601,6 +605,36 @@ void APark3DGameMode::ShowCameraViewer()
 		ViewerWidget->AddToViewport(5);
 		UE_LOG(LogTemp, Log, TEXT("[Park3DGameMode] 카메라 뷰어를 뷰포트에 표시했습니다."));
 	}
+}
+
+void APark3DGameMode::ShowLevelSelect()
+{
+	FPark3DAppConfig Config;
+	if (!UPark3DAppConfigLibrary::Load(Config) || Config.Levels.Num() == 0)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[LevelSelect] config 에 levels 가 없어 주차장 선택 패널을 띄우지 않습니다."));
+		return;
+	}
+	if (!LevelSelectWidget)
+	{
+		APlayerController* PC = CachedPC.Get();
+		LevelSelectWidget = CreateWidget<ULevelSelectWidget>(
+			PC ? PC : UGameplayStatics::GetPlayerController(this, 0), ULevelSelectWidget::StaticClass());
+	}
+	if (!LevelSelectWidget)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[LevelSelect] 주차장 선택 위젯을 만들지 못했습니다."));
+		return;
+	}
+	if (!LevelSelectWidget->IsInViewport())
+	{
+		// ZOrder 15 = 카메라 뷰어(5)·컨트롤 패널(10)보다 앞, 시뮬 HUD(20)·메인 메뉴(100)보다 뒤.
+		LevelSelectWidget->AddToViewport(15);
+	}
+	// 뷰포트에 올린 뒤 채운다 — 그래야 콤보의 Slate 위젯이 있어 항목·선택이 화면에 바로 반영된다.
+	const FString Current = UPark3DAppConfigLibrary::GetCurrentLevelPath(GetWorld());
+	LevelSelectWidget->Populate(Config.Levels, Current);
+	UE_LOG(LogTemp, Log, TEXT("[LevelSelect] 주차장 선택 패널 표시: 항목 %d개, 현재 %s"), Config.Levels.Num(), *Current);
 }
 
 UCameraViewerWidget* APark3DGameMode::GetCameraViewer() const

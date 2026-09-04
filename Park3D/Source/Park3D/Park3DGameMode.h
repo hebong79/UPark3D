@@ -12,6 +12,7 @@
 
 class UUserWidget;
 class UCameraViewerWidget;
+class ULevelSelectWidget;
 class UParkingSimWidget;
 
 /**
@@ -152,6 +153,12 @@ private:
 	/** 카메라 뷰어 위젯을 생성(최초 1회)하고 뷰포트에 표시한다. 컨트롤 패널 개폐와 무관하게 유지된다. */
 	void ShowCameraViewer();
 
+	/**
+	 * 오른쪽 위 "주차장 선택" 패널을 띄운다. 항목은 config_pmaker.json 의 levels[] — 비어 있으면 띄우지 않는다.
+	 * 레벨을 옮기면 GameMode 가 새로 만들어지므로 레벨마다 여기서 다시 만든다(현재 레벨이 선택 상태로 뜬다).
+	 */
+	void ShowLevelSelect();
+
 
 	/**
 	 * Save/Config/config_pmaker.json 을 읽어 프리셋·카메라위치·차량배치 파일을 시작 시 적용한다
@@ -181,6 +188,10 @@ private:
 	/** 주차 시뮬레이션 HUD 인스턴스. */
 	UPROPERTY(Transient)
 	TObjectPtr<UParkingSimWidget> SimWidget = nullptr;
+
+	/** 주차장 선택 패널 인스턴스(levels 가 비어 있으면 nullptr). */
+	UPROPERTY(Transient)
+	TObjectPtr<ULevelSelectWidget> LevelSelectWidget = nullptr;
 
 	/** 뷰어를 숨기기 직전의 가시성(복원용). 뷰어는 드래그/클릭을 받으므로 임의 값으로 되돌리면 안 된다. */
 	ESlateVisibility ViewerSavedVisibility = ESlateVisibility::Visible;

@@ -445,4 +445,67 @@ bool FPark3DAppConfigCameraOpticsTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// ===== 주차장 선택 목록(levels[]) — 파싱 / 레벨 표기 정규화 / 레벨별 파일 override =====
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPark3DAppConfigLevelsTest,
+	"Park3D.AppConfig.Levels",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FPark3DAppConfigLevelsTest::RunTest(const FString& Parameters)
+{
+	// 1) 세 표기가 한 패키지 이름으로 모인다(기동 이동과 콤보가 같은 규칙).
+	TestEqual(TEXT("상대 표기"), UPark3DAppConfigLibrary::NormalizeLevelPath(TEXT("Levels/LV_Park_03")), FString(TEXT("/Game/Levels/LV_Park_03")));
+	TestEqual(TEXT("절대 표기"), UPark3DAppConfigLibrary::NormalizeLevelPath(TEXT("/Game/Levels/LV_Park_03")), FString(TEXT("/Game/Levels/LV_Park_03")));
+	TestEqual(TEXT("역슬래시·확장자·공백"), UPark3DAppConfigLibrary::NormalizeLevelPath(TEXT(" Levels\\LV_Park_03.umap ")), FString(TEXT("/Game/Levels/LV_Park_03")));
+	TestEqual(TEXT("이름만"), UPark3DAppConfigLibrary::NormalizeLevelPath(TEXT("LV_Park_03")), FString(TEXT("/Game/LV_Park_03")));
+	TestTrue(TEXT("빈 문자열은 빈 문자열"), UPark3DAppConfigLibrary::NormalizeLevelPath(TEXT("")).IsEmpty());
+
+	// 2) 파싱 — name·level 이 빠진 항목은 버리고, 파일 키는 있을 때만 담긴다(빈 문자열도 '있음').
+	FPark3DAppConfig C;
+	C.CarPosFile = TEXT("CarPos_Seoshin_2Cam.json");
+	C.CameraPosFile = TEXT("CamPos_Seosin.json");
+	TestTrue(TEXT("파싱 성공"), UPark3DAppConfigLibrary::FromJson(TEXT(R"({
+		"carpos_file": "CarPos_Seoshin_2Cam.json",
+		"camerapos_file": "CamPos_Seosin.json",
+		"levels": [
+			{"name": "서신지구대", "level": "Levels/LV_Park_01"},
+			{"name": "객리단길", "level": "Levels/LV_Park_03", "preset_file": "", "carpos_file": "CarPos_13Num.객리단.json"},
+			{"name": "이름만"},
+			{"level": "Levels/LV_Park_09"},
+			"문자열 항목"
+		]})"), C));
+	TestEqual(TEXT("유효 항목 2개"), C.Levels.Num(), 2);
+	if (C.Levels.Num() == 2)
+	{
+		TestEqual(TEXT("[0] name"), C.Levels[0].Name, FString(TEXT("서신지구대")));
+		TestFalse(TEXT("[0] 파일 키 없음 → 미설정"), C.Levels[0].CarPosFile.IsSet());
+		TestEqual(TEXT("[1] level"), C.Levels[1].Level, FString(TEXT("Levels/LV_Park_03")));
+		TestTrue(TEXT("[1] preset_file 빈 문자열도 '있음'"), C.Levels[1].PresetFile.IsSet() && C.Levels[1].PresetFile.GetValue().IsEmpty());
+		TestTrue(TEXT("[1] carpos_file"), C.Levels[1].CarPosFile.IsSet());
+		TestFalse(TEXT("[1] camerapos_file 없음"), C.Levels[1].CameraPosFile.IsSet());
+	}
+
+	// 3) override — 현재 레벨과 같은 항목의 파일만 덮고, 키가 없는 파일은 최상위 값이 남는다.
+	FPark3DAppConfig Gaek = C;
+	const FPark3DLevelOption* Hit = UPark3DAppConfigLibrary::ApplyLevelOverrides(Gaek, TEXT("/Game/Levels/LV_Park_03"));
+	TestNotNull(TEXT("객리단길 항목 적중"), Hit);
+	TestTrue(TEXT("preset_file 은 빈 문자열로 덮임"), Gaek.PresetFile.IsEmpty());
+	TestEqual(TEXT("carpos_file 덮임"), Gaek.CarPosFile, FString(TEXT("CarPos_13Num.객리단.json")));
+	TestEqual(TEXT("camerapos_file 은 최상위 값 유지"), Gaek.CameraPosFile, FString(TEXT("CamPos_Seosin.json")));
+
+	FPark3DAppConfig Seo = C;
+	TestNotNull(TEXT("서신 항목 적중(파일 키 없음)"), UPark3DAppConfigLibrary::ApplyLevelOverrides(Seo, TEXT("/game/levels/lv_park_01")));
+	TestEqual(TEXT("키 없는 항목은 아무것도 안 덮음"), Seo.CarPosFile, FString(TEXT("CarPos_Seoshin_2Cam.json")));
+
+	FPark3DAppConfig Other = C;
+	TestNull(TEXT("목록에 없는 레벨은 nullptr"), UPark3DAppConfigLibrary::ApplyLevelOverrides(Other, TEXT("/Game/Maps/PresetMaker1")));
+	TestEqual(TEXT("nullptr 이면 그대로"), Other.CarPosFile, FString(TEXT("CarPos_Seoshin_2Cam.json")));
+	TestNull(TEXT("현재 레벨 미상이면 nullptr"), UPark3DAppConfigLibrary::ApplyLevelOverrides(Other, TEXT("")));
+
+	// 4) levels 키가 없으면 기존 목록을 건드리지 않는다(부분 설정 허용 규칙).
+	FPark3DAppConfig Keep = C;
+	TestTrue(TEXT("파싱 성공"), UPark3DAppConfigLibrary::FromJson(TEXT(R"({"rpc_port": 13510})"), Keep));
+	TestEqual(TEXT("levels 유지"), Keep.Levels.Num(), 2);
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

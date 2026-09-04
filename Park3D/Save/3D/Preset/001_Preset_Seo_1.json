@@ -1,89 +1,100 @@
 {
-    "datas": [
-        {
-            "idx": 1,
-            "presetName": "Preset 1",
-            "faceCount": 7,
-            "offsetPos": {
-                "x": -7.367,
-                "y": 0.0,
-                "z": 19.176
-            },
-            "faceRot": 0.0,
-            "groupRot": 0.0,
-            "xSize": 2.5,
-            "zSize": 5.0,
-            "dirType": 0,
-            "useBaseWidth": true,
-            "camIdx": 2
-        },
-        {
-            "idx": 2,
-            "presetName": "Preset 2",
-            "faceCount": 6,
-            "offsetPos": {
-                "x": 13.761,
-                "y": 0.0,
-                "z": 3.332
-            },
-            "faceRot": 0.0,
-            "groupRot": 0.0,
-            "xSize": 5.0,
-            "zSize": 2.5,
-            "dirType": 0,
-            "useBaseWidth": false,
-            "camIdx": 1
-        },
-        {
-            "idx": 3,
-            "presetName": "Preset 3",
-            "faceCount": 4,
-            "offsetPos": {
-                "x": -3.549,
-                "y": 0.0,
-                "z": 3.586
-            },
-            "faceRot": 0.0,
-            "groupRot": 0.0,
-            "xSize": 2.5,
-            "zSize": 5.0,
-            "dirType": 0,
-            "useBaseWidth": true,
-            "camIdx": 2
-        },
-        {
-            "idx": 4,
-            "presetName": "Preset 4",
-            "faceCount": 4,
-            "offsetPos": {
-                "x": -3.549,
-                "y": 0.0,
-                "z": 8.58
-            },
-            "faceRot": 0.0,
-            "groupRot": 0.0,
-            "xSize": 2.5,
-            "zSize": 5.0,
-            "dirType": 0,
-            "useBaseWidth": true,
-            "camIdx": 2
-        },
-        {
-            "idx": 5,
-            "presetName": "Preset 5",
-            "faceCount": 2,
-            "offsetPos": {
-                "x": -3.625,
-                "y": 0.0,
-                "z": -7.114
-            },
-            "faceRot": 0.0,
-            "groupRot": 0.0,
-            "xSize": 5.0,
-            "zSize": 2.5,
-            "dirType": 0,
-            "useBaseWidth": true,
-            "camIdx": 1
-        }
-    ]
+	"isUnreal": true,
+	"datas": [
+		{
+			"idx": 1,
+			"presetName": "Preset 1",
+			"faceCount": 7,
+			"offsetPos":
+			{
+				"x": 19.375999450683594,
+				"y": 5.0329999923706055,
+				"z": 0
+			},
+			"faceRot": 0,
+			"groupRot": 0,
+			"xSize": 2.5,
+			"zSize": 5,
+			"dirType": 0,
+			"useBaseWidth": true,
+			"camIdx": 2,
+			"use3D": false
+		},
+		{
+			"idx": 2,
+			"presetName": "Preset 2",
+			"faceCount": 6,
+			"offsetPos":
+			{
+				"x": 8.0319995880126953,
+				"y": 24.76099967956543,
+				"z": 0
+			},
+			"faceRot": 0,
+			"groupRot": 0,
+			"xSize": 5,
+			"zSize": 2.5,
+			"dirType": 0,
+			"useBaseWidth": false,
+			"camIdx": 1,
+			"use3D": false
+		},
+		{
+			"idx": 3,
+			"presetName": "Preset 3",
+			"faceCount": 4,
+			"offsetPos":
+			{
+				"x": 4.0859999656677246,
+				"y": 7.750999927520752,
+				"z": 0
+			},
+			"faceRot": 2,
+			"groupRot": 0,
+			"xSize": 2.5,
+			"zSize": 5,
+			"dirType": 1,
+			"useBaseWidth": true,
+			"camIdx": 2,
+			"use3D": false
+		},
+		{
+			"idx": 4,
+			"presetName": "Preset 4",
+			"faceCount": 4,
+			"offsetPos":
+			{
+				"x": 9.1800003051757812,
+				"y": 7.9510002136230469,
+				"z": 0
+			},
+			"faceRot": 2,
+			"groupRot": 0,
+			"xSize": 2.5,
+			"zSize": 5,
+			"dirType": 1,
+			"useBaseWidth": true,
+			"camIdx": 2,
+			"use3D": false
+		},
+		{
+			"idx": 5,
+			"presetName": "Preset 5",
+			"faceCount": 2,
+			"offsetPos":
+			{
+				"x": -7.4140000343322754,
+				"y": 3.9749999046325684,
+				"z": 0
+			},
+			"faceRot": 0,
+			"groupRot": 0,
+			"xSize": 5,
+			"zSize": 2.5,
+			"dirType": 0,
+			"useBaseWidth": true,
+			"camIdx": 1,
+			"use3D": false
+		}
+	]
 }

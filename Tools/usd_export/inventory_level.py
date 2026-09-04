@@ -2,6 +2,8 @@
 """
 UnrealEditor-Cmd pythonscript commandlet 안에서 도는 쪽. 레벨(기본 /Game/Levels/LV_Park_01)을 열어
 모든 액터와 그 안의 메시/데칼 컴포넌트를 JSON 으로 덤프한다 -- 환경 USD 변환 대상 인벤토리용.
+액터 위치/회전/스케일, 컴포넌트 월드 변환, ISM/HISM 은 인스턴스별 월드 변환(instance_transforms), 스플라인 메시는 양 끝 파라미터까지
+남겨 Omniverse 쪽에서 건물·도로·소품을 언리얼 배치 그대로(1:1) 조립할 수 있게 한다.
 
     UnrealEditor-Cmd.exe Park3D.uproject -run=pythonscript -script="inventory_level.py <out.json> [/Game/Levels/LV_Park_01]" ...
 
@@ -38,6 +40,25 @@ def _path(obj):
         return obj.get_path_name() if obj else None
     except Exception:  # noqa: BLE001
         return None
+
+
+def _rot(r):
+    return [round(r.roll, 2), round(r.pitch, 2), round(r.yaw, 2)]
+
+
+def _xform(t):
+    """unreal.Transform -> {loc, rot(roll,pitch,yaw), scale} (cm, deg)."""
+    return {"loc": _vec(t.translation), "rot": _rot(t.rotation.rotator()), "scale": _vec(t.scale3d)}
+
+
+def _instance_transforms(comp):
+    """ISM/HISM 의 인스턴스별 월드 변환. get_instance_transform 은 (ok, Transform) 튜플 또는 Transform 을 돌려준다(버전에 따라)."""
+    out = []
+    for i in range(comp.get_instance_count()):
+        r = comp.get_instance_transform(i, True)
+        t = r[1] if isinstance(r, tuple) else r
+        out.append(_xform(t))
+    return out
 
 
 def _material_info(mat, cache):
@@ -123,8 +144,19 @@ def _component_entry(comp, mesh_cache, mat_cache):
         if isinstance(comp, unreal.InstancedStaticMeshComponent):
             try:
                 entry["instances"] = comp.get_instance_count()
-            except Exception:  # noqa: BLE001
-                pass
+                entry["instance_transforms"] = _instance_transforms(comp)
+            except Exception as exc:  # noqa: BLE001
+                entry["instance_error"] = str(exc)
+        elif isinstance(comp, unreal.SplineMeshComponent):
+            # 스플라인 변형 도로 조각: 메시 원형만으로는 재현이 안 되므로 양 끝 위치/접선/스케일(컴포넌트 로컬, cm)을 남긴다
+            try:
+                entry["spline"] = {"start_pos": _vec(comp.get_start_position()), "start_tangent": _vec(comp.get_start_tangent()),
+                                   "end_pos": _vec(comp.get_end_position()), "end_tangent": _vec(comp.get_end_tangent()),
+                                   "start_scale": [round(v, 3) for v in (comp.get_start_scale().x, comp.get_start_scale().y)],
+                                   "end_scale": [round(v, 3) for v in (comp.get_end_scale().x, comp.get_end_scale().y)],
+                                   "forward_axis": comp.get_editor_property("forward_axis").name}
+            except Exception as exc:  # noqa: BLE001
+                entry["spline_error"] = str(exc)
         try:
             b = comp.get_local_bounds()
             # get_local_bounds returns (min, max)
@@ -172,7 +204,8 @@ def main():
         try:
             entry = {"name": a.get_name(), "label": a.get_actor_label(), "class": a.get_class().get_name(),
                      "class_path": _path(a.get_class()), "folder": str(a.get_folder_path()),
-                     "location": _vec(a.get_actor_location()), "hidden": bool(a.is_hidden_ed()),
+                     "location": _vec(a.get_actor_location()), "rotation": _rot(a.get_actor_rotation()),
+                     "scale": _vec(a.get_actor_scale3d()), "hidden": bool(a.is_hidden_ed()),
                      "hidden_in_game": bool(a.get_editor_property("hidden"))}
             try:
                 origin, extent = a.get_actor_bounds(False)

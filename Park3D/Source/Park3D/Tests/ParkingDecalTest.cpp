@@ -120,6 +120,96 @@ bool FParkingComputeSlotCornersTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// ===== FindSlotAtWorld (정적 순수 함수) — 클릭 스냅의 "점 → 면" 역판정 =====
+// ComputeSlotCorners 가 만든 사각형과 같은 좌표로 되돌아오는지, 면 밖을 정확히 거르는지 고정한다.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FParkingFindSlotAtWorldTest,
+	"Park3D.ParkingDecal.FindSlotAtWorld",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FParkingFindSlotAtWorldTest::RunTest(const FString& Parameters)
+{
+	const float U = 100.f;
+	const float Tol = 1e-2f;
+
+	FParkingPreset Base;
+	Base.PresetIdx = 3;
+	Base.FaceCount = 2;
+	Base.Offset = FVector(1.f, 2.f, 0.f);
+	Base.BoxSizeX = 2.5f;   // 폭 250cm
+	Base.BoxSizeZ = 5.0f;   // 길이 500cm
+	Base.DirType = EFaceDirType::Default;
+	Base.bIsBaseWidth = true;
+
+	int32 SlotId = 0;
+	FVector Center = FVector::ZeroVector;
+	float AxisYaw = -1.f;
+
+	// ── 1면(X∈[-150,350], Y∈[75,325]) 안 → 1번 면, 중심 (100,200), 길이축 +X(0°) ──
+	{
+		const TArray<FParkingPreset> Presets = { Base };
+		const FParkingPreset* Hit = AParkingPresetManager::FindSlotAtWorld(
+			Presets, FVector(120.f, 90.f, 0.f), U, SlotId, Center, AxisYaw);
+		TestNotNull(TEXT("S1 면 안이면 프리셋을 돌려준다"), Hit);
+		if (Hit)
+		{
+			TestEqual(TEXT("S1 presetIdx"), Hit->PresetIdx, 3);
+		}
+		TestEqual(TEXT("S1 slotId(1-based)"), SlotId, 1);
+		TestTrue(*FString::Printf(TEXT("S1 중심 (got=%s)"), *Center.ToString()),
+			Center.Equals(FVector(100.f, 200.f, 0.f), Tol));
+		TestEqual(TEXT("S1 길이축 yaw"), AxisYaw, 0.f, Tol);
+	}
+
+	// ── 2면(Y∈[325,575]) 안 → 2번 면 ──
+	{
+		const TArray<FParkingPreset> Presets = { Base };
+		const FParkingPreset* Hit = AParkingPresetManager::FindSlotAtWorld(
+			Presets, FVector(100.f, 450.f, 0.f), U, SlotId, Center, AxisYaw);
+		TestNotNull(TEXT("S2 2번 면 적중"), Hit);
+		TestEqual(TEXT("S2 slotId"), SlotId, 2);
+		TestTrue(TEXT("S2 중심"), Center.Equals(FVector(100.f, 450.f, 0.f), Tol));
+	}
+
+	// ── 면 밖(마지막 면 바로 너머) → 스냅 없음 ──
+	{
+		const TArray<FParkingPreset> Presets = { Base };
+		TestNull(TEXT("S3 면 밖은 nullptr"), AParkingPresetManager::FindSlotAtWorld(
+			Presets, FVector(100.f, 700.f, 0.f), U, SlotId, Center, AxisYaw));
+		TestNull(TEXT("S3 X 밖도 nullptr"), AParkingPresetManager::FindSlotAtWorld(
+			Presets, FVector(500.f, 200.f, 0.f), U, SlotId, Center, AxisYaw));
+	}
+
+	// ── 면회전 90°: 길이축이 UE +Y(90°)로 따라 돈다 ──
+	{
+		FParkingPreset P = Base;
+		P.Offset = FVector::ZeroVector;
+		P.FaceRotate = 90.f;
+		const TArray<FParkingPreset> Presets = { P };
+		const FParkingPreset* Hit = AParkingPresetManager::FindSlotAtWorld(
+			Presets, FVector(0.f, 0.f, 0.f), U, SlotId, Center, AxisYaw);
+		TestNotNull(TEXT("S4 회전면 적중"), Hit);
+		TestEqual(TEXT("S4 slotId"), SlotId, 1);
+		TestEqual(TEXT("S4 길이축 yaw"), AxisYaw, 90.f, Tol);
+	}
+
+	// ── 프리셋이 여럿이면 점을 품는 쪽을 고른다 ──
+	{
+		FParkingPreset Far = Base;
+		Far.PresetIdx = 9;
+		Far.Offset = FVector(50.f, 50.f, 0.f); // 멀리 떨어진 다른 프리셋
+		const TArray<FParkingPreset> Presets = { Far, Base };
+		const FParkingPreset* Hit = AParkingPresetManager::FindSlotAtWorld(
+			Presets, FVector(120.f, 90.f, 0.f), U, SlotId, Center, AxisYaw);
+		TestNotNull(TEXT("S5 두 번째 프리셋 적중"), Hit);
+		if (Hit)
+		{
+			TestEqual(TEXT("S5 presetIdx"), Hit->PresetIdx, 3);
+		}
+	}
+
+	return true;
+}
+
 // ===== 데칼 카운트 / 두께 반영 / 널가드 (에디터 월드 스폰) =====
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FParkingDecalRebuildTest,
 	"Park3D.ParkingDecal.Rebuild",

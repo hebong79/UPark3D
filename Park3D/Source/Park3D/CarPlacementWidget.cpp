@@ -1045,6 +1045,11 @@ void UCarPlacementWidget::AddCarAtWorld(const FVector& WorldLoc)
 	P.rotY = 0.f;
 	P.isFront = true;
 	P.color = ColorVal;
+
+	// 주차면 안을 클릭했으면 그 면 중앙·면 축으로 스냅한다(면 밖이면 클릭 지점 그대로).
+	ACarPlacementManager* Mgr = GetCarManager();
+	const bool bSnapped = Mgr && Mgr->SnapCarPosToSlot(WorldLoc, P);
+
 	CarData.datas.Add(P);
 
 	PrimaryIndex = CarData.datas.Num() - 1;
@@ -1052,7 +1057,9 @@ void UCarPlacementWidget::AddCarAtWorld(const FVector& WorldLoc)
 	FillDetailFields(P);
 	RebuildCarList();
 	RefreshView();
-	Notify(FString::Printf(TEXT("배치 +1 (총 %d대)"), CarData.datas.Num()));
+	Notify(bSnapped
+		? FString::Printf(TEXT("배치 +1 — %d번 프리셋 %d번 면 (총 %d대)"), P.presetId, P.slotId, CarData.datas.Num())
+		: FString::Printf(TEXT("배치 +1 (총 %d대)"), CarData.datas.Num()));
 }
 
 void UCarPlacementWidget::DeleteSelected()

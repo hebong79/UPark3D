@@ -2,6 +2,8 @@
 
 #include "ParkingPresetManager.h"
 #include "ParkingGeometryLibrary.h"
+#include "PresetMakerWidget.h"
+#include "Config/Park3DAppConfig.h"
 #include "DrawDebugHelpers.h"
 #include "Components/SceneComponent.h"
 #include "Components/DecalComponent.h"
@@ -112,6 +114,80 @@ void AParkingPresetManager::ComputeSlotCorners(
 		R = RotateZAround(R, Origin, GroupRot);                            // 그룹 회전
 		OutBottom[k] = R;
 	}
+}
+
+const FParkingPreset* AParkingPresetManager::FindSlotAtWorld(
+	const TArray<FParkingPreset>& Presets, const FVector& WorldLoc, float MetersToUU,
+	int32& OutSlotId, FVector& OutCenterWorld, float& OutAxisYaw)
+{
+	for (const FParkingPreset& P : Presets)
+	{
+		for (int32 j = 0; j < P.FaceCount; ++j)
+		{
+			FVector C[4];
+			// 차량은 바닥에 놓이므로 FaceHeightZ=0 으로 부른다(면 라인의 5cm 띄움은 렌더 전용).
+			ComputeSlotCorners(P, j, MetersToUU, /*FaceHeightZ=*/0.f, C);
+
+			// 사각형은 볼록하다(ComputeSlotCorners 규약) → 네 변의 외적 부호가 모두 같으면 내부.
+			bool bNeg = false, bPos = false;
+			for (int32 k = 0; k < 4; ++k)
+			{
+				const FVector2D Edge(C[(k + 1) % 4].X - C[k].X, C[(k + 1) % 4].Y - C[k].Y);
+				const FVector2D ToPoint(WorldLoc.X - C[k].X, WorldLoc.Y - C[k].Y);
+				const float Cross = Edge.X * ToPoint.Y - Edge.Y * ToPoint.X;
+				if (Cross < 0.f) bNeg = true;
+				if (Cross > 0.f) bPos = true;
+			}
+			if (bNeg && bPos)
+			{
+				continue; // 밖(변 위의 0 은 어느 쪽도 세우지 않으므로 안으로 친다)
+			}
+
+			OutSlotId = j + 1;
+			OutCenterWorld = (C[0] + C[1] + C[2] + C[3]) * 0.25f;
+
+			// 긴 변 = 주차 깊이(차량 길이축). Local[0]→[1] 이 zSize 변, [0]→[3] 이 xSize 변이다.
+			const FVector EdgeZ = C[1] - C[0];
+			const FVector EdgeX = C[3] - C[0];
+			const FVector Depth = (EdgeZ.SizeSquared2D() >= EdgeX.SizeSquared2D()) ? EdgeZ : EdgeX;
+			// Unity yaw = atan2(x, z). Unity x→UE Y, Unity z→UE X 이므로 atan2(UE.Y, UE.X).
+			OutAxisYaw = (Depth.SizeSquared2D() < 1e-6f)
+				? 0.f
+				: FMath::RadiansToDegrees(FMath::Atan2(Depth.Y, Depth.X));
+			return &P;
+		}
+	}
+	return nullptr;
+}
+
+const TArray<FParkingPreset>& AParkingPresetManager::ResolvePresets()
+{
+	if (StoredPresets.Num() > 0)
+	{
+		return StoredPresets;
+	}
+
+	FPark3DAppConfig Config;
+	const FString Path = UPark3DAppConfigLibrary::Load(Config) && !Config.PresetFile.IsEmpty()
+		? UPark3DAppConfigLibrary::ResolveDataPath(TEXT("Preset"), Config.PresetFile)
+		: FString();
+
+	if (Path.IsEmpty())
+	{
+		ConfigPresets.Reset();
+		ConfigPresetPath.Reset();
+		return ConfigPresets;
+	}
+	if (Path != ConfigPresetPath || ConfigPresets.Num() == 0)
+	{
+		ConfigPresetPath = Path;
+		ConfigPresets.Reset();
+		if (!UPresetMakerWidget::LoadPresetsFromJson(Path, ConfigPresets))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[ParkingManager] 프리셋 파일을 읽지 못했습니다: %s"), *Path);
+		}
+	}
+	return ConfigPresets;
 }
 
 void AParkingPresetManager::DrawClosedRect(const FVector(&Corners)[4], const FColor& Color)

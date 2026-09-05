@@ -123,6 +123,26 @@ public:
 		float MetersToUU, float FaceHeightZ,
 		FVector(&OutBottom)[4]);
 
+	/**
+	 * 월드 점(cm)을 품는 주차면을 찾는다(순수 함수) — 클릭 배치 스냅의 "점 → 면" 역판정.
+	 * ComputeSlotCorners 가 만든 바로 그 사각형 위에서 XY 로만 판정한다(클릭은 바닥을 맞히므로 Z 는 무시).
+	 * 사각형이 겹치면 먼저 만난 것을 돌려준다(프리셋 배열 순 → 면 순).
+	 * @param OutSlotId      1-based 면 번호(FCarPos.slotId 와 같은 공간).
+	 * @param OutCenterWorld 면 중심(월드 cm, Z=0).
+	 * @param OutAxisYaw     면 길이축 방향(deg). 전/후면 판정 전 값 — random.slotPlace 와 같은 규약이다.
+	 * @return 품는 면이 있으면 그 프리셋, 없으면 nullptr.
+	 */
+	static const FParkingPreset* FindSlotAtWorld(
+		const TArray<FParkingPreset>& Presets, const FVector& WorldLoc, float MetersToUU,
+		int32& OutSlotId, FVector& OutCenterWorld, float& OutAxisYaw);
+
+	/**
+	 * 조회·스냅이 쓸 주차면 목록. StoredPresets 가 비어 있으면 config_pmaker.json 의 preset_file 을 읽어 캐시한다 —
+	 * 시작 시 자동 로딩분은 UPresetMakerWidget 이 들고 있어 StoredPresets 에 없기 때문이다(프리셋 목록 이원화).
+	 * AParkingSimManager::ResolvePresets 와 같은 규약이며, 그쪽은 이 액터가 없는 경우까지 스스로 처리한다.
+	 */
+	const TArray<FParkingPreset>& ResolvePresets();
+
 	// ---- 표시 설정(미터 → cm 변환 포함) ----
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Parking|View") float MetersToUU = 100.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Parking|View") float FaceHeightZ = 5.f;     // 바닥 위 띄움(cm)
@@ -156,6 +176,10 @@ private:
 	static FVector RotateZAround(const FVector& P, const FVector& Pivot, float AngleDeg);
 
 	// ---- 데칼 풀 / 배치 헬퍼 ----
+	/** StoredPresets 가 비었을 때 config 에서 읽어 둔 프리셋(경로가 바뀌지 않는 한 재사용). */
+	TArray<FParkingPreset> ConfigPresets;
+	FString ConfigPresetPath;
+
 	/** 재사용 풀(라인+fill 공용). 잉여는 Visibility=false 로 숨겨 재사용(파괴 대신). */
 	UPROPERTY(Transient) TArray<TObjectPtr<UDecalComponent>> DecalPool;
 

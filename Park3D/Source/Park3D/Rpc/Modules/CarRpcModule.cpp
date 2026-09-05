@@ -162,6 +162,66 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		return RpcDto::MakeObject(O);
 	});
 
+	/**
+	 * 월드 지점에 차량 1대를 놓는다 — 차량 배치 패널의 Ctrl+좌클릭과 같은 경로(ACarPlacementManager::SnapCarPosToSlot).
+	 * snap(기본 true)이면 그 지점이 주차면 사각형 **안**일 때만 면 중앙·면 축 정렬로 붙고, 밖이면 지점 그대로 놓인다
+	 * (응답 snapped 로 어느 쪽인지 알 수 있다). 이미 차가 서 있는 면도 막지 않는다(random.slotPlace 와 같은 규약).
+	 *
+	 * pos 는 car.create 와 달리 {x,y,z} 를 그대로 읽는다 — UE 미터에서 x·y 가 지면이고 z 가 높이인데
+	 * car.create 가 쓰는 RequirePosXZ 는 x,z 를 필수로 받고 지면 y 를 0 으로 채워, 스냅 판정이 엉뚱한 면을 집는다.
+	 */
+	Dispatcher.Register(TEXT("car.placeAtWorld"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
+		if (!RpcParam::Has(P, TEXT("pos")))
+		{
+			E.FailDomain(TEXT("필수 파라미터 누락: pos (UE 미터, x·y=지면, z=높이)"));
+			return nullptr;
+		}
+		const FVector PosM = RpcParam::GetVec3(P, TEXT("pos"));
+
+		// 차종은 prefabId 우선, 없으면 prefabName(카탈로그 재정렬에도 살아남는 안정 키).
+		int32 PrefabId = RpcParam::GetInt(P, TEXT("prefabId"), 0);
+		const FString PrefabName = RpcParam::GetString(P, TEXT("prefabName"));
+		if (PrefabId <= 0 && !PrefabName.IsEmpty())
+		{
+			PrefabId = PrefabIdFromCatalogName(Catalog, PrefabName);
+		}
+		if (PrefabId <= 0)
+		{
+			PrefabId = 1;
+		}
+
+		FCarPos C;
+		C.id = UCarPlacementLibrary::MakeCarId(Mgr->GetCarCount());
+		C.prefabId = PrefabId;
+		C.prefabName = UCarPlacementLibrary::PrefabNameFromId(Catalog, PrefabId);
+		C.type = RpcParam::GetInt(P, TEXT("type"), static_cast<int32>(ECarType::Small));
+		C.presetId = RpcParam::GetInt(P, TEXT("presetId"), 1);
+		C.slotId = -1; // 스냅되면 실제 면 번호로 덮인다.
+		C.rotY = RpcParam::GetFloat(P, TEXT("rotY"), 0.0);
+		C.isFront = RpcParam::GetBool(P, TEXT("isFront"), true);
+		C.color = RpcParam::GetInt(P, TEXT("color"), -1);
+		C.pos = { static_cast<float>(PosM.X), static_cast<float>(PosM.Y), static_cast<float>(PosM.Z) };
+
+		const bool bSnap = RpcParam::GetBool(P, TEXT("snap"), true);
+		const FVector World = UCarPlacementLibrary::UnrealMetersToWorld(C.pos, Mgr->MetersToUU);
+		const bool bSnapped = bSnap && Mgr->SnapCarPosToSlot(World, C);
+
+		ACarActor* Car = Mgr->SpawnCarFromPos(C, Catalog);
+		if (!Car) { E.FailDomain(TEXT("차량 생성 실패")); return nullptr; }
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetStringField(TEXT("carNameId"), Car->CarData.id);
+		O->SetBoolField(TEXT("snapped"), bSnapped);
+		O->SetNumberField(TEXT("presetId"), Car->CarData.presetId);
+		O->SetNumberField(TEXT("slotId"), Car->CarData.slotId);
+		O->SetNumberField(TEXT("rotY"), Car->CarData.rotY);
+		O->SetObjectField(TEXT("pos"), RpcDto::Vec3(Car->CarData.pos.x, Car->CarData.pos.y, Car->CarData.pos.z));
+		return RpcDto::MakeObject(O);
+	});
+
 	// ---- 삭제 ----
 	Dispatcher.Register(TEXT("car.delete"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{

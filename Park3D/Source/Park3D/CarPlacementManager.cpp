@@ -4,9 +4,15 @@
 #include "CarActor.h"
 #include "CarColorComponent.h"
 #include "CarPlacementLibrary.h"
+#include "CameraControlManager.h"
+#include "PTZCameraActor.h"
+#include "ParkingPresetManager.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Config/CarCatalogConfig.h"
 #include "Engine/DataTable.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
 #include "Math/RandomStream.h"
 
@@ -281,6 +287,169 @@ ACarActor* ACarPlacementManager::TraceCar(APlayerController* PC) const
 		return Cast<ACarActor>(Hit.GetActor());
 	}
 	return nullptr;
+}
+
+namespace
+{
+	/**
+	 * 레벨에 배치된 `BP_ParkingSlot` 액터의 주차면 하나를 찾는다 — 화면에 실제로 칠해져 있는 면이다.
+	 * 이 블루프린트는 면마다 ISM(`ISM_Slot`) 인스턴스를 하나씩 두고, 인스턴스 하나가 곧 주차면 사각형이다
+	 * (플레인 메시 + 스케일 = 면 폭·길이. LV_Park_01 실측: scale (2.64, 5.14) → 264cm × 514cm).
+	 * 프리셋 파일과 달리 레벨에 항상 있으므로, 프리셋을 로드하지 않은 주차장에서도 스냅이 걸린다.
+	 * 대상 선별은 클래스 이름(`BP_ParkingSlot*`) — 주차면 블루프린트는 C++ 타입이 없어 Cast 가 안 된다
+	 * (APark3DGameMode::HideParkingSlotIcons 와 같은 규약). 스토퍼·통로 ISM 은 이름으로 거른다.
+	 * @return 점을 품는 면이 있으면 true. 면 번호는 알 수 없다(레벨 인스턴스에는 슬롯 번호가 없다).
+	 */
+	bool FindLevelSlotAtWorld(UWorld* World, const FVector& WorldLoc, FVector& OutCenter, float& OutAxisYaw)
+	{
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			AActor* Actor = *It;
+			if (!Actor || !Actor->GetClass()->GetName().StartsWith(TEXT("BP_ParkingSlot")))
+			{
+				continue;
+			}
+
+			TArray<UInstancedStaticMeshComponent*> Comps;
+			Actor->GetComponents(Comps);
+			for (UInstancedStaticMeshComponent* Comp : Comps)
+			{
+				// ISM_Slot 만 주차면이다(ISM_Stopper=스토퍼, ISM_Space=통로 줄무늬).
+				if (!Comp || !Comp->GetStaticMesh() || !Comp->GetName().Contains(TEXT("Slot")))
+				{
+					continue;
+				}
+				const FBoxSphereBounds MeshBounds = Comp->GetStaticMesh()->GetBounds();
+
+				for (int32 i = 0; i < Comp->GetInstanceCount(); ++i)
+				{
+					FTransform T;
+					if (!Comp->GetInstanceTransform(i, T, /*bWorldSpace=*/true))
+					{
+						continue;
+					}
+					// 클릭 Z 는 무시하고 면의 평면 위에서 판정한다(면은 두께가 0 인 플레인이다).
+					const FVector OnPlane(WorldLoc.X, WorldLoc.Y, T.GetLocation().Z);
+					const FVector Local = T.InverseTransformPosition(OnPlane) - MeshBounds.Origin;
+					if (FMath::Abs(Local.X) > MeshBounds.BoxExtent.X || FMath::Abs(Local.Y) > MeshBounds.BoxExtent.Y)
+					{
+						continue;
+					}
+
+					OutCenter = T.GetLocation();
+					// 긴 변이 주차 깊이(차량 길이축)다. 플레인의 로컬 X=폭, Y=길이이므로 길면 +90°.
+					const FVector Scale = T.GetScale3D();
+					const float HalfX = MeshBounds.BoxExtent.X * FMath::Abs(Scale.X);
+					const float HalfY = MeshBounds.BoxExtent.Y * FMath::Abs(Scale.Y);
+					OutAxisYaw = static_cast<float>(T.Rotator().Yaw) + (HalfY >= HalfX ? 90.f : 0.f);
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+}
+
+bool ACarPlacementManager::SnapCarPosToSlot(const FVector& WorldLoc, FCarPos& InOutPos) const
+{
+	FVector Center = FVector::ZeroVector;
+	float Yaw = 0.f;
+	int32 PresetId = 0, SlotId = -1;
+	if (!FindParkingSlotAt(WorldLoc, Center, Yaw, PresetId, SlotId))
+	{
+		return false;
+	}
+
+	// 높이는 클릭 지점이 아니라 면 자신의 평면을 따른다 — 같은 면에 클릭으로 놓든 RPC 로 놓든
+	// 차가 같은 높이에 선다(프리셋 면은 random.slotPlace 와 같은 값).
+	InOutPos.pos = UCarPlacementLibrary::WorldToUnrealMeters(Center, MetersToUU);
+	InOutPos.rotY = Yaw;
+	if (PresetId > 0)
+	{
+		InOutPos.presetId = PresetId;
+		InOutPos.slotId = SlotId;
+	}
+	// 레벨 면에는 슬롯 번호가 없다 → presetId/slotId 는 그대로 둔다(slotId=-1 = 슬롯 외 규약 유지).
+	return true;
+}
+
+bool ACarPlacementManager::FindParkingSlotAt(const FVector& WorldLoc, FVector& OutCenterWorld, float& OutYaw,
+	int32& OutPresetId, int32& OutSlotId) const
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return false;
+	}
+
+	int32 SlotId = 0;
+	FVector Center = FVector::ZeroVector;
+	float AxisYaw = 0.f;
+	float U = MetersToUU;
+
+	// 1순위: 프리셋 면. 로드돼 있으면 presetId/slotId 까지 채울 수 있고 sim·scenario 와 같은 공간이다.
+	const FParkingPreset* Slot = nullptr;
+	for (TActorIterator<AParkingPresetManager> It(World); It; ++It)
+	{
+		if (It->MetersToUU > 0.f)
+		{
+			U = It->MetersToUU;
+		}
+		Slot = AParkingPresetManager::FindSlotAtWorld(It->ResolvePresets(), WorldLoc, U, SlotId, Center, AxisYaw);
+		break;
+	}
+
+	// 2순위: 레벨의 BP_ParkingSlot 면. config 의 preset_file 이 비어 있으면 프리셋은 한 개도 없으므로
+	// (실측: 서신·객리단 둘 다 "") 실제 화면에서 걸리는 것은 대개 이쪽이다.
+	if (!Slot && !FindLevelSlotAtWorld(World, WorldLoc, Center, AxisYaw))
+	{
+		return false;
+	}
+
+	// AxisYaw / AxisYaw+180 중 차량 전면이 감시카메라를 향하는 쪽(random.slotPlace 규약).
+	// 차량 전방은 Unity (sin,0,cos) → UE (cos, sin, 0).
+	// 프리셋 면은 그 프리셋의 카메라(CameraIdx), 레벨 면은 번호가 없으므로 가장 가까운 카메라를 본다.
+	float Yaw = AxisYaw;
+	for (TActorIterator<ACameraControlManager> It(World); It; ++It)
+	{
+		const APTZCameraActor* Cam = nullptr;
+		if (Slot)
+		{
+			Cam = It->GetCamera(Slot->CameraIdx - 1);
+		}
+		else
+		{
+			float BestSq = TNumericLimits<float>::Max();
+			for (int32 i = 0; i < It->GetCameraCount(); ++i)
+			{
+				const APTZCameraActor* C = It->GetCamera(i);
+				if (!C) continue;
+				const float Sq = static_cast<float>(FVector::DistSquared2D(C->GetActorLocation(), Center));
+				if (Sq < BestSq) { BestSq = Sq; Cam = C; }
+			}
+		}
+		if (Cam)
+		{
+			FVector ToCam = Cam->GetActorLocation() - Center;
+			ToCam.Z = 0.f;
+			if (ToCam.SizeSquared() > 1e-4f)
+			{
+				const float Rad = FMath::DegreesToRadians(AxisYaw);
+				const FVector Fwd(FMath::Cos(Rad), FMath::Sin(Rad), 0.f);
+				if (FVector::DotProduct(Fwd, ToCam) < 0.f)
+				{
+					Yaw = AxisYaw + 180.f;
+				}
+			}
+		}
+		break;
+	}
+
+	OutCenterWorld = Center;
+	OutYaw = UCarPlacementLibrary::AddYawDeg(Yaw, 0.f); // [0,360) 정규화
+	OutPresetId = Slot ? Slot->PresetIdx : 0;
+	OutSlotId = Slot ? SlotId : -1;
+	return true;
 }
 
 // ===== 랜덤 배치/표시 (Unity CCarObjListUI 랜덤 함수군 포팅) =====

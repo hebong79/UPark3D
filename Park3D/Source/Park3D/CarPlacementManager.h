@@ -223,6 +223,34 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Car")
 	ACarActor* TraceCar(APlayerController* PC) const;
 
+	/**
+	 * 월드 지점(cm)이 주차면 사각형 안이면 그 면 기준으로 InOutPos 의 pos·rotY(·presetId·slotId)를 채운다.
+	 * 차량 배치 패널의 Ctrl+좌클릭과 RPC car.placeAtWorld 가 공유하는 단일 스냅 창구다.
+	 *  - 면의 출처는 둘이다. 1순위는 프리셋 면(AParkingPresetManager::ComputeSlotCorners — 라인·데칼·시뮬과
+	 *    같은 사각형)이고, 프리셋이 하나도 없으면 2순위로 레벨의 `BP_ParkingSlot` 액터가 ISM 인스턴스로
+	 *    깔아 둔 면을 쓴다. config 의 preset_file 이 비어 있는 주차장에서는 2순위만 존재한다.
+	 *  - 레벨 면에는 슬롯 번호가 없으므로 그 경우 presetId/slotId 는 건드리지 않는다.
+	 *  - 정렬은 면 길이축이고, 차량 전면이 그 프리셋의 감시카메라(CameraIdx)를 향하는 쪽을 고른다
+	 *    (random.slotPlace 와 같은 규약). 카메라가 없으면 길이축 방향을 그대로 쓴다.
+	 *  - isFront 는 건드리지 않는다(후면주차 지정은 호출부 몫 — ACarActor 가 +180 을 붙인다).
+	 *  - 이미 차가 서 있는 면도 막지 않는다(random.slotPlace 와 같이 겹쳐 놓인다).
+	 * 면 밖이면 아무것도 바꾸지 않는다 → 호출부는 클릭 지점을 그대로 쓴다.
+	 * @return 스냅했으면 true.
+	 */
+	bool SnapCarPosToSlot(const FVector& WorldLoc, FCarPos& InOutPos) const;
+
+	/**
+	 * 위 스냅의 조회 부분(월드 지점 → 주차면 중심·차량 yaw). 값을 쓰지 않으므로 검증·도구에서 그대로 부를 수 있다.
+	 * @param OutCenterWorld 면 중심(월드 cm).
+	 * @param OutYaw         차량 rotY(deg) — 면 길이축 + 전면이 감시카메라를 향하는 쪽. [0,360)로 정규화한다.
+	 * @param OutPresetId    프리셋 면이면 그 PresetIdx, 레벨(BP_ParkingSlot) 면이면 0.
+	 * @param OutSlotId      프리셋 면이면 1-based 면 번호, 레벨 면이면 -1(슬롯 외 규약).
+	 * @return 점을 품는 면이 있으면 true.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Car")
+	bool FindParkingSlotAt(const FVector& WorldLoc, FVector& OutCenterWorld, float& OutYaw,
+		int32& OutPresetId, int32& OutSlotId) const;
+
 	/** prefabId 로 카탈로그 항목 검색(Idx 일치, 없으면 첫 항목). */
 	static const FCarPresetEntry* FindEntryByPrefabId(const TArray<FCarPresetEntry>& Catalog, int32 PrefabId);
 

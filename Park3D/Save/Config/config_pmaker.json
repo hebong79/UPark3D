@@ -2,7 +2,7 @@
 	"level": "Levels/LV_Park_01",
 	"levels": [
 		{ "name": "서신지구대", "level": "Levels/LV_Park_01", "preset_file": "", "carpos_file": "CarPos_Seoshin_2Cam.json", "camerapos_file": "CamPos_Seosin.json" },
-		{ "name": "객리단길", "level": "Levels/LV_Park_03", "preset_file": "", "carpos_file": "CarPos_13Num.객리단.json", "camerapos_file": "CamPos_13Face.객리단.json" }
+		{ "name": "객리단길", "level": "Levels/LV_Park_03", "preset_file": "", "carpos_file": "CarPos_14Num.객리단.json", "camerapos_file": "CamPos_13Face.객리단.json" }
 	],
 	"rpc_port": 13510,
 	"main_port": 13600,

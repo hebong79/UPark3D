@@ -110,6 +110,12 @@ public:
 	/** 기존 WBP_CameraControl의 스크롤 콘텐츠. CPCamDistDlg 이식 패널을 C++로 끝에 추가한다. */
 	UPROPERTY(meta = (BindWidgetOptional)) UVerticalBox* VBox_Root = nullptr;
 
+	// ---- 시작 슬롯(프리셋 줄 아래 C++ 삽입 행). WBP 를 고치지 않는다 ----
+	// 쿠킹된 WBP 의 베이스에 UPROPERTY 를 더하면 패키지가 Bad export index 로 죽으므로(2026-08-12)
+	// 포인터는 비-UPROPERTY 로 둔다. 위젯 트리가 자식으로 붙들고 있어 GC 에 안전하다(PresetMaker 콤보와 같은 방식).
+	UEditableTextBox* Field_StartSlot = nullptr;
+	UTextBlock* Txt_StartSlotHint = nullptr;
+
 	// ---- 설정 ----
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
 	float MetersToUU = 100.f;
@@ -312,6 +318,25 @@ private:
 	UWidget* FindRootRow(UWidget* InChild) const;
 	/** 카메라/프리셋/컨트롤/PTZ 묶음 사이에 구분선을 넣는다. */
 	void InsertGroupDividers();
+
+	/**
+	 * 프리셋 줄 아래에 "시작 슬롯" 줄을 한 번 끼운다(라벨 + 입력칸 + 안내 문구).
+	 * WBP 를 고치지 않고 C++ 로 만든다 — Content/ 는 git 밖이라 WBP 변경은 커밋에 남지 않는다.
+	 */
+	void BuildStartSlotRow();
+
+	/** 현재 프리셋의 start_slot 을 입력칸에 표시한다(0 이면 빈칸). */
+	void FillStartSlotField(int32 StartSlot);
+
+	/** 입력칸의 숫자(빈칸/0 = 미지정). */
+	int32 ReadStartSlotField() const;
+
+	/**
+	 * LShift + 좌클릭으로 바닥 주차면을 찍어 그 번호를 입력칸에 넣는다(매 틱 호출).
+	 * 모드 버튼이 없다 — 수정키를 누르고 있는 것 자체가 지정 의사다(사용자 결정, 2026-09-07).
+	 * 값은 칸에만 들어가고 프리셋 반영은 기존 필드들과 같이 "수정" 버튼이 한다.
+	 */
+	void TickStartSlotPick(APlayerController* PC, bool bOverPanel);
 	/** 누르는 동안 이동을 시작한다(이미 다른 방향이면 교체). */
 	void BeginPtzMove(EPtzMove Move);
 	/**
@@ -442,6 +467,9 @@ private:
 	static constexpr float SideColumnMinWidth = 120.f;
 	bool bActionButtonsRelocated = false;
 	bool bGroupDividersInserted = false;
+
+	/** 시작 슬롯 지정의 좌클릭 에지(Slate 경유 입력까지 본다 — 카메라 피킹과 같은 헬퍼). */
+	Park3DPickInput::FLeftClickEdge StartSlotClickEdge;
 	TWeakObjectPtr<UButton> PtzButtons[PtzMoveCount]; // 인덱스 = (int32)EPtzMove - 1
 	EPtzMove ActivePtzMove = EPtzMove::None;
 	// 패드 상단 P/T/Z 현재값 표시.

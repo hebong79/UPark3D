@@ -8,6 +8,7 @@
 #include "CameraDistanceWidget.h"
 #include "Park3DDataPaths.h"
 #include "Park3DGameMode.h"
+#include "ParkingPresetManager.h" // 시작 슬롯 지정: 클릭 지점 → 바닥 번호 조회
 #include "Rpc/CamStreamSubsystem.h"
 #include "Components/Button.h"
 #include "Components/ComboBoxString.h"
@@ -252,6 +253,7 @@ void UCameraControlWidget::NativeConstruct()
 	CollapsePtzSliderGroups(); // 패드가 들어갈 자리를 먼저 비운다(인덱스도 여기서 정해진다).
 	BuildPtzPad();
 	RelocateActionButtons(); // 패드가 있어야 옆 칸이 존재한다.
+	BuildStartSlotRow();     // 프리셋 줄 아래 한 줄 — 구분선보다 먼저 넣어야 묶음 경계가 이 줄을 넘지 않는다.
 	InsertGroupDividers();   // 줄이 다 자리 잡은 뒤에 넣어야 인덱스가 맞는다.
 	ApplySliderThumbStyle();
 	// 창은 여기서 뷰포트에 넣어 두되 접어 둔다(늦게 넣으면 크기가 잡히지 않는다 — EnsureDistanceDialog 주석).
@@ -316,6 +318,10 @@ void UCameraControlWidget::NativeTick(const FGeometry& MyGeometry, float InDelta
 	const bool bCtrl = Park3DPickInput::IsCtrlDown(PC);
 	const bool bOverPanel = (RootBorder && RootBorder->IsHovered());
 	const bool bClickJustPressed = PickClickEdge.Poll(PC);
+
+	// LShift + 좌클릭 → 바닥 주차면 번호를 시작 슬롯 칸에 넣는다(모드 없음, 수정키가 곧 의사표시).
+	// Ctrl 피킹과 수정키가 갈려 서로 간섭하지 않으므로 매니저 피킹 잠금에는 끼어들지 않는다.
+	TickStartSlotPick(PC, bOverPanel);
 
 	if (bPicking && bCtrl && !bOverPanel && bClickJustPressed)
 	{
@@ -714,6 +720,7 @@ void UCameraControlWidget::HandlePresetAdd()
 	Dir.sname = FString::Printf(TEXT("Preset %d"), Count);
 	Dir.cam_id = CurCamIndex + 1;
 	Dir.preset_id = Count;
+	Dir.start_slot = ReadStartSlotField(); // 칸에 찍어 둔 값 그대로 새 프리셋에 담는다.
 	CollectDirFromControls(Dir);
 
 	CP.datas.Add(Dir);
@@ -741,6 +748,11 @@ void UCameraControlWidget::HandlePresetModify()
 	if (Field_PresetId)
 	{
 		Dir.preset_id = FCString::Atoi(*Field_PresetId->GetText().ToString());
+	}
+	// 시작 슬롯도 여기서 프리셋에 들어간다 — 칸에 찍힌 값은 '수정' 전까지 반영되지 않는다(되돌릴 여지).
+	if (Field_StartSlot)
+	{
+		Dir.start_slot = ReadStartSlotField();
 	}
 	CollectDirFromControls(Dir); // 식별 필드(idx/sname/cam_id/preset_id)는 보존, geometry/ptz만 갱신.
 
@@ -859,6 +871,8 @@ void UCameraControlWidget::FillControlsFromDir(const FCamDir& InDir)
 	{
 		Field_PresetId->SetText(FText::AsNumber(Dir.preset_id));
 	}
+	// 시작 슬롯은 프리셋마다 다른 값이다 — 프리셋을 바꿀 때마다 그 프리셋 값으로 갈아 끼운다.
+	FillStartSlotField(Dir.start_slot);
 
 	ApplyAllControlsToCamera();
 }
@@ -1545,6 +1559,147 @@ void UCameraControlWidget::RelocateActionButtons()
 			VBSlot->SetHorizontalAlignment(HAlign_Fill);
 		}
 	}
+}
+
+void UCameraControlWidget::BuildStartSlotRow()
+{
+	// 패널을 닫았다 다시 열면 NativeConstruct 가 다시 도는데, 위젯 트리는 살아 있으므로 한 번만 만든다.
+	if (Field_StartSlot || !WidgetTree)
+	{
+		return;
+	}
+	UPanelWidget* Column = VBox_Root ? Cast<UPanelWidget>(VBox_Root) : Park3DPanelStyle::FindContentColumn(WidgetTree);
+	UWidget* PresetRow = Park3DPanelStyle::FindRowIn(Column, Combo_Preset);
+	if (!Column || !PresetRow)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CameraControl] 시작 슬롯 줄을 넣을 프리셋 줄을 찾지 못했습니다."));
+		return;
+	}
+
+	UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+	Label->SetText(FText::FromString(TEXT("시작 슬롯")));
+	Label->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+	{
+		FSlateFontInfo F = Label->GetFont();
+		F.Size = 11;
+		Label->SetFont(F);
+	}
+
+	Field_StartSlot = WidgetTree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass(), TEXT("Field_StartSlot"));
+	Field_StartSlot->SetForegroundColor(FLinearColor::Black); // 다른 입력 필드와 같은 규약(NativeConstruct 1-b).
+	{
+		// 폰트를 줄이지 않으면 기본 크기(24)에 스타일 패딩이 얹혀 아래 획이 잘린다(PTZ step 칸과 같은 이유).
+		FEditableTextBoxStyle St = Field_StartSlot->GetWidgetStyle();
+		St.TextStyle.Font.Size = 11;
+		Field_StartSlot->SetWidgetStyle(St);
+	}
+
+	Txt_StartSlotHint = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+	Txt_StartSlotHint->SetText(FText::FromString(TEXT("LShift+클릭으로 지정")));
+	Txt_StartSlotHint->SetColorAndOpacity(FSlateColor(FLinearColor(0.72f, 0.72f, 0.74f, 1.f)));
+	{
+		FSlateFontInfo F = Txt_StartSlotHint->GetFont();
+		F.Size = 10;
+		Txt_StartSlotHint->SetFont(F);
+	}
+
+	UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+	if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(Label))
+	{
+		S->SetVerticalAlignment(VAlign_Center);
+		S->SetPadding(FMargin(2.f, 0.f, 8.f, 0.f));
+	}
+	USizeBox* FieldSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+	FieldSize->SetWidthOverride(64.f);
+	FieldSize->SetHeightOverride(24.f);
+	FieldSize->AddChild(Field_StartSlot);
+	if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(FieldSize))
+	{
+		S->SetVerticalAlignment(VAlign_Center);
+	}
+	if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(Txt_StartSlotHint))
+	{
+		S->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		S->SetVerticalAlignment(VAlign_Center);
+		S->SetHorizontalAlignment(HAlign_Right);
+		S->SetPadding(FMargin(8.f, 0.f, 2.f, 0.f));
+	}
+
+	const int32 InsertAt = Column->GetChildIndex(PresetRow) + 1;
+	if (UVerticalBoxSlot* VBSlot = Cast<UVerticalBoxSlot>(Column->InsertChildAt(InsertAt, Row)))
+	{
+		VBSlot->SetPadding(FMargin(0.f, 4.f, 0.f, 0.f));
+	}
+
+	// 지금 선택된 프리셋 값으로 채운다(패널을 열 때마다 최신 상태가 보이도록).
+	const FCameraPos& CP = CurCameraPos();
+	FillStartSlotField(CP.datas.IsValidIndex(CurPresetIndex) ? CP.datas[CurPresetIndex].start_slot : 0);
+}
+
+void UCameraControlWidget::FillStartSlotField(int32 StartSlot)
+{
+	if (!Field_StartSlot)
+	{
+		return;
+	}
+	// 0 은 "미지정"이다 — 0 을 그대로 보여 주면 0번 면이 있는 것처럼 읽힌다.
+	Field_StartSlot->SetText(StartSlot > 0 ? FText::AsNumber(StartSlot) : FText::GetEmpty());
+}
+
+int32 UCameraControlWidget::ReadStartSlotField() const
+{
+	if (!Field_StartSlot)
+	{
+		return 0;
+	}
+	const FString S = Field_StartSlot->GetText().ToString().TrimStartAndEnd();
+	return S.IsEmpty() ? 0 : FMath::Max(0, FCString::Atoi(*S));
+}
+
+void UCameraControlWidget::TickStartSlotPick(APlayerController* PC, bool bOverPanel)
+{
+	// 클릭 에지는 조건과 무관하게 매 틱 소비해야 한다 — 안 그러면 패널 위에서 누른 클릭이
+	// 밖으로 나온 뒤 "방금 눌림"으로 되살아난다(카메라 피킹과 같은 규약).
+	const bool bClickJustPressed = StartSlotClickEdge.Poll(PC);
+	if (!bClickJustPressed)
+	{
+		return;
+	}
+	// Shift 는 PlayerController 와 Slate 양쪽을 본다 — 패널이 떠 있으면 입력이 Slate 로 가서
+	// PlayerController 만으로는 못 본다(Park3DPickInput 의 Ctrl 과 같은 사정).
+	const bool bPcShift = PC && (PC->IsInputKeyDown(EKeys::LeftShift) || PC->IsInputKeyDown(EKeys::RightShift));
+	const bool bSlateShift = FSlateApplication::IsInitialized() && FSlateApplication::Get().GetModifierKeys().IsShiftDown();
+	if (!bPcShift && !bSlateShift)
+	{
+		return; // 평범한 클릭 — 조용히 지나간다(로그를 남기면 클릭마다 한 줄씩 쌓인다).
+	}
+	// Shift+클릭은 드문 입력이라 한 줄 남긴다 — 안 먹을 때 어느 관문에서 막혔는지 화면만 보고는 가릴 수 없다.
+	UE_LOG(LogTemp, Log, TEXT("[CameraControl] 시작 슬롯 지정 시도: shift(pc=%d slate=%d) overPanel=%d"),
+		bPcShift ? 1 : 0, bSlateShift ? 1 : 0, bOverPanel ? 1 : 0);
+	if (!Field_StartSlot || bOverPanel)
+	{
+		return;
+	}
+
+	ACameraControlManager* Mgr = GetCameraManager();
+	FVector HitWorld;
+	if (!Mgr || !Mgr->TraceFloor(PC, HitWorld))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CameraControl] 시작 슬롯 지정: 바닥 트레이스 실패(mgr=%d)"), Mgr ? 1 : 0);
+		return;
+	}
+
+	AParkingPresetManager* PresetMgr = AParkingPresetManager::GetOrSpawn(GetWorld());
+	FParkingSlotNumberInfo Info;
+	if (!PresetMgr || !PresetMgr->FindSlotNumberAtWorld(HitWorld, Info))
+	{
+		Notify(TEXT("그 자리에 주차면이 없습니다 — 면 안을 클릭하세요"));
+		return;
+	}
+
+	FillStartSlotField(Info.Number);
+	Notify(FString::Printf(TEXT("시작 슬롯 %d 지정 (%s) — 프리셋에 넣으려면 '수정'"),
+		Info.Number, Info.bFromPreset ? TEXT("프리셋 면") : TEXT("레벨 면")));
 }
 
 void UCameraControlWidget::InsertGroupDividers()

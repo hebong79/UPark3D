@@ -28,6 +28,8 @@ struct FParkingSlotNumberInfo
 	FVector AxisDir = FVector::ForwardVector;
 	/** 짧은 변(cm) — 글자 크기 상한 계산과 동일한 값. */
 	float WidthCm = 0.f;
+	/** 긴 변(cm, AxisDir 방향). 점→면 판정(FindSlotNumberAtWorld)에 필요하다. */
+	float LengthCm = 0.f;
 
 	/** 출처: true=프리셋 면, false=레벨 BP_ParkingSlot 의 ISM 면. */
 	bool bFromPreset = false;
@@ -165,6 +167,15 @@ public:
 	 * **레벨 면을 나열하는 유일한 경로다**(RPC 에 레벨 슬롯 목록이 없어 이전 세션은 커맨드릿을 썼다).
 	 */
 	void CollectSlotNumbers(const TArray<FParkingPreset>& Presets, TArray<FParkingSlotNumberInfo>& Out) const;
+
+	/**
+	 * 월드 점(cm)을 품는 주차면의 **바닥에 그려진 번호**를 찾는다(카메라 패널 LShift+좌클릭 지정용).
+	 * 바로 그 번호 목록 위에서 판정하므로 화면에 보이는 숫자와 어긋날 수 없다.
+	 * 겹치면 먼저 만난 면(프리셋 면 → 레벨 면 순)을 준다.
+	 * @param OutInfo 찾은 면의 정보(번호·중심·출처). 실패 시 손대지 않는다.
+	 * @return 품는 면이 있으면 true.
+	 */
+	bool FindSlotNumberAtWorld(const FVector& WorldLoc, FParkingSlotNumberInfo& OutInfo);
 
 	/** 번호만 숨긴다(풀 유지). */
 	UFUNCTION(BlueprintCallable, Category = "Parking|Number")

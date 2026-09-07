@@ -434,7 +434,12 @@ bool FParkingSlotNumberTest::RunTest(const FString& Parameters)
 	P.FaceCount = 6;
 	P.BoxSizeX = 2.5f;
 	P.BoxSizeZ = 5.0f;
+	// 에디터 월드(LV_Park_01)의 실제 주차면과 겹치지 않는 먼 자리에 둔다 — 겹치면 점→번호 판정(TN-7)이
+	// 합성 면 대신 레벨 면을 집어 "밖" 판정이 참이 되지 않는다.
+	P.Offset = FVector(500.f, 500.f, 0.f);
 	TArray<FParkingPreset> Presets = { P };
+	// 조회 API 는 매니저의 목록(ResolvePresets)을 본다 — 실제 경로와 같게 하려면 여기에 담아야 한다.
+	Mgr->StoredPresets = Presets;
 
 	// TN-1: 기본 켜짐 → 프리셋 6면 번호 1~6 이 모두 보인다.
 	TestTrue(TEXT("TN-1 bShowSlotNumbers 기본값 true"), Mgr->bShowSlotNumbers);
@@ -489,6 +494,29 @@ bool FParkingSlotNumberTest::RunTest(const FString& Parameters)
 			TestTrue(TEXT("TN-5 프리셋 면은 레벨 키가 비어 있다"), S.LevelActor.IsEmpty() && S.LevelInstance == -1);
 		}
 		TestEqual(TEXT("TN-5 프리셋 면 6개"), PresetSlots, 6);
+	}
+
+	// TN-7: 점 → 번호 판정(카메라 패널 LShift+좌클릭 백엔드). 면 안은 그 면 번호, 밖은 실패.
+	{
+		TArray<FParkingSlotNumberInfo> Slots;
+		Mgr->CollectSlotNumbers(Presets, Slots);
+		const FParkingSlotNumberInfo* Target = Slots.FindByPredicate([](const FParkingSlotNumberInfo& S) { return S.bFromPreset && S.Number == 3; });
+		if (TestNotNull(TEXT("TN-7 3번 프리셋 면 존재"), Target))
+		{
+			FParkingSlotNumberInfo Hit;
+			TestTrue(TEXT("TN-7 면 중심 → 적중"), Mgr->FindSlotNumberAtWorld(Target->Center, Hit));
+			TestEqual(TEXT("TN-7 중심에서 3번"), Hit.Number, 3);
+
+			// 폭 방향으로 반쪽의 90% → 여전히 안, 150% → 밖(이웃 면이 없는 쪽으로 민다).
+			const FVector Perp(-Target->AxisDir.Y, Target->AxisDir.X, 0.f);
+			const FVector Inside = Target->Center + Perp * (Target->WidthCm * 0.45f);
+			const FVector Outside = Target->Center + Target->AxisDir * (Target->LengthCm * 0.75f);
+			FParkingSlotNumberInfo Hit2;
+			TestTrue(TEXT("TN-7 면 안(폭 90%)"), Mgr->FindSlotNumberAtWorld(Inside, Hit2));
+			TestEqual(TEXT("TN-7 면 안도 같은 번호"), Hit2.Number, 3);
+			FParkingSlotNumberInfo Hit3;
+			TestFalse(TEXT("TN-7 길이축 밖은 미적중"), Mgr->FindSlotNumberAtWorld(Outside, Hit3));
+		}
 	}
 
 	// TN-6: 표시를 꺼도 목록은 그대로 나온다(번호 체계는 표시 여부와 무관).

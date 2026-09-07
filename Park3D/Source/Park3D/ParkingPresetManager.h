@@ -14,6 +14,32 @@ class UDecalComponent;
 class UMaterialInterface;
 class UTextRenderComponent;
 
+/**
+ * 바닥에 번호를 붙인 주차면 하나. 렌더(RebuildSlotNumbers)와 조회(RPC preset.numbers)가 같은 목록을 쓴다.
+ * USTRUCT 이 아닌 이유 — 블루프린트에 노출할 필요가 없고, 좌표는 월드 cm(내부 규약) 그대로 둔다.
+ */
+struct FParkingSlotNumberInfo
+{
+	/** 바닥에 찍히는 번호(1부터). */
+	int32 Number = 0;
+	/** 면 중심(월드 cm). */
+	FVector Center = FVector::ZeroVector;
+	/** 면 길이축(수평 단위 벡터). */
+	FVector AxisDir = FVector::ForwardVector;
+	/** 짧은 변(cm) — 글자 크기 상한 계산과 동일한 값. */
+	float WidthCm = 0.f;
+
+	/** 출처: true=프리셋 면, false=레벨 BP_ParkingSlot 의 ISM 면. */
+	bool bFromPreset = false;
+	/** 프리셋 면일 때 그 PresetIdx(레벨 면은 0). */
+	int32 PresetIdx = 0;
+	/** 프리셋 면일 때 1-based 면 번호(FCarPos.slotId 와 같은 공간). 레벨 면은 -1 — 레벨 면에는 슬롯 번호가 없다. */
+	int32 SlotId = -1;
+	/** 레벨 면일 때 소유 액터 이름과 ISM 인스턴스 번호(프리셋 면은 빈 문자열/-1). */
+	FString LevelActor;
+	int32 LevelInstance = -1;
+};
+
 UCLASS()
 class PARK3D_API AParkingPresetManager : public AActor
 {
@@ -132,6 +158,13 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Parking|Number")
 	void RebuildSlotNumbers(const TArray<FParkingPreset>& Presets);
+
+	/**
+	 * 번호가 붙는 면 목록을 그리기 전에 계산해 돌려준다(그리기와 같은 순서·같은 번호).
+	 * `bShowSlotNumbers` 와 무관하게 계산한다 — 숨겨 둔 상태에서도 번호를 조회할 수 있어야 한다.
+	 * **레벨 면을 나열하는 유일한 경로다**(RPC 에 레벨 슬롯 목록이 없어 이전 세션은 커맨드릿을 썼다).
+	 */
+	void CollectSlotNumbers(const TArray<FParkingPreset>& Presets, TArray<FParkingSlotNumberInfo>& Out) const;
 
 	/** 번호만 숨긴다(풀 유지). */
 	UFUNCTION(BlueprintCallable, Category = "Parking|Number")

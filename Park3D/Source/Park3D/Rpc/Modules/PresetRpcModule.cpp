@@ -67,6 +67,14 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 		if (RpcParam::Has(P, TEXT("show3D")))         { Mgr->bShow3DView = RpcParam::GetBool(P, TEXT("show3D"), Mgr->bShow3DView); }
 		if (RpcParam::Has(P, TEXT("lineThickness")))  { Mgr->LineThickness = RpcParam::GetFloat(P, TEXT("lineThickness"), Mgr->LineThickness); }
 		if (RpcParam::Has(P, TEXT("decalThickness"))) { Mgr->DecalLineThicknessCm = RpcParam::GetFloat(P, TEXT("decalThickness"), Mgr->DecalLineThicknessCm); }
+		// 바닥 주차면 번호 — 패널의 "주차면 번호" 콤보(출력/숨김)와 같은 스위치(매니저 플래그가 주인).
+		// numberSize 는 **상한**이다: 실제 글자 높이 = min(numberSize, 면 폭 × 45%) 라 좁은 면에서는
+		// 올려도 안 커진다(라인을 넘지 않게 하는 규칙). numberZ 는 면 판 위로 띄우는 상대 높이(cm).
+		// 패널에는 없는 값이지만 주차장마다 면 크기·판 높이가 달라 원격 조정 수단이 필요하다.
+		// 주의: 이 호출로 바꾼 상태는 열려 있는 패널의 콤보 표시에 즉시 반영되지 않는다(패널은 열릴 때 동기화).
+		if (RpcParam::Has(P, TEXT("showNumbers")))    { Mgr->bShowSlotNumbers = RpcParam::GetBool(P, TEXT("showNumbers"), Mgr->bShowSlotNumbers); }
+		if (RpcParam::Has(P, TEXT("numberSize")))     { Mgr->SlotNumberSizeCm = RpcParam::GetFloat(P, TEXT("numberSize"), Mgr->SlotNumberSizeCm); }
+		if (RpcParam::Has(P, TEXT("numberZ")))        { Mgr->SlotNumberZ = RpcParam::GetFloat(P, TEXT("numberZ"), Mgr->SlotNumberZ); }
 		Mgr->RefreshView();
 
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
@@ -75,7 +83,59 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetBoolField(TEXT("show3D"), Mgr->bShow3DView);
 		O->SetNumberField(TEXT("lineThickness"), Mgr->LineThickness);
 		O->SetNumberField(TEXT("decalThickness"), Mgr->DecalLineThicknessCm);
+		O->SetBoolField(TEXT("showNumbers"), Mgr->bShowSlotNumbers);
+		O->SetNumberField(TEXT("numberSize"), Mgr->SlotNumberSizeCm);
+		O->SetNumberField(TEXT("numberZ"), Mgr->SlotNumberZ);
 		return RpcDto::MakeObject(O);
+	});
+
+	/**
+	 * 바닥에 붙는 주차면 번호 목록. 표시가 꺼져 있어도 계산해서 돌려준다(번호 체계는 표시와 무관하다).
+	 * **레벨 면(BP_ParkingSlot 의 ISM)을 나열하는 유일한 RPC 다** — 지금까지는 이 목록이 없어
+	 * 커맨드릿(inventory_level.py)으로 뽑아야 했다(2026-09-05 항목).
+	 * pos 는 다른 조회들과 같은 **미터**, rotY 는 면 길이축 방향(도).
+	 */
+	Dispatcher.Register(TEXT("preset.numbers"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		AParkingPresetManager* Mgr = GetPresetManager(E); if (!Mgr) return nullptr;
+
+		TArray<FParkingSlotNumberInfo> Slots;
+		Mgr->CollectSlotNumbers(Mgr->ResolvePresets(), Slots);
+
+		const float U = Mgr->MetersToUU > 0.f ? Mgr->MetersToUU : 100.f;
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		int32 PresetCount = 0;
+		for (const FParkingSlotNumberInfo& S : Slots)
+		{
+			TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+			O->SetNumberField(TEXT("number"), S.Number);
+			O->SetStringField(TEXT("source"), S.bFromPreset ? TEXT("preset") : TEXT("level"));
+			O->SetObjectField(TEXT("pos"), RpcDto::Vec3(S.Center.X / U, S.Center.Y / U, S.Center.Z / U));
+			O->SetNumberField(TEXT("rotY"), FMath::RadiansToDegrees(FMath::Atan2(S.AxisDir.Y, S.AxisDir.X)));
+			O->SetNumberField(TEXT("widthCm"), S.WidthCm);
+			if (S.bFromPreset)
+			{
+				O->SetNumberField(TEXT("presetId"), S.PresetIdx);
+				O->SetNumberField(TEXT("faceSlot"), S.SlotId); // car.list 의 faceSlot 과 같은 공간
+				++PresetCount;
+			}
+			else
+			{
+				// 레벨 면에는 슬롯 번호가 없다 — 액터·인스턴스가 그 면을 다시 찾는 유일한 키다.
+				O->SetStringField(TEXT("levelActor"), S.LevelActor);
+				O->SetNumberField(TEXT("levelInstance"), S.LevelInstance);
+			}
+			Arr.Add(MakeShared<FJsonValueObject>(O));
+		}
+
+		TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+		Root->SetBoolField(TEXT("ok"), true);
+		Root->SetBoolField(TEXT("visible"), Mgr->bShowSlotNumbers);
+		Root->SetNumberField(TEXT("count"), Slots.Num());
+		Root->SetNumberField(TEXT("presetCount"), PresetCount);
+		Root->SetNumberField(TEXT("levelCount"), Slots.Num() - PresetCount);
+		Root->SetArrayField(TEXT("numbers"), Arr);
+		return RpcDto::MakeObject(Root);
 	});
 
 	Dispatcher.Register(TEXT("preset.get"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>

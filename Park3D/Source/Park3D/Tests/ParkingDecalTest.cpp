@@ -473,6 +473,34 @@ bool FParkingSlotNumberTest::RunTest(const FString& Parameters)
 	Mgr->RebuildSlotNumbers(Presets);
 	TestEqual(TEXT("TN-4 on → 개수 복원"), VisibleNumbers().Num(), Shown.Num());
 
+	// TN-5: 조회 API(RPC preset.numbers 백엔드) — 그린 것과 같은 목록·같은 번호를 돌려준다.
+	{
+		TArray<FParkingSlotNumberInfo> Slots;
+		Mgr->CollectSlotNumbers(Presets, Slots);
+		TestEqual(TEXT("TN-5 목록 수 = 표시 수"), Slots.Num(), Shown.Num());
+
+		int32 PresetSlots = 0;
+		for (const FParkingSlotNumberInfo& S : Slots)
+		{
+			if (!S.bFromPreset) continue;
+			++PresetSlots;
+			TestEqual(TEXT("TN-5 프리셋 면 presetIdx"), S.PresetIdx, 3);
+			TestEqual(TEXT("TN-5 프리셋 면 번호 = slotId"), S.Number, S.SlotId); // 프리셋 1개라 시작 번호가 1
+			TestTrue(TEXT("TN-5 프리셋 면은 레벨 키가 비어 있다"), S.LevelActor.IsEmpty() && S.LevelInstance == -1);
+		}
+		TestEqual(TEXT("TN-5 프리셋 면 6개"), PresetSlots, 6);
+	}
+
+	// TN-6: 표시를 꺼도 목록은 그대로 나온다(번호 체계는 표시 여부와 무관).
+	{
+		Mgr->bShowSlotNumbers = false;
+		Mgr->RebuildSlotNumbers(Presets);
+		TArray<FParkingSlotNumberInfo> Slots;
+		Mgr->CollectSlotNumbers(Presets, Slots);
+		TestEqual(TEXT("TN-6 숨김 상태에서도 목록 유지"), Slots.Num(), Shown.Num());
+		Mgr->bShowSlotNumbers = true;
+	}
+
 	Mgr->Destroy();
 	return true;
 }

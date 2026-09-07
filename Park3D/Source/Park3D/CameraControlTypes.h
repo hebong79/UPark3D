@@ -63,12 +63,18 @@ struct FCamDir
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") FCamPtz  ptzmax;           // 슬라이더 max(pan/tilt/zoom)
 
 	/**
-	 * 이 프리셋이 담당하는 첫 주차면 번호(바닥에 그려지는 번호와 같은 공간). 0=미지정.
-	 * **기록 전용이다** — 이 값을 바꿔도 바닥 번호는 다시 매겨지지 않는다(사용자 결정, 2026-09-07).
+	 * 시작 슬롯 — 이 프리셋의 기준 면(start_face)이 바닥에서 받을 번호. 0=미지정.
+	 * start_face 가 함께 있으면 바닥 번호가 **다시 매겨진다**: 그 면이 start_slot 번이 되고 목록에서 뒤에 오는
+	 * 면은 +1 씩 이어진다(AParkingPresetManager::SetNumberAnchors). start_face 가 비어 있으면 기록만 남는다.
 	 * Unity SCamDir 에는 없는 키다. Unity 쪽 파서는 모르는 키를 무시하므로 파일 호환은 유지되고,
 	 * 이 값이 없는 옛 파일은 0(미지정)으로 읽힌다.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") int32    start_slot = 0;
+	/**
+	 * 기준 면의 키(FParkingSlotNumberInfo::FaceKey — "level:<액터>#<인스턴스>" / "preset:<idx>#<slot>"). 빈 문자열=없음.
+	 * 순번이 아니라 키로 두는 이유: 순번은 프리셋을 만들거나 지우면 밀려 엉뚱한 면을 가리킨다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") FString  start_face;
 };
 
 /** === Unity SCameraPos (카메라 1대의 프리셋 리스트) === 내부 datas 키 소문자. */

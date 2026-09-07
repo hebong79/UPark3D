@@ -20,8 +20,10 @@ class UTextRenderComponent;
  */
 struct FParkingSlotNumberInfo
 {
-	/** 바닥에 찍히는 번호(1부터). */
+	/** 바닥에 찍히는 번호(1부터). 기준점(FSlotNumberAnchor)이 걸려 있으면 그 번호부터 이어 매긴 값이다. */
 	int32 Number = 0;
+	/** 기준점을 걸기 전의 순번(프리셋 면·레벨 면 각각 1부터). 사람이 면을 가리킬 때 쓰는 이름이다. */
+	int32 BaseNumber = 0;
 	/** 면 중심(월드 cm). */
 	FVector Center = FVector::ZeroVector;
 	/** 면 길이축(수평 단위 벡터). */
@@ -40,6 +42,27 @@ struct FParkingSlotNumberInfo
 	/** 레벨 면일 때 소유 액터 이름과 ISM 인스턴스 번호(프리셋 면은 빈 문자열/-1). */
 	FString LevelActor;
 	int32 LevelInstance = -1;
+
+	/**
+	 * 면을 다시 찾는 문자열 키 — "preset:<PresetIdx>#<SlotId>" / "level:<액터이름>#<인스턴스>".
+	 * 순번(BaseNumber)이 아니라 이 키로 기준점을 저장한다: 순번은 프리셋을 만들거나 지우면 밀린다.
+	 */
+	FString FaceKey() const
+	{
+		return bFromPreset
+			? FString::Printf(TEXT("preset:%d#%d"), PresetIdx, SlotId)
+			: FString::Printf(TEXT("level:%s#%d"), *LevelActor, LevelInstance);
+	}
+};
+
+/**
+ * 번호 재부여 기준점 — "이 면(FaceKey)을 Number 번으로 하고, 목록에서 그 뒤에 오는 면은 +1 씩 이어 매긴다".
+ * 카메라 프리셋의 시작 슬롯(FCamDir.start_face/start_slot)이 이것으로 바뀌어 매니저에 들어온다.
+ */
+struct FSlotNumberAnchor
+{
+	FString FaceKey;
+	int32 Number = 0;
 };
 
 UCLASS()
@@ -177,6 +200,15 @@ public:
 	 */
 	bool FindSlotNumberAtWorld(const FVector& WorldLoc, FParkingSlotNumberInfo& OutInfo);
 
+	/**
+	 * 번호 재부여 기준점을 통째로 바꾸고 바로 다시 그린다(카메라 패널 '수정'/'열기', RPC cam.*Preset 가 부른다).
+	 * 규칙 — 목록 순서대로 훑으며 기준점을 만나면 그 번호로 바꾸고 이후 면은 +1 씩 잇는다. 기준점 앞의 면은 원래 순번.
+	 * 프리셋 면 → 레벨 면 경계에서는 이어 매기기를 끊는다(두 묶음은 원래 독립적으로 1부터 센다).
+	 * 같은 면에 기준점이 둘이면 뒤에 준 것이 이긴다. Number<=0 이거나 키가 빈 항목은 버린다.
+	 */
+	void SetNumberAnchors(const TArray<FSlotNumberAnchor>& InAnchors);
+	const TArray<FSlotNumberAnchor>& GetNumberAnchors() const { return NumberAnchors; }
+
 	/** 번호만 숨긴다(풀 유지). */
 	UFUNCTION(BlueprintCallable, Category = "Parking|Number")
 	void ClearSlotNumbers();
@@ -267,6 +299,10 @@ private:
 
 	// ---- 번호 텍스트 풀(데칼 풀과 같은 cursor 규약) ----
 	UPROPERTY(Transient) TArray<TObjectPtr<UTextRenderComponent>> NumberPool;
+	/** 번호 재부여 기준점(SetNumberAnchors). 렌더·조회·점→번호 판정이 전부 이것을 거친 번호를 본다. */
+	TArray<FSlotNumberAnchor> NumberAnchors;
+	/** CollectSlotNumbers 의 마지막 단계 — 순번(BaseNumber)을 채우고 기준점을 적용한다. */
+	void ApplyNumberAnchors(TArray<FParkingSlotNumberInfo>& Slots) const;
 	UTextRenderComponent* AcquireNumber(int32 Index);
 	/**
 	 * 면 중심에 번호를 눕혀 놓는다. AxisDir 은 면 길이축(수평), RowDir 은 열 방향(이웃 면 쪽, 없으면 0).

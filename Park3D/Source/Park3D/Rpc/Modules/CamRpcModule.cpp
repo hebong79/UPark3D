@@ -94,6 +94,20 @@ namespace
 		return FindDir(List.datas[CamId - 1], CamId, PresetId, /*bCreate=*/false);
 	}
 
+	/**
+	 * 메모리의 시작 슬롯 기준점(start_face/start_slot)을 바닥 번호에 반영한다.
+	 * 패널의 SyncNumberAnchors 와 같은 규칙이며 마지막에 넘긴 쪽(패널이든 RPC 든)이 이긴다 — 카메라 액터와 같은 성질.
+	 */
+	void PushCamNumberAnchors(UWorld* World, const FCameraPosList& Memory)
+	{
+		if (AParkingPresetManager* PresetMgr = AParkingPresetManager::GetOrSpawn(World))
+		{
+			TArray<FSlotNumberAnchor> Anchors;
+			UCameraControlLibrary::CollectNumberAnchors(Memory, Anchors);
+			PresetMgr->SetNumberAnchors(Anchors);
+		}
+	}
+
 	/** 프리셋 적용 결과 공통 응답. */
 	TSharedPtr<FJsonValue> PresetResult(int32 CamId, int32 PresetId, const FCamDir& Dir)
 	{
@@ -105,8 +119,9 @@ namespace
 		O->SetNumberField(TEXT("pan"), Dir.pan);
 		O->SetNumberField(TEXT("tilt"), Dir.tilt);
 		O->SetNumberField(TEXT("zoom"), Dir.zoom);
-		// 이 프리셋이 담당하는 첫 주차면 번호(0=미지정). 기록 전용이라 외부에서 읽을 길이 없으면 넣은 의미가 없다.
+		// 시작 슬롯: 기준 면(startFace, preset.numbers 의 faceKey)이 받는 번호(startSlot, 0=미지정).
 		O->SetNumberField(TEXT("startSlot"), Dir.start_slot);
+		O->SetStringField(TEXT("startFace"), Dir.start_face);
 		return RpcDto::MakeObject(O);
 	}
 
@@ -473,9 +488,14 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 		Dir->rot = FCamVec3{ Tilt, Pan, 0.f };
 		Dir->ptzmax.z = Cam->MaxZoom;
 		// 시작 슬롯은 카메라 상태에서 읽을 수 없는 값이다(사람이 정한다) — 준 경우에만 덮고, 아니면 기존 값을 지킨다.
+		// startFace 는 preset.numbers 의 faceKey("level:<액터>#<인스턴스>" / "preset:<idx>#<slot>"). 빈 문자열이면 기준 면을 푼다.
 		if (RpcParam::Has(P, TEXT("startSlot")))
 		{
 			Dir->start_slot = FMath::Max(0, RpcParam::GetInt(P, TEXT("startSlot"), Dir->start_slot));
+		}
+		if (RpcParam::Has(P, TEXT("startFace")))
+		{
+			Dir->start_face = RpcParam::GetString(P, TEXT("startFace"), Dir->start_face).TrimStartAndEnd();
 		}
 
 		const FString Path = ResolveCamPresetPath(P);
@@ -484,6 +504,7 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 			E.FailDomain(FString::Printf(TEXT("카메라 프리셋 저장 실패: %s"), *Path));
 			return nullptr;
 		}
+		PushCamNumberAnchors(GetWorldPtr(), PresetMemory);
 
 		TSharedPtr<FJsonValue> Result = PresetResult(CamId, PresetId, *Dir);
 		Result->AsObject()->SetStringField(TEXT("path"), Path);
@@ -507,6 +528,7 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 			return nullptr;
 		}
 		PresetMemory = MoveTemp(Loaded); // 파일이 메모리를 교체한다(부분 병합 아님 — Unity 동일).
+		PushCamNumberAnchors(GetWorldPtr(), PresetMemory); // 파일의 기준점으로 바닥 번호를 다시 매긴다(패널 '열기'와 같다).
 
 		FCamDir* Dir = FindDirConst(PresetMemory, CamId, PresetId);
 		if (!Dir)
@@ -547,6 +569,7 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetBoolField(TEXT("ok"), true);
 		O->SetNumberField(TEXT("removed"), Removed);
 		O->SetNumberField(TEXT("remaining"), Dirs.Num());
+		PushCamNumberAnchors(GetWorldPtr(), PresetMemory); // 지운 프리셋의 기준점도 함께 빠진다.
 
 		if (RpcParam::GetBool(P, TEXT("save"), true))
 		{

@@ -529,6 +529,70 @@ bool FParkingSlotNumberTest::RunTest(const FString& Parameters)
 		Mgr->bShowSlotNumbers = true;
 	}
 
+	// TN-8: 기준점 재부여(카메라 프리셋 시작 슬롯). 3번 면을 10번으로 → 뒤 면은 11,12,13, 앞 면(1,2)은 그대로.
+	// 레벨 면 묶음은 프리셋 묶음의 이어 매기기에 끌려가지 않는다(경계에서 끊김).
+	{
+		TArray<FParkingSlotNumberInfo> Before;
+		Mgr->CollectSlotNumbers(Presets, Before);
+		TArray<int32> LevelBefore;
+		for (const FParkingSlotNumberInfo& S : Before) { if (!S.bFromPreset) LevelBefore.Add(S.Number); }
+
+		TArray<FSlotNumberAnchor> Anchors;
+		Anchors.Add(FSlotNumberAnchor{ TEXT("preset:3#3"), 10 });
+		Anchors.Add(FSlotNumberAnchor{ TEXT(""), 99 });        // 키 없음 → 버림
+		Anchors.Add(FSlotNumberAnchor{ TEXT("preset:3#1"), 0 }); // 번호 0 → 버림
+		Mgr->SetNumberAnchors(Anchors);
+		TestEqual(TEXT("TN-8 유효 기준점 1개"), Mgr->GetNumberAnchors().Num(), 1);
+
+		TArray<FParkingSlotNumberInfo> After;
+		Mgr->CollectSlotNumbers(Presets, After);
+		const int32 Expected[6] = { 1, 2, 10, 11, 12, 13 };
+		int32 PresetIdx = 0;
+		TArray<int32> LevelAfter;
+		for (const FParkingSlotNumberInfo& S : After)
+		{
+			if (S.bFromPreset)
+			{
+				if (PresetIdx < 6)
+				{
+					TestEqual(*FString::Printf(TEXT("TN-8 프리셋 면 %d 번호"), PresetIdx + 1), S.Number, Expected[PresetIdx]);
+					TestEqual(*FString::Printf(TEXT("TN-8 프리셋 면 %d 순번 유지"), PresetIdx + 1), S.BaseNumber, PresetIdx + 1);
+				}
+				++PresetIdx;
+			}
+			else
+			{
+				LevelAfter.Add(S.Number);
+			}
+		}
+		TestTrue(TEXT("TN-8 레벨 면 번호는 프리셋 기준점에 끌려가지 않는다"), LevelAfter == LevelBefore);
+
+		// 점→번호 판정도 재부여된 번호를 준다(화면과 같은 목록).
+		const FParkingSlotNumberInfo* Third = After.FindByPredicate([](const FParkingSlotNumberInfo& S) { return S.bFromPreset && S.SlotId == 3; });
+		if (TestNotNull(TEXT("TN-8 3번 면"), Third))
+		{
+			FParkingSlotNumberInfo Hit;
+			TestTrue(TEXT("TN-8 3번 면 중심 적중"), Mgr->FindSlotNumberAtWorld(Third->Center, Hit));
+			TestEqual(TEXT("TN-8 적중 번호 = 10"), Hit.Number, 10);
+			TestEqual(TEXT("TN-8 적중 순번 = 3"), Hit.BaseNumber, 3);
+			TestEqual(TEXT("TN-8 적중 키"), Hit.FaceKey(), FString(TEXT("preset:3#3")));
+		}
+
+		// 같은 면에 기준점 둘 → 뒤에 준 것이 이긴다. 기준점을 비우면 원래 순번으로.
+		Anchors.Reset();
+		Anchors.Add(FSlotNumberAnchor{ TEXT("preset:3#3"), 10 });
+		Anchors.Add(FSlotNumberAnchor{ TEXT("preset:3#3"), 20 });
+		Mgr->SetNumberAnchors(Anchors);
+		Mgr->CollectSlotNumbers(Presets, After);
+		Third = After.FindByPredicate([](const FParkingSlotNumberInfo& S) { return S.bFromPreset && S.SlotId == 3; });
+		TestEqual(TEXT("TN-8 중복 기준점은 뒤가 이김"), Third ? Third->Number : -1, 20);
+
+		Mgr->SetNumberAnchors({});
+		Mgr->CollectSlotNumbers(Presets, After);
+		Third = After.FindByPredicate([](const FParkingSlotNumberInfo& S) { return S.bFromPreset && S.SlotId == 3; });
+		TestEqual(TEXT("TN-8 기준점 해제 → 원래 3"), Third ? Third->Number : -1, 3);
+	}
+
 	Mgr->Destroy();
 	return true;
 }

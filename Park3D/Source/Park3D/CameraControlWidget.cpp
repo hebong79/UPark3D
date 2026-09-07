@@ -684,6 +684,7 @@ void UCameraControlWidget::HandleCamDelete()
 		ApplyAllControlsToCamera();
 	}
 	RefreshViewerBrush();
+	SyncNumberAnchors(); // 지운 카메라의 프리셋 기준점도 함께 빠진다.
 	Notify(FString::Printf(TEXT("카메라 삭제 (총 %d대)"), Mgr->GetCameraCount()));
 }
 
@@ -720,7 +721,7 @@ void UCameraControlWidget::HandlePresetAdd()
 	Dir.sname = FString::Printf(TEXT("Preset %d"), Count);
 	Dir.cam_id = CurCamIndex + 1;
 	Dir.preset_id = Count;
-	Dir.start_slot = ReadStartSlotField(); // 칸에 찍어 둔 값 그대로 새 프리셋에 담는다.
+	WriteStartSlotTo(Dir); // 줄에 올려 둔 값 그대로 새 프리셋에 담는다.
 	CollectDirFromControls(Dir);
 
 	CP.datas.Add(Dir);
@@ -733,6 +734,7 @@ void UCameraControlWidget::HandlePresetAdd()
 		Combo_Preset->SetSelectedIndex(CurPresetIndex);
 		bComboRefreshing = false;
 	}
+	SyncNumberAnchors();
 	Notify(FString::Printf(TEXT("프리셋 추가 (%d개)"), CP.datas.Num()));
 }
 
@@ -749,10 +751,10 @@ void UCameraControlWidget::HandlePresetModify()
 	{
 		Dir.preset_id = FCString::Atoi(*Field_PresetId->GetText().ToString());
 	}
-	// 시작 슬롯도 여기서 프리셋에 들어간다 — 칸에 찍힌 값은 '수정' 전까지 반영되지 않는다(되돌릴 여지).
+	// 시작 슬롯도 여기서 프리셋에 들어간다 — 줄의 값은 '수정' 전까지 반영되지 않는다(되돌릴 여지).
 	if (Field_StartSlot)
 	{
-		Dir.start_slot = ReadStartSlotField();
+		WriteStartSlotTo(Dir);
 	}
 	CollectDirFromControls(Dir); // 식별 필드(idx/sname/cam_id/preset_id)는 보존, geometry/ptz만 갱신.
 
@@ -762,6 +764,7 @@ void UCameraControlWidget::HandlePresetModify()
 		Mgr->ApplyDir(CurCamIndex, Dir);
 	}
 	RefreshViewerBrush();
+	SyncNumberAnchors(); // 바닥 번호는 여기서 다시 매겨진다 — 이 줄을 만든 목적이다.
 	Notify(TEXT("프리셋 수정"));
 }
 
@@ -792,6 +795,7 @@ void UCameraControlWidget::HandlePresetDelete()
 		}
 	}
 	RefreshViewerBrush();
+	SyncNumberAnchors(); // 지운 프리셋의 기준점도 함께 빠진다.
 	Notify(FString::Printf(TEXT("프리셋 삭제 (%d개)"), CP.datas.Num()));
 }
 
@@ -872,7 +876,7 @@ void UCameraControlWidget::FillControlsFromDir(const FCamDir& InDir)
 		Field_PresetId->SetText(FText::AsNumber(Dir.preset_id));
 	}
 	// 시작 슬롯은 프리셋마다 다른 값이다 — 프리셋을 바꿀 때마다 그 프리셋 값으로 갈아 끼운다.
-	FillStartSlotField(Dir.start_slot);
+	FillStartSlotRow(Dir);
 
 	ApplyAllControlsToCamera();
 }
@@ -1065,6 +1069,8 @@ bool UCameraControlWidget::LoadFromJsonFile(const FString& Path)
 	RefreshViewerBrush();
 	CurFilePath = Path;
 	SetFileName(FPaths::GetCleanFilename(Path));
+	// 시작 시 자동 로딩도 이 길을 지난다(APark3DGameMode::ApplyStartupConfig) — 파일의 기준점이 곧 기동 직후 바닥 번호다.
+	SyncNumberAnchors();
 	Notify(FString::Printf(TEXT("열기 %d대 ← %s"), CamData.datas.Num(), *Path));
 	return true;
 }
@@ -1113,6 +1119,7 @@ void UCameraControlWidget::HandleInit()
 	}
 	ApplyAllControlsToCamera();
 	RefreshViewerBrush();
+	SyncNumberAnchors(); // 기준점이 전부 사라져 바닥 번호가 원래 순번으로 돌아간다.
 	Notify(TEXT("초기화 (카메라 1대 / 기본 프리셋)"));
 }
 
@@ -1595,7 +1602,7 @@ void UCameraControlWidget::BuildStartSlotRow()
 	}
 
 	Txt_StartSlotHint = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
-	Txt_StartSlotHint->SetText(FText::FromString(TEXT("LShift+클릭으로 지정")));
+	Txt_StartSlotHint->SetText(FText::FromString(TEXT("LShift+클릭으로 기준 면 지정"))); // 실제 문구는 RefreshStartSlotHint 가 정한다.
 	Txt_StartSlotHint->SetColorAndOpacity(FSlateColor(FLinearColor(0.72f, 0.72f, 0.74f, 1.f)));
 	{
 		FSlateFontInfo F = Txt_StartSlotHint->GetFont();
@@ -1633,17 +1640,55 @@ void UCameraControlWidget::BuildStartSlotRow()
 
 	// 지금 선택된 프리셋 값으로 채운다(패널을 열 때마다 최신 상태가 보이도록).
 	const FCameraPos& CP = CurCameraPos();
-	FillStartSlotField(CP.datas.IsValidIndex(CurPresetIndex) ? CP.datas[CurPresetIndex].start_slot : 0);
+	FillStartSlotRow(CP.datas.IsValidIndex(CurPresetIndex) ? CP.datas[CurPresetIndex] : FCamDir());
 }
 
-void UCameraControlWidget::FillStartSlotField(int32 StartSlot)
+void UCameraControlWidget::FillStartSlotRow(const FCamDir& Dir)
 {
 	if (!Field_StartSlot)
 	{
 		return;
 	}
 	// 0 은 "미지정"이다 — 0 을 그대로 보여 주면 0번 면이 있는 것처럼 읽힌다.
-	Field_StartSlot->SetText(StartSlot > 0 ? FText::AsNumber(StartSlot) : FText::GetEmpty());
+	Field_StartSlot->SetText(Dir.start_slot > 0 ? FText::AsNumber(Dir.start_slot) : FText::GetEmpty());
+	PickedStartFace = Dir.start_face;
+	PickedStartBase = 0;
+	if (!PickedStartFace.IsEmpty())
+	{
+		// 키 → 순번은 바닥 번호 목록에서 찾는다(다른 레벨의 면이면 못 찾고 0 으로 남아 문구가 그 사실을 알린다).
+		if (AParkingPresetManager* PresetMgr = AParkingPresetManager::GetOrSpawn(GetWorld()))
+		{
+			TArray<FParkingSlotNumberInfo> Slots;
+			PresetMgr->CollectSlotNumbers(PresetMgr->ResolvePresets(), Slots);
+			for (const FParkingSlotNumberInfo& S : Slots)
+			{
+				if (S.FaceKey() == PickedStartFace) { PickedStartBase = S.BaseNumber; break; }
+			}
+		}
+	}
+	RefreshStartSlotHint();
+}
+
+void UCameraControlWidget::RefreshStartSlotHint()
+{
+	if (!Txt_StartSlotHint)
+	{
+		return;
+	}
+	FString Hint;
+	if (PickedStartFace.IsEmpty())
+	{
+		Hint = TEXT("LShift+클릭으로 기준 면 지정");
+	}
+	else if (PickedStartBase > 0)
+	{
+		Hint = FString::Printf(TEXT("기준 면 #%d → 번호 쓰고 '수정'"), PickedStartBase);
+	}
+	else
+	{
+		Hint = TEXT("기준 면이 이 레벨에 없음");
+	}
+	Txt_StartSlotHint->SetText(FText::FromString(Hint));
 }
 
 int32 UCameraControlWidget::ReadStartSlotField() const
@@ -1654,6 +1699,25 @@ int32 UCameraControlWidget::ReadStartSlotField() const
 	}
 	const FString S = Field_StartSlot->GetText().ToString().TrimStartAndEnd();
 	return S.IsEmpty() ? 0 : FMath::Max(0, FCString::Atoi(*S));
+}
+
+void UCameraControlWidget::WriteStartSlotTo(FCamDir& Dir) const
+{
+	Dir.start_slot = ReadStartSlotField();
+	Dir.start_face = Dir.start_slot > 0 ? PickedStartFace : FString(); // 번호를 비우면 기준 면도 의미가 없다.
+}
+
+void UCameraControlWidget::SyncNumberAnchors()
+{
+	AParkingPresetManager* PresetMgr = AParkingPresetManager::GetOrSpawn(GetWorld());
+	if (!PresetMgr)
+	{
+		return;
+	}
+	TArray<FSlotNumberAnchor> Anchors;
+	UCameraControlLibrary::CollectNumberAnchors(CamData, Anchors);
+	PresetMgr->SetNumberAnchors(Anchors);
+	// 재부여로 화면 번호가 바뀌었을 수 있다 — 안내 문구의 순번은 안 변하지만 칸은 프리셋 값 그대로라 손댈 것이 없다.
 }
 
 void UCameraControlWidget::TickStartSlotPick(APlayerController* PC, bool bOverPanel)
@@ -1697,9 +1761,13 @@ void UCameraControlWidget::TickStartSlotPick(APlayerController* PC, bool bOverPa
 		return;
 	}
 
-	FillStartSlotField(Info.Number);
-	Notify(FString::Printf(TEXT("시작 슬롯 %d 지정 (%s) — 프리셋에 넣으려면 '수정'"),
-		Info.Number, Info.bFromPreset ? TEXT("프리셋 면") : TEXT("레벨 면")));
+	// 기준 면은 그 면, 칸에는 지금 바닥에 보이는 번호를 넣어 둔다 — 사용자는 이것을 원하는 번호로 고쳐 '수정'한다.
+	PickedStartFace = Info.FaceKey();
+	PickedStartBase = Info.BaseNumber;
+	Field_StartSlot->SetText(FText::AsNumber(Info.Number));
+	RefreshStartSlotHint();
+	Notify(FString::Printf(TEXT("기준 면 #%d 지정 (%s, 현재 %d번) — 번호를 쓰고 '수정'"),
+		Info.BaseNumber, Info.bFromPreset ? TEXT("프리셋 면") : TEXT("레벨 면"), Info.Number));
 }
 
 void UCameraControlWidget::InsertGroupDividers()

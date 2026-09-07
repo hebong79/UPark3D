@@ -109,6 +109,9 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 		{
 			TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 			O->SetNumberField(TEXT("number"), S.Number);
+			// baseNumber 는 기준점(cam.savePreset startFace/startSlot)을 걸기 전 순번, faceKey 는 그 기준점에 넣는 키.
+			O->SetNumberField(TEXT("baseNumber"), S.BaseNumber);
+			O->SetStringField(TEXT("faceKey"), S.FaceKey());
 			O->SetStringField(TEXT("source"), S.bFromPreset ? TEXT("preset") : TEXT("level"));
 			O->SetObjectField(TEXT("pos"), RpcDto::Vec3(S.Center.X / U, S.Center.Y / U, S.Center.Z / U));
 			O->SetNumberField(TEXT("rotY"), FMath::RadiansToDegrees(FMath::Atan2(S.AxisDir.Y, S.AxisDir.X)));

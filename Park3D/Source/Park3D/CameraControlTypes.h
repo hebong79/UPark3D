@@ -61,6 +61,14 @@ struct FCamDir
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") float    zoom = 1.f;       // 줌 배율(1~36), FOV 아님
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") FCamPtz  ptzmin;           // 슬라이더 min(pan/tilt/zoom)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") FCamPtz  ptzmax;           // 슬라이더 max(pan/tilt/zoom)
+
+	/**
+	 * 이 프리셋이 담당하는 첫 주차면 번호(바닥에 그려지는 번호와 같은 공간). 0=미지정.
+	 * **기록 전용이다** — 이 값을 바꿔도 바닥 번호는 다시 매겨지지 않는다(사용자 결정, 2026-09-07).
+	 * Unity SCamDir 에는 없는 키다. Unity 쪽 파서는 모르는 키를 무시하므로 파일 호환은 유지되고,
+	 * 이 값이 없는 옛 파일은 0(미지정)으로 읽힌다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") int32    start_slot = 0;
 };
 
 /** === Unity SCameraPos (카메라 1대의 프리셋 리스트) === 내부 datas 키 소문자. */

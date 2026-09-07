@@ -105,6 +105,8 @@ namespace
 		O->SetNumberField(TEXT("pan"), Dir.pan);
 		O->SetNumberField(TEXT("tilt"), Dir.tilt);
 		O->SetNumberField(TEXT("zoom"), Dir.zoom);
+		// 이 프리셋이 담당하는 첫 주차면 번호(0=미지정). 기록 전용이라 외부에서 읽을 길이 없으면 넣은 의미가 없다.
+		O->SetNumberField(TEXT("startSlot"), Dir.start_slot);
 		return RpcDto::MakeObject(O);
 	}
 
@@ -470,6 +472,11 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 		// 로드 시 pan/tilt 는 rot 에서 복원되므로(NormalizeLoaded) rot 도 반드시 같이 쓴다.
 		Dir->rot = FCamVec3{ Tilt, Pan, 0.f };
 		Dir->ptzmax.z = Cam->MaxZoom;
+		// 시작 슬롯은 카메라 상태에서 읽을 수 없는 값이다(사람이 정한다) — 준 경우에만 덮고, 아니면 기존 값을 지킨다.
+		if (RpcParam::Has(P, TEXT("startSlot")))
+		{
+			Dir->start_slot = FMath::Max(0, RpcParam::GetInt(P, TEXT("startSlot"), Dir->start_slot));
+		}
 
 		const FString Path = ResolveCamPresetPath(P);
 		if (!UCameraControlLibrary::SaveToJson(Path, PresetMemory))

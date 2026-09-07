@@ -24,6 +24,7 @@ namespace
 		FVector Center = FVector::ZeroVector;
 		FVector AxisDir = FVector::ForwardVector; // 길이축(수평 단위 벡터)
 		float WidthCm = 0.f;                      // 짧은 변
+		float LengthCm = 0.f;                     // 긴 변(AxisDir 방향)
 		FString ActorName;                        // 소유 BP_ParkingSlot 액터 이름
 		int32 Instance = -1;                      // 그 액터 ISM 안의 인스턴스 번호
 	};
@@ -83,6 +84,7 @@ namespace
 					// 긴 변이 주차 깊이(차량 길이축). 플레인 로컬 X 가 길면 X 축, 아니면 Y 축.
 					S.AxisDir = (HalfX >= HalfY ? T.GetUnitAxis(EAxis::X) : T.GetUnitAxis(EAxis::Y)).GetSafeNormal2D();
 					S.WidthCm = 2.f * FMath::Min(HalfX, HalfY);
+					S.LengthCm = 2.f * FMath::Max(HalfX, HalfY);
 					S.ActorName = Actor->GetName();
 					S.Instance = i;
 					Out.Add(S);
@@ -710,6 +712,7 @@ void AParkingPresetManager::CollectSlotNumbers(const TArray<FParkingPreset>& Pre
 			Info.Center = (C[0] + C[1] + C[2] + C[3]) * 0.25f;
 			Info.AxisDir = (bZLong ? EdgeZ : EdgeX).GetSafeNormal2D();
 			Info.WidthCm = static_cast<float>((bZLong ? EdgeX : EdgeZ).Size2D());
+			Info.LengthCm = static_cast<float>((bZLong ? EdgeZ : EdgeX).Size2D());
 			Info.bFromPreset = true;
 			Info.PresetIdx = P.PresetIdx;
 			Info.SlotId = j + 1;
@@ -730,10 +733,36 @@ void AParkingPresetManager::CollectSlotNumbers(const TArray<FParkingPreset>& Pre
 		Info.Center = LevelSlots[i].Center;
 		Info.AxisDir = LevelSlots[i].AxisDir;
 		Info.WidthCm = LevelSlots[i].WidthCm;
+		Info.LengthCm = LevelSlots[i].LengthCm;
 		Info.LevelActor = LevelSlots[i].ActorName;
 		Info.LevelInstance = LevelSlots[i].Instance;
 		Out.Add(Info);
 	}
+}
+
+bool AParkingPresetManager::FindSlotNumberAtWorld(const FVector& WorldLoc, FParkingSlotNumberInfo& OutInfo)
+{
+	TArray<FParkingSlotNumberInfo> Slots;
+	CollectSlotNumbers(ResolvePresets(), Slots);
+
+	for (const FParkingSlotNumberInfo& S : Slots)
+	{
+		if (S.LengthCm <= 0.f || S.WidthCm <= 0.f)
+		{
+			continue;
+		}
+		// 면 축으로 옮겨 반쪽 크기와 비교(OBB). Z 는 무시한다 — 클릭은 바닥을 맞히고 면은 두께가 0 이다.
+		const FVector D = WorldLoc - S.Center;
+		const FVector Perp(-S.AxisDir.Y, S.AxisDir.X, 0.f);
+		const float Along  = static_cast<float>(D.X * S.AxisDir.X + D.Y * S.AxisDir.Y);
+		const float Across = static_cast<float>(D.X * Perp.X + D.Y * Perp.Y);
+		if (FMath::Abs(Along) <= S.LengthCm * 0.5f && FMath::Abs(Across) <= S.WidthCm * 0.5f)
+		{
+			OutInfo = S;
+			return true;
+		}
+	}
+	return false;
 }
 
 void AParkingPresetManager::RebuildSlotNumbers(const TArray<FParkingPreset>& Presets)

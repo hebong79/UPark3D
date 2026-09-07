@@ -330,6 +330,7 @@ bool FCameraControlJsonRoundTripTest::RunTest(const FString& Parameters)
 			D.pos = {-3.5f, 8.f, 9.9f}; D.rot = {-10.f, 271.13f, 0.f};
 			D.pan = 271.13f; D.tilt = -10.f; D.zoom = 12.f;
 			D.ptzmin = {-180.f, -90.f, 1.f}; D.ptzmax = {180.f, 90.f, 36.f};
+			D.start_slot = 12; // 카메라 패널의 '시작 슬롯'(0=미지정). 파일에 남아야 다음에 열 때 보인다.
 			Cam0.datas.Add(D);
 		}
 		Src.datas.Add(Cam0);
@@ -372,6 +373,8 @@ bool FCameraControlJsonRoundTripTest::RunTest(const FString& Parameters)
 				TestEqual(TEXT("sname"), LD.sname, SD.sname);
 				TestEqual(TEXT("cam_id"), LD.cam_id, SD.cam_id);
 				TestEqual(TEXT("preset_id"), LD.preset_id, SD.preset_id);
+				// 시작 슬롯: 지정한 프리셋은 값이 살아 있고, 안 넣은 프리셋은 0(미지정)으로 남는다.
+				TestEqual(TEXT("start_slot"), LD.start_slot, SD.start_slot);
 				TestEqual(TEXT("pos.x"), LD.pos.x, SD.pos.x, 1e-3f);
 				TestEqual(TEXT("pos.y"), LD.pos.y, SD.pos.y, 1e-3f);
 				TestEqual(TEXT("pos.z"), LD.pos.z, SD.pos.z, 1e-3f);
@@ -451,6 +454,9 @@ bool FCameraControlJsonFixtureTest::RunTest(const FString& Parameters)
 		// rot↔pan/tilt 동기화.
 		TestEqual(TEXT("pan=rot.y=45"), D.pan, 45.f, 1e-3f);
 		TestEqual(TEXT("tilt=rot.x=15"), D.tilt, 15.f, 1e-3f);
+		// start_slot 이 없는 옛 파일(Unity 산출물)은 0=미지정으로 읽혀야 한다 — 여기서 쓰레기 값이 들어오면
+		// 패널이 있지도 않은 면 번호를 표시한다.
+		TestEqual(TEXT("start_slot 없는 파일 → 0(미지정)"), D.start_slot, 0);
 	}
 	else
 	{

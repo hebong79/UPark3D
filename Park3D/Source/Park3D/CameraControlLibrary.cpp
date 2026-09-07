@@ -266,7 +266,7 @@ void UCameraControlLibrary::CollectNumberAnchors(const FCameraPosList& Data, TAr
 		{
 			if (!Dir.start_face.IsEmpty() && Dir.start_slot > 0)
 			{
-				Out.Add(FSlotNumberAnchor{ Dir.start_face, Dir.start_slot });
+				Out.Add(FSlotNumberAnchor{ Dir.start_face, Dir.start_slot, FMath::Max(0, Dir.start_count) });
 			}
 		}
 	}

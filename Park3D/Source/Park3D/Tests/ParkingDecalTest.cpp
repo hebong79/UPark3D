@@ -593,6 +593,40 @@ bool FParkingSlotNumberTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("TN-8 기준점 해제 → 원래 3"), Third ? Third->Number : -1, 3);
 	}
 
+	// TN-9: 갯수 제한. 2번 면부터 3개만 10,11,12 로 — 앞(1)과 뒤(5,6)는 원래 순번 그대로.
+	{
+		TArray<FSlotNumberAnchor> Anchors;
+		Anchors.Add(FSlotNumberAnchor{ TEXT("preset:3#2"), 10, 3 });
+		Mgr->SetNumberAnchors(Anchors);
+
+		TArray<FParkingSlotNumberInfo> After;
+		Mgr->CollectSlotNumbers(Presets, After);
+		const int32 Expected[6] = { 1, 10, 11, 12, 5, 6 };
+		int32 i = 0;
+		for (const FParkingSlotNumberInfo& S : After)
+		{
+			if (!S.bFromPreset) continue;
+			if (i < 6)
+			{
+				TestEqual(*FString::Printf(TEXT("TN-9 면 %d 번호"), i + 1), S.Number, Expected[i]);
+			}
+			++i;
+		}
+
+		// 갯수가 남은 면 수보다 크면 묶음 끝에서 자연히 멈춘다(경계를 넘지 않는다).
+		Anchors.Reset();
+		Anchors.Add(FSlotNumberAnchor{ TEXT("preset:3#5"), 50, 99 });
+		Mgr->SetNumberAnchors(Anchors);
+		Mgr->CollectSlotNumbers(Presets, After);
+		const FParkingSlotNumberInfo* FirstLevel = After.FindByPredicate([](const FParkingSlotNumberInfo& S) { return !S.bFromPreset; });
+		if (FirstLevel)
+		{
+			TestEqual(TEXT("TN-9 갯수가 남아도 레벨 면은 원래 1번"), FirstLevel->Number, 1);
+		}
+
+		Mgr->SetNumberAnchors({});
+	}
+
 	Mgr->Destroy();
 	return true;
 }

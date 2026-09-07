@@ -75,6 +75,11 @@ struct FCamDir
 	 * 순번이 아니라 키로 두는 이유: 순번은 프리셋을 만들거나 지우면 밀려 엉뚱한 면을 가리킨다.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") FString  start_face;
+	/**
+	 * 기준 면부터 이어 매길 면의 **개수**. 0=제한 없음(묶음 끝까지).
+	 * 예) start_slot=1, start_count=7 → 기준 면부터 7개 면이 1~7 이 되고 그 뒤 면은 원래 순번으로 남는다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") int32    start_count = 0;
 };
 
 /** === Unity SCameraPos (카메라 1대의 프리셋 리스트) === 내부 datas 키 소문자. */

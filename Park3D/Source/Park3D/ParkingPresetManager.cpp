@@ -24,6 +24,8 @@ namespace
 		FVector Center = FVector::ZeroVector;
 		FVector AxisDir = FVector::ForwardVector; // 길이축(수평 단위 벡터)
 		float WidthCm = 0.f;                      // 짧은 변
+		FString ActorName;                        // 소유 BP_ParkingSlot 액터 이름
+		int32 Instance = -1;                      // 그 액터 ISM 안의 인스턴스 번호
 	};
 
 	/** "BP_ParkingSlot_C_12" 의 끝 숫자. 없으면 0. 이름 문자열 정렬은 _10 이 _2 앞에 오므로 숫자로 비교한다. */
@@ -81,6 +83,8 @@ namespace
 					// 긴 변이 주차 깊이(차량 길이축). 플레인 로컬 X 가 길면 X 축, 아니면 Y 축.
 					S.AxisDir = (HalfX >= HalfY ? T.GetUnitAxis(EAxis::X) : T.GetUnitAxis(EAxis::Y)).GetSafeNormal2D();
 					S.WidthCm = 2.f * FMath::Min(HalfX, HalfY);
+					S.ActorName = Actor->GetName();
+					S.Instance = i;
 					Out.Add(S);
 				}
 			}
@@ -682,16 +686,9 @@ void AParkingPresetManager::PlaceNumber(UTextRenderComponent* T, const FVector& 
 	T->SetVisibility(true);
 }
 
-void AParkingPresetManager::RebuildSlotNumbers(const TArray<FParkingPreset>& Presets)
+void AParkingPresetManager::CollectSlotNumbers(const TArray<FParkingPreset>& Presets, TArray<FParkingSlotNumberInfo>& Out) const
 {
-	if (!bShowSlotNumbers)
-	{
-		ClearSlotNumbers();
-		return;
-	}
-
-	struct FJob { FVector Center; FVector AxisDir; float WidthCm; int32 Number; };
-	TArray<FJob> Jobs;
+	Out.Reset();
 
 	// ① 프리셋 면 — 번호는 리스트의 [시작~끝] 과 같은 할당(카메라 → 프리셋 순 연속 부여).
 	const TArray<FParkingSpaceAssignment> Assigns = UParkingGeometryLibrary::CalculateParkingSpaceAssignments(Presets);
@@ -707,10 +704,18 @@ void AParkingPresetManager::RebuildSlotNumbers(const TArray<FParkingPreset>& Pre
 			const FVector EdgeZ = C[1] - C[0];
 			const FVector EdgeX = C[3] - C[0];
 			const bool bZLong = EdgeZ.SizeSquared2D() >= EdgeX.SizeSquared2D();
-			Jobs.Add({ (C[0] + C[1] + C[2] + C[3]) * 0.25f, bZLong ? EdgeZ : EdgeX, static_cast<float>((bZLong ? EdgeX : EdgeZ).Size2D()), Start + j });
+
+			FParkingSlotNumberInfo Info;
+			Info.Number = Start + j;
+			Info.Center = (C[0] + C[1] + C[2] + C[3]) * 0.25f;
+			Info.AxisDir = (bZLong ? EdgeZ : EdgeX).GetSafeNormal2D();
+			Info.WidthCm = static_cast<float>((bZLong ? EdgeX : EdgeZ).Size2D());
+			Info.bFromPreset = true;
+			Info.PresetIdx = P.PresetIdx;
+			Info.SlotId = j + 1;
+			Out.Add(Info);
 		}
 	}
-	const int32 PresetCount = Jobs.Num();
 
 	// ② 레벨 면 — 항상 있는 쪽. 프리셋과 별개로 1부터.
 	TArray<FLevelSlot> LevelSlots;
@@ -720,31 +725,56 @@ void AParkingPresetManager::RebuildSlotNumbers(const TArray<FParkingPreset>& Pre
 	}
 	for (int32 i = 0; i < LevelSlots.Num(); ++i)
 	{
-		Jobs.Add({ LevelSlots[i].Center, LevelSlots[i].AxisDir, LevelSlots[i].WidthCm, i + 1 });
+		FParkingSlotNumberInfo Info;
+		Info.Number = i + 1;
+		Info.Center = LevelSlots[i].Center;
+		Info.AxisDir = LevelSlots[i].AxisDir;
+		Info.WidthCm = LevelSlots[i].WidthCm;
+		Info.LevelActor = LevelSlots[i].ActorName;
+		Info.LevelInstance = LevelSlots[i].Instance;
+		Out.Add(Info);
+	}
+}
+
+void AParkingPresetManager::RebuildSlotNumbers(const TArray<FParkingPreset>& Presets)
+{
+	if (!bShowSlotNumbers)
+	{
+		ClearSlotNumbers();
+		return;
+	}
+
+	TArray<FParkingSlotNumberInfo> Slots;
+	CollectSlotNumbers(Presets, Slots);
+
+	int32 PresetCount = 0;
+	for (const FParkingSlotNumberInfo& S : Slots)
+	{
+		if (S.bFromPreset) ++PresetCount;
 	}
 
 	// 열 방향 = 가장 가까운 다른 면 중심 쪽(면이 하나뿐이면 없음 → 길이축).
-	for (int32 i = 0; i < Jobs.Num(); ++i)
+	for (int32 i = 0; i < Slots.Num(); ++i)
 	{
 		FVector RowDir = FVector::ZeroVector;
 		float BestSq = TNumericLimits<float>::Max();
-		for (int32 k = 0; k < Jobs.Num(); ++k)
+		for (int32 k = 0; k < Slots.Num(); ++k)
 		{
 			if (k == i) continue;
-			const FVector D = Jobs[k].Center - Jobs[i].Center;
+			const FVector D = Slots[k].Center - Slots[i].Center;
 			const float Sq = static_cast<float>(D.SizeSquared2D());
 			if (Sq > 1.f && Sq < BestSq) { BestSq = Sq; RowDir = D.GetSafeNormal2D(); }
 		}
-		PlaceNumber(AcquireNumber(i), Jobs[i].Center, Jobs[i].AxisDir, Jobs[i].WidthCm, Jobs[i].Number, RowDir);
+		PlaceNumber(AcquireNumber(i), Slots[i].Center, Slots[i].AxisDir, Slots[i].WidthCm, Slots[i].Number, RowDir);
 	}
 
-	for (int32 idx = Jobs.Num(); idx < NumberPool.Num(); ++idx)
+	for (int32 idx = Slots.Num(); idx < NumberPool.Num(); ++idx)
 	{
 		if (NumberPool[idx]) NumberPool[idx]->SetVisibility(false);
 	}
 
 	UE_LOG(LogTemp, Log, TEXT("[ParkingManager] 주차면 번호 %d개 표시(프리셋 %d, 레벨 %d, 풀 %d)"),
-		Jobs.Num(), PresetCount, LevelSlots.Num(), NumberPool.Num());
+		Slots.Num(), PresetCount, Slots.Num() - PresetCount, NumberPool.Num());
 }
 
 void AParkingPresetManager::ClearSlotNumbers()

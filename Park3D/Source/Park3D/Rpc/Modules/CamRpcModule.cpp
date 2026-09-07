@@ -119,9 +119,11 @@ namespace
 		O->SetNumberField(TEXT("pan"), Dir.pan);
 		O->SetNumberField(TEXT("tilt"), Dir.tilt);
 		O->SetNumberField(TEXT("zoom"), Dir.zoom);
-		// 시작 슬롯: 기준 면(startFace, preset.numbers 의 faceKey)이 받는 번호(startSlot, 0=미지정).
+		// 시작 슬롯: 기준 면(startFace, preset.numbers 의 faceKey)이 받는 번호(startSlot, 0=미지정)와
+		// 이어 매길 면의 개수(startCount, 0=묶음 끝까지).
 		O->SetNumberField(TEXT("startSlot"), Dir.start_slot);
 		O->SetStringField(TEXT("startFace"), Dir.start_face);
+		O->SetNumberField(TEXT("startCount"), Dir.start_count);
 		return RpcDto::MakeObject(O);
 	}
 
@@ -496,6 +498,10 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 		if (RpcParam::Has(P, TEXT("startFace")))
 		{
 			Dir->start_face = RpcParam::GetString(P, TEXT("startFace"), Dir->start_face).TrimStartAndEnd();
+		}
+		if (RpcParam::Has(P, TEXT("startCount")))
+		{
+			Dir->start_count = FMath::Max(0, RpcParam::GetInt(P, TEXT("startCount"), Dir->start_count));
 		}
 
 		const FString Path = ResolveCamPresetPath(P);

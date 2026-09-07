@@ -114,6 +114,7 @@ public:
 	// 쿠킹된 WBP 의 베이스에 UPROPERTY 를 더하면 패키지가 Bad export index 로 죽으므로(2026-08-12)
 	// 포인터는 비-UPROPERTY 로 둔다. 위젯 트리가 자식으로 붙들고 있어 GC 에 안전하다(PresetMaker 콤보와 같은 방식).
 	UEditableTextBox* Field_StartSlot = nullptr;
+	UEditableTextBox* Field_StartCount = nullptr;
 	UTextBlock* Txt_StartSlotHint = nullptr;
 	/** 줄에 올라와 있는 기준 면(FParkingSlotNumberInfo::FaceKey)과 그 순번. '수정' 전까지는 칸의 값이고 프리셋 값이 아니다. */
 	FString PickedStartFace;
@@ -334,8 +335,11 @@ private:
 	/** 기준 면 유무·순번에 맞춰 안내 문구를 바꾼다. */
 	void RefreshStartSlotHint();
 
-	/** 입력칸의 숫자(빈칸/0 = 미지정). */
+	/** 시작 슬롯 칸의 숫자(빈칸/0 = 미지정). */
 	int32 ReadStartSlotField() const;
+
+	/** 갯수 칸의 숫자(빈칸/0 = 제한 없음). */
+	int32 ReadStartCountField() const;
 
 	/** 줄의 값(칸 + 기준 면)을 프리셋에 쓴다. 숫자가 0 이면 기준 면도 함께 지운다. */
 	void WriteStartSlotTo(FCamDir& Dir) const;

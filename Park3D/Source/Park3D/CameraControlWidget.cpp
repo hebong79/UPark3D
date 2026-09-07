@@ -1583,23 +1583,54 @@ void UCameraControlWidget::BuildStartSlotRow()
 		return;
 	}
 
-	UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
-	Label->SetText(FText::FromString(TEXT("시작 슬롯")));
-	Label->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+	UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+
+	// 라벨(흰 글자) 하나를 줄에 붙인다.
+	auto AddLabel = [this, Row](const TCHAR* Text, float LeftPad, float RightPad)
 	{
+		UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		Label->SetText(FText::FromString(Text));
+		Label->SetColorAndOpacity(FSlateColor(FLinearColor::White));
 		FSlateFontInfo F = Label->GetFont();
 		F.Size = 11;
 		Label->SetFont(F);
-	}
+		if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(Label))
+		{
+			S->SetVerticalAlignment(VAlign_Center);
+			S->SetPadding(FMargin(LeftPad, 0.f, RightPad, 0.f));
+		}
+	};
 
-	Field_StartSlot = WidgetTree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass(), TEXT("Field_StartSlot"));
-	Field_StartSlot->SetForegroundColor(FLinearColor::Black); // 다른 입력 필드와 같은 규약(NativeConstruct 1-b).
+	// 흰 칸에 검은 글자. **FocusedForegroundColor 를 같이 주지 않으면 타이핑하는 동안 글자가 안 보인다** —
+	// SetForegroundColor 는 포커스가 없을 때의 색만 정하고, 포커스 색은 엔진 기본(밝은 회색)이 남아 밝은 칸에 묻힌다.
+	// 값을 넣고 Enter 를 쳐야 그제야 검게 보여서 "입력이 안 먹는다"로 읽힌다(2026-09-08 신고, 실기 재현).
+	auto MakeNumberField = [this, Row](const TCHAR* Name, float Width) -> UEditableTextBox*
 	{
+		UEditableTextBox* Box = WidgetTree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass(), FName(Name));
+		Box->SetForegroundColor(FLinearColor::Black);
+		FEditableTextBoxStyle St = Box->GetWidgetStyle();
 		// 폰트를 줄이지 않으면 기본 크기(24)에 스타일 패딩이 얹혀 아래 획이 잘린다(PTZ step 칸과 같은 이유).
-		FEditableTextBoxStyle St = Field_StartSlot->GetWidgetStyle();
 		St.TextStyle.Font.Size = 11;
-		Field_StartSlot->SetWidgetStyle(St);
-	}
+		St.TextStyle.ColorAndOpacity = FSlateColor(FLinearColor::Black);
+		St.ForegroundColor = FSlateColor(FLinearColor::Black);
+		St.FocusedForegroundColor = FSlateColor(FLinearColor::Black);
+		Box->SetWidgetStyle(St);
+
+		USizeBox* Size = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+		Size->SetWidthOverride(Width);
+		Size->SetHeightOverride(24.f);
+		Size->AddChild(Box);
+		if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(Size))
+		{
+			S->SetVerticalAlignment(VAlign_Center);
+		}
+		return Box;
+	};
+
+	AddLabel(TEXT("시작 슬롯"), 2.f, 8.f);
+	Field_StartSlot = MakeNumberField(TEXT("Field_StartSlot"), 56.f);
+	AddLabel(TEXT("갯수"), 10.f, 6.f);
+	Field_StartCount = MakeNumberField(TEXT("Field_StartCount"), 46.f);
 
 	Txt_StartSlotHint = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 	Txt_StartSlotHint->SetText(FText::FromString(TEXT("LShift+클릭으로 기준 면 지정"))); // 실제 문구는 RefreshStartSlotHint 가 정한다.
@@ -1608,21 +1639,6 @@ void UCameraControlWidget::BuildStartSlotRow()
 		FSlateFontInfo F = Txt_StartSlotHint->GetFont();
 		F.Size = 10;
 		Txt_StartSlotHint->SetFont(F);
-	}
-
-	UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
-	if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(Label))
-	{
-		S->SetVerticalAlignment(VAlign_Center);
-		S->SetPadding(FMargin(2.f, 0.f, 8.f, 0.f));
-	}
-	USizeBox* FieldSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
-	FieldSize->SetWidthOverride(64.f);
-	FieldSize->SetHeightOverride(24.f);
-	FieldSize->AddChild(Field_StartSlot);
-	if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(FieldSize))
-	{
-		S->SetVerticalAlignment(VAlign_Center);
 	}
 	if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(Txt_StartSlotHint))
 	{
@@ -1651,6 +1667,11 @@ void UCameraControlWidget::FillStartSlotRow(const FCamDir& Dir)
 	}
 	// 0 은 "미지정"이다 — 0 을 그대로 보여 주면 0번 면이 있는 것처럼 읽힌다.
 	Field_StartSlot->SetText(Dir.start_slot > 0 ? FText::AsNumber(Dir.start_slot) : FText::GetEmpty());
+	if (Field_StartCount)
+	{
+		// 갯수 0 = 제한 없음(묶음 끝까지). 역시 빈칸으로 둔다.
+		Field_StartCount->SetText(Dir.start_count > 0 ? FText::AsNumber(Dir.start_count) : FText::GetEmpty());
+	}
 	PickedStartFace = Dir.start_face;
 	PickedStartBase = 0;
 	if (!PickedStartFace.IsEmpty())
@@ -1682,11 +1703,11 @@ void UCameraControlWidget::RefreshStartSlotHint()
 	}
 	else if (PickedStartBase > 0)
 	{
-		Hint = FString::Printf(TEXT("기준 면 #%d → 번호 쓰고 '수정'"), PickedStartBase);
+		Hint = FString::Printf(TEXT("기준 면 #%d → '수정'"), PickedStartBase);
 	}
 	else
 	{
-		Hint = TEXT("기준 면이 이 레벨에 없음");
+		Hint = TEXT("기준 면 없음(다른 레벨)");
 	}
 	Txt_StartSlotHint->SetText(FText::FromString(Hint));
 }
@@ -1701,9 +1722,20 @@ int32 UCameraControlWidget::ReadStartSlotField() const
 	return S.IsEmpty() ? 0 : FMath::Max(0, FCString::Atoi(*S));
 }
 
+int32 UCameraControlWidget::ReadStartCountField() const
+{
+	if (!Field_StartCount)
+	{
+		return 0;
+	}
+	const FString S = Field_StartCount->GetText().ToString().TrimStartAndEnd();
+	return S.IsEmpty() ? 0 : FMath::Max(0, FCString::Atoi(*S));
+}
+
 void UCameraControlWidget::WriteStartSlotTo(FCamDir& Dir) const
 {
 	Dir.start_slot = ReadStartSlotField();
+	Dir.start_count = ReadStartCountField();
 	Dir.start_face = Dir.start_slot > 0 ? PickedStartFace : FString(); // 번호를 비우면 기준 면도 의미가 없다.
 }
 
@@ -1766,7 +1798,7 @@ void UCameraControlWidget::TickStartSlotPick(APlayerController* PC, bool bOverPa
 	PickedStartBase = Info.BaseNumber;
 	Field_StartSlot->SetText(FText::AsNumber(Info.Number));
 	RefreshStartSlotHint();
-	Notify(FString::Printf(TEXT("기준 면 #%d 지정 (%s, 현재 %d번) — 번호를 쓰고 '수정'"),
+	Notify(FString::Printf(TEXT("기준 면 #%d 지정 (%s, 현재 %d번) — 번호·갯수를 쓰고 '수정'"),
 		Info.BaseNumber, Info.bFromPreset ? TEXT("프리셋 면") : TEXT("레벨 면"), Info.Number));
 }
 

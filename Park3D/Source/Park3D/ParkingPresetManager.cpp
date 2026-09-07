@@ -753,30 +753,32 @@ void AParkingPresetManager::ApplyNumberAnchors(TArray<FParkingSlotNumberInfo>& S
 	{
 		return;
 	}
-	TMap<FString, int32> ByKey;
+	TMap<FString, FSlotNumberAnchor> ByKey;
 	for (const FSlotNumberAnchor& A : NumberAnchors)
 	{
-		ByKey.Add(A.FaceKey, A.Number); // 같은 키는 뒤에 온 것이 덮는다.
+		ByKey.Add(A.FaceKey, A); // 같은 키는 뒤에 온 것이 덮는다.
 	}
 
-	bool bRunning = false;
 	bool bPrevFromPreset = true;
 	int32 Next = 0;
+	int32 Remaining = 0; // 남은 개수이자 "적용 중" 표시(0 이면 원래 순번을 그대로 둔다).
 	for (FParkingSlotNumberInfo& S : Slots)
 	{
 		if (S.bFromPreset != bPrevFromPreset)
 		{
-			bRunning = false; // 프리셋 면 → 레벨 면 경계: 이어 매기기를 끊는다(두 묶음은 독립).
+			Remaining = 0; // 프리셋 면 → 레벨 면 경계: 이어 매기기를 끊는다(두 묶음은 독립).
 			bPrevFromPreset = S.bFromPreset;
 		}
-		if (const int32* Start = ByKey.Find(S.FaceKey()))
+		if (const FSlotNumberAnchor* A = ByKey.Find(S.FaceKey()))
 		{
-			Next = *Start;
-			bRunning = true;
+			Next = A->Number;
+			// 개수를 안 주면(0) 묶음 끝까지 — 09-08 최초 규약. 주면 그 개수만 바꾸고 뒤는 원래 순번.
+			Remaining = A->Count > 0 ? A->Count : TNumericLimits<int32>::Max();
 		}
-		if (bRunning)
+		if (Remaining > 0)
 		{
 			S.Number = Next++;
+			--Remaining;
 		}
 	}
 }

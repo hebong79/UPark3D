@@ -12,6 +12,7 @@
 
 class UDecalComponent;
 class UMaterialInterface;
+class UTextRenderComponent;
 
 UCLASS()
 class PARK3D_API AParkingPresetManager : public AActor
@@ -113,6 +114,36 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Parking|Decal")
 	void ClearDecals();
 
+	// ---- 주차면 바닥 번호(3D 텍스트). 라인/데칼 경로와 독립 — 두 모드 어디서나 같은 번호가 보인다. ----
+	/**
+	 * 번호 표시 토글(기본 켜짐). 위젯 콤보("출력"/"숨김")가 이 값을 바꾸고 RebuildSlotNumbers 로 반영한다.
+	 * bUseDecalView 처럼 위젯이 없을 때(RPC·시작 자동 로딩)도 매니저 값이 기준이다.
+	 */
+	UPROPERTY(Transient, BlueprintReadWrite, Category = "Parking|Number")
+	bool bShowSlotNumbers = true;
+
+	/**
+	 * 주차면 번호를 바닥에 다시 그린다. 대상은 둘 —
+	 *  ① Presets 의 면: 번호는 PresetMaker 리스트의 [시작~끝] 과 같은 카메라 기준 할당
+	 *     (UParkingGeometryLibrary::CalculateParkingSpaceAssignments) + 면 순서.
+	 *  ② 레벨의 BP_ParkingSlot ISM 면: 액터 이름 번호순 → 인스턴스 순으로 1부터. 인벤토리(inventory_LV_Park_03)
+	 *     실측으로 이 순서가 SW 끝→NE 01…14 이며 카메라 문서(Docs/20260906_174500)의 면 번호와 같다.
+	 * bShowSlotNumbers=false 면 전부 숨긴다(풀은 유지). 글자는 가장 가까운 카메라 쪽에서 바로 읽히도록 눕힌다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Parking|Number")
+	void RebuildSlotNumbers(const TArray<FParkingPreset>& Presets);
+
+	/** 번호만 숨긴다(풀 유지). */
+	UFUNCTION(BlueprintCallable, Category = "Parking|Number")
+	void ClearSlotNumbers();
+
+	/** 월드의 매니저를 찾고 없으면 스폰한다(ALightControlManager::GetOrSpawn 과 같은 규약). */
+	static AParkingPresetManager* GetOrSpawn(UWorld* World);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Parking|Number") float SlotNumberSizeCm = 120.f;         // 글자 높이(cm). 면 폭의 45% 를 넘지 않게 자동 축소
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Parking|Number") float SlotNumberZ = 6.f;                // 바닥 위 띄움(cm) — 라인(FaceHeightZ 5) 보다 위
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Parking|Number") FColor SlotNumberColor = FColor(255, 200, 0); // 흰 라인·베이지 노면과 갈리는 노랑
+
 	/**
 	 * 프리셋 P 의 FaceIndex 번째 면의 바닥 사각형 4점(월드 cm)을 계산(순수 함수).
 	 * 반환 순서 = 기존 Local[4] 순서: (-,-),(-,+),(+,+),(+,-).
@@ -189,4 +220,13 @@ private:
 	void PlaceLineDecal(UDecalComponent* D, const FVector& A, const FVector& B, float ThicknessCm);
 	/** 슬롯 사각형 전체를 덮는 fill 데칼 배치. */
 	void PlaceFillDecal(UDecalComponent* D, const FVector(&Bottom)[4]);
+
+	// ---- 번호 텍스트 풀(데칼 풀과 같은 cursor 규약) ----
+	UPROPERTY(Transient) TArray<TObjectPtr<UTextRenderComponent>> NumberPool;
+	UTextRenderComponent* AcquireNumber(int32 Index);
+	/**
+	 * 면 중심에 번호를 눕혀 놓는다. AxisDir 은 면 길이축(수평), RowDir 은 열 방향(이웃 면 쪽, 없으면 0).
+	 * 글자 위쪽은 길이·폭 두 축 중 RowDir 에 수직인 축을 가장 가까운 카메라 반대쪽으로 둔다(도로 쪽에서 똑바로 읽힘).
+	 */
+	void PlaceNumber(UTextRenderComponent* T, const FVector& Center, const FVector& AxisDir, float SlotWidthCm, int32 Number, const FVector& RowDir);
 };

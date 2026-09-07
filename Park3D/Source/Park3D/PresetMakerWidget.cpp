@@ -13,6 +13,11 @@
 #include "Components/Border.h"
 #include "Components/TextBlock.h"
 #include "Components/Slider.h"
+#include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
+#include "Components/SizeBox.h"
+#include "Components/SizeBoxSlot.h"
+#include "Components/VerticalBoxSlot.h"
 #include "Park3DPanelStyle.h"
 #include "Styling/CoreStyle.h"
 #include "Blueprint/WidgetTree.h"
@@ -62,6 +67,34 @@ namespace
 	{
 		return FString::Printf(TEXT("%.3f"), V);
 	}
+
+	// 주차면 번호 콤보 항목. 순서가 곧 인덱스(0=출력, 1=숨김).
+	const TCHAR* const GSlotNumberShow = TEXT("출력");
+	const TCHAR* const GSlotNumberHide = TEXT("숨김");
+	constexpr float GSlotNumberFontSize = 14.f;
+
+	/** 콤보 드롭다운·항목 배경을 흰색으로(LevelSelectWidget::ApplyWhiteDropdown 과 같은 값). */
+	void ApplyWhiteDropdown(UComboBoxString* Combo)
+	{
+		FSlateBrush WhiteBrush;
+		WhiteBrush.DrawAs = ESlateBrushDrawType::RoundedBox;
+		WhiteBrush.TintColor = FSlateColor(FLinearColor::White);
+		WhiteBrush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
+		WhiteBrush.OutlineSettings.CornerRadii = FVector4(0.0, 0.0, 0.0, 0.0);
+		FSlateBrush HoverBrush = WhiteBrush;
+		HoverBrush.TintColor = FSlateColor(FLinearColor(0.85f, 0.85f, 0.85f));
+
+		FComboBoxStyle ComboStyle = Combo->GetWidgetStyle();
+		ComboStyle.ComboButtonStyle.MenuBorderBrush = WhiteBrush;
+		Combo->SetWidgetStyle(ComboStyle);
+
+		FTableRowStyle RowStyle = Combo->GetItemStyle();
+		RowStyle.EvenRowBackgroundBrush        = WhiteBrush;
+		RowStyle.OddRowBackgroundBrush         = WhiteBrush;
+		RowStyle.EvenRowBackgroundHoveredBrush = HoverBrush;
+		RowStyle.OddRowBackgroundHoveredBrush  = HoverBrush;
+		Combo->SetItemStyle(RowStyle);
+	}
 }
 
 
@@ -80,6 +113,54 @@ void UPresetMakerWidget::NativeConstruct()
 		bGroupDividersInserted = true;
 		Park3DPanelStyle::InsertGroupDividers(WidgetTree, Park3DPanelStyle::FindContentColumn(WidgetTree),
 			{ (UWidget*)Field_OffsetX, (UWidget*)Combo_DirType, (UWidget*)Check_UseDecal });
+	}
+
+	// "주차면 번호 | [출력▾]" 줄을 데칼 체크박스 줄 바로 아래에 한 번만 끼운다(구분선 삽입 뒤라 인덱스가 확정돼 있다).
+	if (!bSlotNumberRowInserted && WidgetTree)
+	{
+		bSlotNumberRowInserted = true;
+		UPanelWidget* Column = Park3DPanelStyle::FindContentColumn(WidgetTree);
+		UWidget* DecalRow = Park3DPanelStyle::FindRowIn(Column, Check_UseDecal);
+		if (Column && DecalRow)
+		{
+			UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+			Label->SetText(FText::FromString(TEXT("주차면 번호")));
+			Label->SetFontSize(GSlotNumberFontSize);
+
+			Combo_SlotNumber = WidgetTree->ConstructWidget<UComboBoxString>(UComboBoxString::StaticClass(), TEXT("Combo_SlotNumber"));
+			Combo_SlotNumber->AddOption(GSlotNumberShow);
+			Combo_SlotNumber->AddOption(GSlotNumberHide);
+			ApplyWhiteDropdown(Combo_SlotNumber);
+
+			UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+			if (UHorizontalBoxSlot* S = Cast<UHorizontalBoxSlot>(Row->AddChild(Label)))
+			{
+				S->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+				S->SetVerticalAlignment(VAlign_Center);
+			}
+			USizeBox* ComboBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+			ComboBox->SetWidthOverride(110.f);
+			ComboBox->AddChild(Combo_SlotNumber);
+			Row->AddChild(ComboBox);
+
+			if (UVerticalBoxSlot* VBSlot = Cast<UVerticalBoxSlot>(Column->InsertChildAt(Column->GetChildIndex(DecalRow) + 1, Row)))
+			{
+				VBSlot->SetPadding(FMargin(0.f, 5.f, 0.f, 0.f));
+			}
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[PresetMaker] 주차면 번호 콤보를 넣을 줄(Check_UseDecal)을 찾지 못했습니다."));
+		}
+	}
+	if (Combo_SlotNumber)
+	{
+		// BindUFunction: OnGenerateWidgetEvent 는 단일 다이내믹 델리게이트라 AddDynamic 이 없다(주차장 선택 콤보와 동일).
+		Combo_SlotNumber->OnGenerateWidgetEvent.BindUFunction(this, FName("HandleSlotNumberItem"));
+		Combo_SlotNumber->OnSelectionChanged.AddUniqueDynamic(this, &UPresetMakerWidget::HandleSlotNumberChanged);
+		// 표시 상태의 주인은 매니저다(RPC·재표시 사이에 바뀔 수 있다) — 열릴 때마다 매니저 값으로 맞춘다. Direct 라 핸들러는 무시.
+		AParkingPresetManager* Mgr = GetViewManager();
+		Combo_SlotNumber->SetSelectedIndex((Mgr && !Mgr->bShowSlotNumbers) ? 1 : 0);
 	}
 
 
@@ -757,6 +838,36 @@ void UPresetMakerWidget::HandleUseDecalChanged(bool bIsChecked)
 	RefreshView();
 }
 
+void UPresetMakerWidget::HandleSlotNumberChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+	if (SelectionType == ESelectInfo::Direct)
+	{
+		return; // NativeConstruct 의 동기화 선택 — 상태 변경이 아니다.
+	}
+	if (AParkingPresetManager* Mgr = GetViewManager())
+	{
+		Mgr->bShowSlotNumbers = (SelectedItem != GSlotNumberHide);
+		RefreshView();
+	}
+}
+
+UWidget* UPresetMakerWidget::HandleSlotNumberItem(FString Item)
+{
+	UTextBlock* Text = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+	Text->SetText(FText::FromString(Item));
+	Text->SetColorAndOpacity(FSlateColor(GTextPrimary));
+	Text->SetFontSize(GSlotNumberFontSize);
+
+	USizeBox* Row = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+	Row->SetHeightOverride(24.f);
+	if (USizeBoxSlot* S = Cast<USizeBoxSlot>(Row->AddChild(Text)))
+	{
+		S->SetPadding(FMargin(6, 0));
+		S->SetVerticalAlignment(VAlign_Center);
+	}
+	return Row;
+}
+
 // ─────────────────────────────────────────────────────────────
 // 월드 라인 뷰 (3차)
 // ─────────────────────────────────────────────────────────────
@@ -822,6 +933,9 @@ void UPresetMakerWidget::RefreshView()
 
 		// bUseDecal=false 면 RebuildDecals 내부에서 데칼을 전부 숨긴다.
 		Mgr->RebuildDecals(Presets, SelForView, DecalThickness, bUseDecal);
+
+		// 바닥 번호는 라인/데칼 모드와 무관 — 매니저의 bShowSlotNumbers(콤보가 바꾼다)를 따른다.
+		Mgr->RebuildSlotNumbers(Presets);
 	}
 }
 

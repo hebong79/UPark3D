@@ -8,6 +8,7 @@
 #include "../ParkingPresetManager.h"
 #include "../ParkingPresetTypes.h"
 #include "Components/DecalComponent.h"
+#include "Components/TextRenderComponent.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 
@@ -393,6 +394,84 @@ bool FParkingRefreshViewModeTest::RunTest(const FString& Parameters)
 	Mgr->bUseDecalView = false;
 	Mgr->RefreshView();
 	TestEqual(TEXT("TP-2 라인 모드 → 가시 데칼 0"), CountVisibleDecals(Mgr), 0);
+
+	Mgr->Destroy();
+	return true;
+}
+
+// ===== 주차면 바닥 번호(3D 텍스트) =====
+// 프리셋 6면 → 번호 6개(+ 에디터 월드에 BP_ParkingSlot 이 있으면 그만큼 더), 토글 off → 0, 번호는 할당 시작값부터 연속.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FParkingSlotNumberTest,
+	"Park3D.ParkingDecal.SlotNumbers",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FParkingSlotNumberTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = (GEngine && GEngine->GetWorldContexts().Num() > 0) ? GWorld : nullptr;
+	if (!World)
+	{
+		AddWarning(TEXT("에디터 월드 없음 — 주차면 번호 테스트 건너뜀."));
+		return true;
+	}
+
+	AParkingPresetManager* Mgr = World->SpawnActor<AParkingPresetManager>();
+	if (!TestNotNull(TEXT("매니저 스폰(SlotNumbers)"), Mgr)) return false;
+
+	auto VisibleNumbers = [Mgr]()
+	{
+		TArray<FString> Out;
+		TArray<UTextRenderComponent*> Texts;
+		Mgr->GetComponents<UTextRenderComponent>(Texts);
+		for (UTextRenderComponent* T : Texts)
+		{
+			if (T && T->GetVisibleFlag()) Out.Add(T->Text.ToString());
+		}
+		return Out;
+	};
+
+	FParkingPreset P;
+	P.PresetIdx = 3;
+	P.FaceCount = 6;
+	P.BoxSizeX = 2.5f;
+	P.BoxSizeZ = 5.0f;
+	TArray<FParkingPreset> Presets = { P };
+
+	// TN-1: 기본 켜짐 → 프리셋 6면 번호 1~6 이 모두 보인다.
+	TestTrue(TEXT("TN-1 bShowSlotNumbers 기본값 true"), Mgr->bShowSlotNumbers);
+	Mgr->RebuildSlotNumbers(Presets);
+	TArray<FString> Shown = VisibleNumbers();
+	TestTrue(TEXT("TN-1 번호 6개 이상 표시"), Shown.Num() >= 6);
+	for (int32 n = 1; n <= 6; ++n)
+	{
+		TestTrue(*FString::Printf(TEXT("TN-1 번호 %d 표시"), n), Shown.Contains(FString::FromInt(n)));
+	}
+
+	// TN-2: 글자 높이 상한 — 프리셋 면 폭 250cm 의 45% = 112.5 인 글자가 6개(기본 120 보다 작다).
+	// 에디터 월드의 레벨 면(LV_Park_01 은 폭 264 → 118.8)이 섞이므로 최대값이 아니라 개수로 본다.
+	{
+		TArray<UTextRenderComponent*> Texts;
+		Mgr->GetComponents<UTextRenderComponent>(Texts);
+		int32 Capped = 0;
+		float MaxSize = 0.f;
+		for (UTextRenderComponent* T : Texts)
+		{
+			if (!T || !T->GetVisibleFlag()) continue;
+			MaxSize = FMath::Max(MaxSize, T->WorldSize);
+			if (FMath::IsNearlyEqual(T->WorldSize, 112.5f, 1e-2f)) ++Capped;
+		}
+		TestEqual(TEXT("TN-2 프리셋 6면 글자 높이 = 250×45% = 112.5"), Capped, 6);
+		TestTrue(*FString::Printf(TEXT("TN-2 글자 높이 ≤ 기본 120 (got %.1f)"), MaxSize), MaxSize <= 120.f + 1e-3f);
+	}
+
+	// TN-3: 토글 off → 전부 숨김(풀 유지).
+	Mgr->bShowSlotNumbers = false;
+	Mgr->RebuildSlotNumbers(Presets);
+	TestEqual(TEXT("TN-3 off → 가시 번호 0"), VisibleNumbers().Num(), 0);
+
+	// TN-4: 다시 on → 같은 개수(풀 재사용).
+	Mgr->bShowSlotNumbers = true;
+	Mgr->RebuildSlotNumbers(Presets);
+	TestEqual(TEXT("TN-4 on → 개수 복원"), VisibleNumbers().Num(), Shown.Num());
 
 	Mgr->Destroy();
 	return true;

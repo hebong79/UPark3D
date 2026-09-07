@@ -8,6 +8,7 @@
 #include "Blueprint/UserWidget.h"
 #include "ParkingPresetTypes.h"
 #include "Park3DPickInput.h"
+#include "Types/SlateEnums.h"
 #include "PresetMakerWidget.generated.h"
 
 class UButton;
@@ -214,12 +215,25 @@ protected:
 	UFUNCTION() void HandleDecalThicknessChanged(float Value);
 	UFUNCTION() void HandleUseDecalChanged(bool bIsChecked);
 
+	// 주차면 번호 콤보("출력"/"숨김") → 매니저 bShowSlotNumbers 반영 후 RefreshView. 코드 선택(Direct)은 무시.
+	UFUNCTION() void HandleSlotNumberChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+	/** 콤보 항목/본문 위젯 — 흰 드롭다운 위에 검은 글자(주차장 선택 콤보와 같은 규약). */
+	UFUNCTION() UWidget* HandleSlotNumberItem(FString Item);
+
 	// 리스트 엔트리 클릭(호버 기준으로 클릭된 엔트리 판별)
 	UFUNCTION() void HandleEntryClicked();
 
 private:
 	/** 묶음 구분선은 한 번만 넣는다 — NativeConstruct 는 패널을 다시 열 때마다 돈다. */
 	bool bGroupDividersInserted = false;
+
+	/**
+	 * 주차면 번호 출력 콤보(C++ 로 만들어 데칼 체크박스 줄 아래에 끼운다). WBP 는 git 밖이고
+	 * 쿠킹된 WBP 의 C++ 베이스에 UPROPERTY 를 더하면 패키지가 Bad export index 로 죽으므로(2026-08-12)
+	 * 바인딩·UPROPERTY 없이 둔다 — 위젯 트리가 자식으로 붙들고 있어 GC 에 안전하다.
+	 */
+	bool bSlotNumberRowInserted = false;
+	UComboBoxString* Combo_SlotNumber = nullptr;
 
 	/** 동적으로 만든 프리셋 리스트 엔트리 버튼들. */
 	UPROPERTY(Transient)

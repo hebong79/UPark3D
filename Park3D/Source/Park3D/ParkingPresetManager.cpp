@@ -3,12 +3,90 @@
 #include "ParkingPresetManager.h"
 #include "ParkingGeometryLibrary.h"
 #include "PresetMakerWidget.h"
+#include "CameraControlManager.h"
+#include "PTZCameraActor.h"
 #include "Config/Park3DAppConfig.h"
 #include "DrawDebugHelpers.h"
 #include "Components/SceneComponent.h"
 #include "Components/DecalComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
+#include "Components/TextRenderComponent.h"
+#include "Engine/StaticMesh.h"
+#include "EngineUtils.h"
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
+
+namespace
+{
+	/** 레벨 BP_ParkingSlot ISM 면 하나. 인스턴스 자체에는 번호가 없어 나열 순서가 곧 번호다. */
+	struct FLevelSlot
+	{
+		FVector Center = FVector::ZeroVector;
+		FVector AxisDir = FVector::ForwardVector; // 길이축(수평 단위 벡터)
+		float WidthCm = 0.f;                      // 짧은 변
+	};
+
+	/** "BP_ParkingSlot_C_12" 의 끝 숫자. 없으면 0. 이름 문자열 정렬은 _10 이 _2 앞에 오므로 숫자로 비교한다. */
+	int32 TrailingNumber(const FString& Name)
+	{
+		int32 End = Name.Len();
+		while (End > 0 && FChar::IsDigit(Name[End - 1])) --End;
+		return End < Name.Len() ? FCString::Atoi(*Name.Mid(End)) : 0;
+	}
+
+	/**
+	 * 레벨의 BP_ParkingSlot ISM_Slot 인스턴스를 액터 이름 번호순 → 인스턴스 순으로 모은다.
+	 * 선별 규약(클래스 이름 접두사 + 컴포넌트 이름 "Slot")은 ACarPlacementManager 의 FindLevelSlotAtWorld 와 같다.
+	 */
+	void CollectLevelSlots(UWorld* World, TArray<FLevelSlot>& Out)
+	{
+		TArray<AActor*> SlotActors;
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			if (It->GetClass()->GetName().StartsWith(TEXT("BP_ParkingSlot")))
+			{
+				SlotActors.Add(*It);
+			}
+		}
+		SlotActors.Sort([](const AActor& A, const AActor& B)
+		{
+			const int32 NA = TrailingNumber(A.GetName());
+			const int32 NB = TrailingNumber(B.GetName());
+			return NA != NB ? NA < NB : A.GetName() < B.GetName();
+		});
+
+		for (AActor* Actor : SlotActors)
+		{
+			TArray<UInstancedStaticMeshComponent*> Comps;
+			Actor->GetComponents(Comps);
+			for (UInstancedStaticMeshComponent* Comp : Comps)
+			{
+				if (!Comp || !Comp->GetStaticMesh() || !Comp->GetName().Contains(TEXT("Slot")))
+				{
+					continue; // ISM_Stopper·ISM_Space 제외
+				}
+				const FVector Extent = Comp->GetStaticMesh()->GetBounds().BoxExtent;
+				for (int32 i = 0; i < Comp->GetInstanceCount(); ++i)
+				{
+					FTransform T;
+					if (!Comp->GetInstanceTransform(i, T, /*bWorldSpace=*/true))
+					{
+						continue;
+					}
+					const FVector Scale = T.GetScale3D();
+					const float HalfX = Extent.X * FMath::Abs(Scale.X);
+					const float HalfY = Extent.Y * FMath::Abs(Scale.Y);
+					FLevelSlot S;
+					S.Center = T.GetLocation();
+					// 긴 변이 주차 깊이(차량 길이축). 플레인 로컬 X 가 길면 X 축, 아니면 Y 축.
+					S.AxisDir = (HalfX >= HalfY ? T.GetUnitAxis(EAxis::X) : T.GetUnitAxis(EAxis::Y)).GetSafeNormal2D();
+					S.WidthCm = 2.f * FMath::Min(HalfX, HalfY);
+					Out.Add(S);
+				}
+			}
+		}
+	}
+}
 
 AParkingPresetManager::AParkingPresetManager()
 {
@@ -383,6 +461,22 @@ void AParkingPresetManager::RefreshView()
 		RebuildAll(StoredPresets, SelectedPresetIndex, bShow3DView);
 		RebuildDecals(StoredPresets, SelectedPresetIndex, DecalLineThicknessCm, false); // 데칼 전부 숨김
 	}
+	RebuildSlotNumbers(StoredPresets);
+}
+
+AParkingPresetManager* AParkingPresetManager::GetOrSpawn(UWorld* World)
+{
+	if (!World)
+	{
+		return nullptr;
+	}
+	for (TActorIterator<AParkingPresetManager> It(World); It; ++It)
+	{
+		return *It;
+	}
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	return World->SpawnActor<AParkingPresetManager>(AParkingPresetManager::StaticClass(), FTransform::Identity, Params);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -508,5 +602,150 @@ void AParkingPresetManager::ClearDecals()
 	for (TObjectPtr<UDecalComponent>& D : DecalPool)
 	{
 		if (D) D->SetVisibility(false);
+	}
+}
+
+// ─────────────────────────────────────────────────────────────
+// 주차면 바닥 번호(3D 텍스트)
+// ─────────────────────────────────────────────────────────────
+
+UTextRenderComponent* AParkingPresetManager::AcquireNumber(int32 Index)
+{
+	if (NumberPool.IsValidIndex(Index) && NumberPool[Index])
+	{
+		return NumberPool[Index];
+	}
+
+	// 엔진 기본 폰트(RobotoDistanceField)는 Offline 캐시라 숫자가 그려진다 — 프로젝트 한글 폰트(Runtime)를
+	// 걸면 아무것도 안 나온다(팀 보드 #63, CarPlateNumberWidget.h). 여기는 숫자만 쓰므로 기본값을 그대로 둔다.
+	UTextRenderComponent* T = NewObject<UTextRenderComponent>(this);
+	T->SetupAttachment(RootComponent);
+	T->SetHorizontalAlignment(EHTA_Center);
+	T->SetVerticalAlignment(EVRTA_TextCenter);
+	T->SetCastShadow(false);
+	T->RegisterComponent();
+	NumberPool.Add(T);
+	return T;
+}
+
+void AParkingPresetManager::PlaceNumber(UTextRenderComponent* T, const FVector& Center, const FVector& AxisDir, float SlotWidthCm, int32 Number, const FVector& RowDir)
+{
+	if (!T) return;
+
+	// 글자 위쪽 = 면의 두 축(길이·폭) 중 **열 방향(이웃 면 쪽)에 수직인 축**. 수직주차는 열 방향이 폭 축이라
+	// 길이축이 되고, 객리단길 같은 평행주차는 열 방향이 길이축이라 폭 축이 된다 — 어느 쪽이든 통로/도로에서
+	// 글자가 똑바로 서고 번호가 도로를 따라 읽힌다. 부호는 가장 가까운 카메라(도로 쪽) 반대 방향.
+	// (버린 규칙 둘: ① 길이축 고정 → 평행주차에서 옆으로 누움 ② "가장 가까운 카메라와 나란한 축" →
+	//  객리단 카메라가 폴대 끝(도로 쪽 2~4m)에 있어 카메라 벡터가 열 방향 성분이 더 커 ①과 같아진다. 둘 다 캡처로 확인.)
+	FVector Up = AxisDir.GetSafeNormal2D();
+	if (Up.IsNearlyZero()) Up = FVector::ForwardVector;
+	if (!RowDir.IsNearlyZero())
+	{
+		const FVector Perp(-Up.Y, Up.X, 0.f); // 폭 축
+		if (FMath::Abs(FVector::DotProduct(Perp, RowDir)) < FMath::Abs(FVector::DotProduct(Up, RowDir)))
+		{
+			Up = Perp;
+		}
+	}
+	for (TActorIterator<ACameraControlManager> It(GetWorld()); It; ++It)
+	{
+		float BestSq = TNumericLimits<float>::Max();
+		FVector ToCam = FVector::ZeroVector;
+		for (int32 i = 0; i < It->GetCameraCount(); ++i)
+		{
+			const APTZCameraActor* C = It->GetCamera(i);
+			if (!C) continue;
+			const FVector D = C->GetActorLocation() - Center;
+			const float Sq = static_cast<float>(D.SizeSquared2D());
+			if (Sq < BestSq) { BestSq = Sq; ToCam = D; }
+		}
+		if (FVector::DotProduct(Up, ToCam) > 0.f)
+		{
+			Up = -Up; // 카메라 반대쪽
+		}
+		break;
+	}
+
+	// TextRender 메시는 로컬 YZ 평면(법선 +X, 읽는 방향 −Y, 위 +Z) — 법선을 월드 위로, 위쪽을 Up 으로 눕힌다.
+	const FRotator Rot = FRotationMatrix::MakeFromXZ(FVector::UpVector, Up).Rotator();
+	T->SetWorldLocationAndRotation(FVector(Center.X, Center.Y, SlotNumberZ), Rot);
+	// 두 자리 숫자 폭 ≈ 높이 × 1.1 — 좁은 면에서 라인을 넘지 않도록 면 폭의 45% 로 상한.
+	const float Size = SlotWidthCm > 0.f ? FMath::Min(SlotNumberSizeCm, SlotWidthCm * 0.45f) : SlotNumberSizeCm;
+	T->SetWorldSize(Size);
+	T->SetTextRenderColor(SlotNumberColor);
+	T->SetText(FText::AsNumber(Number));
+	T->SetVisibility(true);
+}
+
+void AParkingPresetManager::RebuildSlotNumbers(const TArray<FParkingPreset>& Presets)
+{
+	if (!bShowSlotNumbers)
+	{
+		ClearSlotNumbers();
+		return;
+	}
+
+	struct FJob { FVector Center; FVector AxisDir; float WidthCm; int32 Number; };
+	TArray<FJob> Jobs;
+
+	// ① 프리셋 면 — 번호는 리스트의 [시작~끝] 과 같은 할당(카메라 → 프리셋 순 연속 부여).
+	const TArray<FParkingSpaceAssignment> Assigns = UParkingGeometryLibrary::CalculateParkingSpaceAssignments(Presets);
+	for (const FParkingPreset& P : Presets)
+	{
+		const FParkingSpaceAssignment* A = Assigns.FindByPredicate([&P](const FParkingSpaceAssignment& X) { return X.PresetIdx == P.PresetIdx; });
+		const int32 Start = A ? A->StartFaceNum : 1;
+		for (int32 j = 0; j < P.FaceCount; ++j)
+		{
+			FVector C[4];
+			ComputeSlotCorners(P, j, MetersToUU, FaceHeightZ, C);
+			// [0]→[1] 이 zSize(길이) 변, [0]→[3] 이 xSize(폭) 변(FindSlotAtWorld 와 같은 규약).
+			const FVector EdgeZ = C[1] - C[0];
+			const FVector EdgeX = C[3] - C[0];
+			const bool bZLong = EdgeZ.SizeSquared2D() >= EdgeX.SizeSquared2D();
+			Jobs.Add({ (C[0] + C[1] + C[2] + C[3]) * 0.25f, bZLong ? EdgeZ : EdgeX, static_cast<float>((bZLong ? EdgeX : EdgeZ).Size2D()), Start + j });
+		}
+	}
+	const int32 PresetCount = Jobs.Num();
+
+	// ② 레벨 면 — 항상 있는 쪽. 프리셋과 별개로 1부터.
+	TArray<FLevelSlot> LevelSlots;
+	if (UWorld* World = GetWorld())
+	{
+		CollectLevelSlots(World, LevelSlots);
+	}
+	for (int32 i = 0; i < LevelSlots.Num(); ++i)
+	{
+		Jobs.Add({ LevelSlots[i].Center, LevelSlots[i].AxisDir, LevelSlots[i].WidthCm, i + 1 });
+	}
+
+	// 열 방향 = 가장 가까운 다른 면 중심 쪽(면이 하나뿐이면 없음 → 길이축).
+	for (int32 i = 0; i < Jobs.Num(); ++i)
+	{
+		FVector RowDir = FVector::ZeroVector;
+		float BestSq = TNumericLimits<float>::Max();
+		for (int32 k = 0; k < Jobs.Num(); ++k)
+		{
+			if (k == i) continue;
+			const FVector D = Jobs[k].Center - Jobs[i].Center;
+			const float Sq = static_cast<float>(D.SizeSquared2D());
+			if (Sq > 1.f && Sq < BestSq) { BestSq = Sq; RowDir = D.GetSafeNormal2D(); }
+		}
+		PlaceNumber(AcquireNumber(i), Jobs[i].Center, Jobs[i].AxisDir, Jobs[i].WidthCm, Jobs[i].Number, RowDir);
+	}
+
+	for (int32 idx = Jobs.Num(); idx < NumberPool.Num(); ++idx)
+	{
+		if (NumberPool[idx]) NumberPool[idx]->SetVisibility(false);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[ParkingManager] 주차면 번호 %d개 표시(프리셋 %d, 레벨 %d, 풀 %d)"),
+		Jobs.Num(), PresetCount, LevelSlots.Num(), NumberPool.Num());
+}
+
+void AParkingPresetManager::ClearSlotNumbers()
+{
+	for (TObjectPtr<UTextRenderComponent>& T : NumberPool)
+	{
+		if (T) T->SetVisibility(false);
 	}
 }

@@ -8,6 +8,7 @@
 #include "CarPlacementWidget.h"
 #include "LevelSelectWidget.h"
 #include "MainMenuWidget.h"
+#include "ParkingPresetManager.h" // 시작 시 주차면 바닥 번호를 한 번 그린다.
 #include "PresetMakerWidget.h"
 #include "Config/Park3DAppConfig.h"
 #include "Config/CarCatalogConfig.h"
@@ -182,6 +183,14 @@ void APark3DGameMode::BeginPlay()
 
 	// 시작 설정 파일(Save/Config/config_pmaker.json) 적용 — 메뉴/패널·카메라 매니저가 준비된 뒤여야 한다.
 	ApplyStartupConfig();
+
+	// 주차면 바닥 번호(기본 출력). 프리셋 매니저는 패널을 열어야 생기므로 여기서 확보해 한 번 그린다 —
+	// 그래야 프리셋 파일이 비어 있는 주차장(서신·객리단)에서도 레벨 면의 번호가 시작부터 보인다.
+	// 카메라 매니저(ApplyStartupConfig 가 파일을 적용) 뒤여야 글자 방향이 카메라 쪽을 본다.
+	if (AParkingPresetManager* PresetMgr = AParkingPresetManager::GetOrSpawn(GetWorld()))
+	{
+		PresetMgr->RebuildSlotNumbers(PresetMgr->ResolvePresets());
+	}
 
 	// 주차 시뮬레이션 HUD 는 만들어만 두고 숨긴 채 시작한다(메인 메뉴 "주차 시뮬레이션" 버튼으로 연다).
 	EnsureSimPanel();

@@ -738,6 +738,61 @@ void AParkingPresetManager::CollectSlotNumbers(const TArray<FParkingPreset>& Pre
 		Info.LevelInstance = LevelSlots[i].Instance;
 		Out.Add(Info);
 	}
+
+	ApplyNumberAnchors(Out);
+}
+
+void AParkingPresetManager::ApplyNumberAnchors(TArray<FParkingSlotNumberInfo>& Slots) const
+{
+	// 순번은 항상 남긴다 — 기준점을 걸지 않아도 사람이 면을 부를 이름이고, 패널 안내 문구가 이것을 보여 준다.
+	for (FParkingSlotNumberInfo& S : Slots)
+	{
+		S.BaseNumber = S.Number;
+	}
+	if (NumberAnchors.Num() == 0)
+	{
+		return;
+	}
+	TMap<FString, int32> ByKey;
+	for (const FSlotNumberAnchor& A : NumberAnchors)
+	{
+		ByKey.Add(A.FaceKey, A.Number); // 같은 키는 뒤에 온 것이 덮는다.
+	}
+
+	bool bRunning = false;
+	bool bPrevFromPreset = true;
+	int32 Next = 0;
+	for (FParkingSlotNumberInfo& S : Slots)
+	{
+		if (S.bFromPreset != bPrevFromPreset)
+		{
+			bRunning = false; // 프리셋 면 → 레벨 면 경계: 이어 매기기를 끊는다(두 묶음은 독립).
+			bPrevFromPreset = S.bFromPreset;
+		}
+		if (const int32* Start = ByKey.Find(S.FaceKey()))
+		{
+			Next = *Start;
+			bRunning = true;
+		}
+		if (bRunning)
+		{
+			S.Number = Next++;
+		}
+	}
+}
+
+void AParkingPresetManager::SetNumberAnchors(const TArray<FSlotNumberAnchor>& InAnchors)
+{
+	NumberAnchors.Reset();
+	for (const FSlotNumberAnchor& A : InAnchors)
+	{
+		if (!A.FaceKey.IsEmpty() && A.Number > 0)
+		{
+			NumberAnchors.Add(A);
+		}
+	}
+	UE_LOG(LogTemp, Log, TEXT("[ParkingManager] 번호 기준점 %d개 적용"), NumberAnchors.Num());
+	RebuildSlotNumbers(ResolvePresets());
 }
 
 bool AParkingPresetManager::FindSlotNumberAtWorld(const FVector& WorldLoc, FParkingSlotNumberInfo& OutInfo)

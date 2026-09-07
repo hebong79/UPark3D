@@ -257,6 +257,21 @@ bool UCameraControlLibrary::LoadFromJson(const FString& Path, FCameraPosList& Ou
 	return true;
 }
 
+void UCameraControlLibrary::CollectNumberAnchors(const FCameraPosList& Data, TArray<FSlotNumberAnchor>& Out)
+{
+	Out.Reset();
+	for (const FCameraPos& Cam : Data.datas)
+	{
+		for (const FCamDir& Dir : Cam.datas)
+		{
+			if (!Dir.start_face.IsEmpty() && Dir.start_slot > 0)
+			{
+				Out.Add(FSlotNumberAnchor{ Dir.start_face, Dir.start_slot });
+			}
+		}
+	}
+}
+
 void UCameraControlLibrary::NormalizeLoaded(FCameraPosList& Data, bool bSourceIsUnreal)
 {
 	for (FCameraPos& CamPos : Data.datas)

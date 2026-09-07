@@ -8,6 +8,7 @@
 #include "CoreMinimal.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "CameraControlTypes.h"
+#include "ParkingPresetManager.h" // FSlotNumberAnchor
 #include "CameraControlLibrary.generated.h"
 
 UCLASS()
@@ -124,6 +125,13 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Camera|Data")
 	static bool LoadFromJson(const FString& Path, FCameraPosList& Out);
+
+	/**
+	 * 카메라 목록의 모든 프리셋에서 번호 재부여 기준점(start_face + start_slot)을 모은다.
+	 * 카메라 → 프리셋 순서 그대로이며, 매니저는 같은 면의 중복을 "뒤에 온 것이 이긴다"로 푼다.
+	 * 패널(CamData)과 RPC(PresetMemory)가 같은 규칙으로 매니저에 넘기기 위한 한 곳.
+	 */
+	static void CollectNumberAnchors(const FCameraPosList& Data, TArray<FSlotNumberAnchor>& Out);
 
 private:
 	/** 로드 직후 각 FCamDir 에 기본값 보정 + pan/tilt 동기화 적용(§12-C). */

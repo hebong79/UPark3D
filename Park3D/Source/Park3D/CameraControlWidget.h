@@ -115,6 +115,9 @@ public:
 	// 포인터는 비-UPROPERTY 로 둔다. 위젯 트리가 자식으로 붙들고 있어 GC 에 안전하다(PresetMaker 콤보와 같은 방식).
 	UEditableTextBox* Field_StartSlot = nullptr;
 	UTextBlock* Txt_StartSlotHint = nullptr;
+	/** 줄에 올라와 있는 기준 면(FParkingSlotNumberInfo::FaceKey)과 그 순번. '수정' 전까지는 칸의 값이고 프리셋 값이 아니다. */
+	FString PickedStartFace;
+	int32 PickedStartBase = 0;
 
 	// ---- 설정 ----
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
@@ -325,16 +328,28 @@ private:
 	 */
 	void BuildStartSlotRow();
 
-	/** 현재 프리셋의 start_slot 을 입력칸에 표시한다(0 이면 빈칸). */
-	void FillStartSlotField(int32 StartSlot);
+	/** 프리셋의 시작 슬롯(start_slot/start_face)을 줄에 올린다 — 칸 값·기준 면·안내 문구. */
+	void FillStartSlotRow(const FCamDir& Dir);
+
+	/** 기준 면 유무·순번에 맞춰 안내 문구를 바꾼다. */
+	void RefreshStartSlotHint();
 
 	/** 입력칸의 숫자(빈칸/0 = 미지정). */
 	int32 ReadStartSlotField() const;
 
+	/** 줄의 값(칸 + 기준 면)을 프리셋에 쓴다. 숫자가 0 이면 기준 면도 함께 지운다. */
+	void WriteStartSlotTo(FCamDir& Dir) const;
+
 	/**
-	 * LShift + 좌클릭으로 바닥 주차면을 찍어 그 번호를 입력칸에 넣는다(매 틱 호출).
+	 * CamData 의 모든 프리셋에서 기준점을 모아 매니저에 넘겨 바닥 번호를 다시 매긴다.
+	 * 프리셋 값이 바뀌는 곳(수정·추가·삭제·열기·초기화·카메라 삭제)마다 부른다 — 칸 편집만으로는 안 부른다.
+	 */
+	void SyncNumberAnchors();
+
+	/**
+	 * LShift + 좌클릭으로 바닥 주차면을 찍어 그 면을 기준 면으로 올리고 현재 번호를 입력칸에 넣는다(매 틱 호출).
 	 * 모드 버튼이 없다 — 수정키를 누르고 있는 것 자체가 지정 의사다(사용자 결정, 2026-09-07).
-	 * 값은 칸에만 들어가고 프리셋 반영은 기존 필드들과 같이 "수정" 버튼이 한다.
+	 * 값은 줄에만 들어가고 프리셋 반영(과 바닥 재부여)은 기존 필드들과 같이 "수정" 버튼이 한다.
 	 */
 	void TickStartSlotPick(APlayerController* PC, bool bOverPanel);
 	/** 누르는 동안 이동을 시작한다(이미 다른 방향이면 교체). */

@@ -141,7 +141,7 @@ public:
 	static AParkingPresetManager* GetOrSpawn(UWorld* World);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Parking|Number") float SlotNumberSizeCm = 120.f;         // 글자 높이(cm). 면 폭의 45% 를 넘지 않게 자동 축소
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Parking|Number") float SlotNumberZ = 6.f;                // 바닥 위 띄움(cm) — 라인(FaceHeightZ 5) 보다 위
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Parking|Number") float SlotNumberZ = 6.f;                // 면 판 **위로** 띄우는 상대 높이(cm). 절대값이면 면이 높은 레벨에서 판 밑에 깔린다
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Parking|Number") FColor SlotNumberColor = FColor(255, 200, 0); // 흰 라인·베이지 노면과 갈리는 노랑
 
 	/**

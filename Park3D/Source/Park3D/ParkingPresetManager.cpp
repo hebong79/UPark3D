@@ -632,21 +632,24 @@ void AParkingPresetManager::PlaceNumber(UTextRenderComponent* T, const FVector& 
 {
 	if (!T) return;
 
-	// 글자 위쪽 = 면의 두 축(길이·폭) 중 **열 방향(이웃 면 쪽)에 수직인 축**. 수직주차는 열 방향이 폭 축이라
-	// 길이축이 되고, 객리단길 같은 평행주차는 열 방향이 길이축이라 폭 축이 된다 — 어느 쪽이든 통로/도로에서
-	// 글자가 똑바로 서고 번호가 도로를 따라 읽힌다. 부호는 가장 가까운 카메라(도로 쪽) 반대 방향.
+	// 글자 축 = 면의 두 축(길이·폭) 중 **열 방향(이웃 면 쪽)에 수직인 축**. 수직주차는 열 방향이 폭 축이라
+	// 길이축이 되고, 객리단길 같은 평행주차는 열 방향이 길이축이라 폭 축이 된다 — 어느 쪽이든 글자가
+	// 면 안에 세로로 눕고 번호가 열을 따라 나란히 읽힌다.
 	// (버린 규칙 둘: ① 길이축 고정 → 평행주차에서 옆으로 누움 ② "가장 가까운 카메라와 나란한 축" →
 	//  객리단 카메라가 폴대 끝(도로 쪽 2~4m)에 있어 카메라 벡터가 열 방향 성분이 더 커 ①과 같아진다. 둘 다 캡처로 확인.)
-	FVector Up = AxisDir.GetSafeNormal2D();
-	if (Up.IsNearlyZero()) Up = FVector::ForwardVector;
+	FVector TextAxis = AxisDir.GetSafeNormal2D();
+	if (TextAxis.IsNearlyZero()) TextAxis = FVector::ForwardVector;
 	if (!RowDir.IsNearlyZero())
 	{
-		const FVector Perp(-Up.Y, Up.X, 0.f); // 폭 축
-		if (FMath::Abs(FVector::DotProduct(Perp, RowDir)) < FMath::Abs(FVector::DotProduct(Up, RowDir)))
+		const FVector Perp(-TextAxis.Y, TextAxis.X, 0.f); // 폭 축
+		if (FMath::Abs(FVector::DotProduct(Perp, RowDir)) < FMath::Abs(FVector::DotProduct(TextAxis, RowDir)))
 		{
-			Up = Perp;
+			TextAxis = Perp;
 		}
 	}
+	// 부호: 축이 **가장 가까운 카메라를 향하게** 둔다. 반대로 두면 카메라 화면에서 숫자가 거꾸로 나온다 —
+	// `MakeFromXZ` 의 로컬 +Z 는 글자 위쪽이 아니라 아래쪽이기 때문이다(엔진 정점 Z = −Top).
+	// 감시 카메라 화면이 이 앱의 판정 화면이므로 그쪽에서 바로 읽히는 것을 기준으로 삼는다. 캡처로 확정.
 	for (TActorIterator<ACameraControlManager> It(GetWorld()); It; ++It)
 	{
 		float BestSq = TNumericLimits<float>::Max();
@@ -659,16 +662,18 @@ void AParkingPresetManager::PlaceNumber(UTextRenderComponent* T, const FVector& 
 			const float Sq = static_cast<float>(D.SizeSquared2D());
 			if (Sq < BestSq) { BestSq = Sq; ToCam = D; }
 		}
-		if (FVector::DotProduct(Up, ToCam) > 0.f)
+		if (FVector::DotProduct(TextAxis, ToCam) < 0.f)
 		{
-			Up = -Up; // 카메라 반대쪽
+			TextAxis = -TextAxis;
 		}
 		break;
 	}
 
-	// TextRender 메시는 로컬 YZ 평면(법선 +X, 읽는 방향 −Y, 위 +Z) — 법선을 월드 위로, 위쪽을 Up 으로 눕힌다.
-	const FRotator Rot = FRotationMatrix::MakeFromXZ(FVector::UpVector, Up).Rotator();
-	T->SetWorldLocationAndRotation(FVector(Center.X, Center.Y, SlotNumberZ), Rot);
+	// TextRender 메시는 로컬 YZ 평면(법선 +X) — 법선을 월드 위로 눕히고 로컬 +Z 를 TextAxis 에 맞춘다.
+	const FRotator Rot = FRotationMatrix::MakeFromXZ(FVector::UpVector, TextAxis).Rotator();
+	// 높이는 **면 자신의 Z 기준 상대**여야 한다 — 절대 6cm 로 박았더니 LV_Park_01(면 판 z=10cm)에서
+	// 글자가 판 밑에 깔려 위에서 안 보였다(LV_Park_03 은 z=1.1cm 라 우연히 보였다). 캡처로 확인.
+	T->SetWorldLocationAndRotation(FVector(Center.X, Center.Y, Center.Z + SlotNumberZ), Rot);
 	// 두 자리 숫자 폭 ≈ 높이 × 1.1 — 좁은 면에서 라인을 넘지 않도록 면 폭의 45% 로 상한.
 	const float Size = SlotWidthCm > 0.f ? FMath::Min(SlotNumberSizeCm, SlotWidthCm * 0.45f) : SlotNumberSizeCm;
 	T->SetWorldSize(Size);

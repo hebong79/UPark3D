@@ -73,8 +73,13 @@ namespace
 	const TCHAR* const GSlotNumberHide = TEXT("숨김");
 	constexpr float GSlotNumberFontSize = 14.f;
 
-	/** 콤보 드롭다운·항목 배경을 흰색으로(LevelSelectWidget::ApplyWhiteDropdown 과 같은 값). */
-	void ApplyWhiteDropdown(UComboBoxString* Combo)
+	/**
+	 * 콤보 드롭다운·항목 배경을 흰색으로(LevelSelectWidget 의 같은 이름 함수와 같은 값).
+	 * 이름에 접두사를 붙인 이유 — 익명 네임스페이스라도 **유니티 빌드가 두 .cpp 를 한 TU 로 합치면
+	 * 같은 이름이 재정의 에러(C2084)가 된다**. LevelSelectWidget.cpp 에 이미 `ApplyWhiteDropdown` 이 있고,
+	 * 어떤 파일이 유니티에 묶이는지는 Adaptive Unity 가 수정 이력에 따라 바꾸므로 언제 터질지 모른다.
+	 */
+	void ApplyPresetWhiteDropdown(UComboBoxString* Combo)
 	{
 		FSlateBrush WhiteBrush;
 		WhiteBrush.DrawAs = ESlateBrushDrawType::RoundedBox;
@@ -130,7 +135,7 @@ void UPresetMakerWidget::NativeConstruct()
 			Combo_SlotNumber = WidgetTree->ConstructWidget<UComboBoxString>(UComboBoxString::StaticClass(), TEXT("Combo_SlotNumber"));
 			Combo_SlotNumber->AddOption(GSlotNumberShow);
 			Combo_SlotNumber->AddOption(GSlotNumberHide);
-			ApplyWhiteDropdown(Combo_SlotNumber);
+			ApplyPresetWhiteDropdown(Combo_SlotNumber);
 
 			UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
 			if (UHorizontalBoxSlot* S = Cast<UHorizontalBoxSlot>(Row->AddChild(Label)))

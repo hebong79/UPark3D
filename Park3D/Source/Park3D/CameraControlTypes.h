@@ -76,13 +76,13 @@ struct FCamDir
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") FString  start_face;
 	/**
-	 * 기준 면부터 이어 매길 면의 **개수**. N 이면 수동/자동 어느 모드든 기준 면부터 N 장을 강제로 매긴다(번호가 겹쳐도 막지 않는다).
-	 * 0 이면 auto_renumber 가 범위를 정한다. 예) start_slot=1, start_count=7 → 기준 면부터 7개 면이 1~7, 그 뒤는 원래 순번.
+	 * 수동(auto_renumber=false)일 때 기준 면부터 강제로 매길 면의 **개수**. 그 뒤 면은 손대지 않는다(번호가 겹쳐도 막지 않는다).
+	 * 0=기준 면 한 장. 예) start_slot=1, start_count=7 → 기준 면부터 7개 면이 1~7, 그 뒤는 원래 순번. 자동이면 무시된다.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") int32    start_count = 0;
 	/**
-	 * start_count 가 0 일 때의 범위. 거짓(기본, 수동)이면 **기준 면 한 장만** start_slot 번이 되고,
-	 * 참(자동)이면 묶음 끝까지 +1 씩 이어 매긴다. 이 값이 없는 옛 파일은 거짓=수동으로 읽힌다.
+	 * 참(자동)이면 기준 면부터 묶음 끝까지 +1 씩 이어 매긴다(start_count 무시).
+	 * 거짓(기본, 수동)이면 start_count 장만 바뀐다. 이 값이 없는 옛 파일은 거짓=수동으로 읽힌다.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") bool     auto_renumber = false;
 };

@@ -55,6 +55,40 @@ namespace
 		return Out;
 	}
 
+	/**
+	 * 호출 로그에서 뺄 메서드 — 스트림·폴링용이라 초당 여러 번 들어와 로그를 덮는다.
+	 * 나머지는 전부 남긴다. 2026-09-08 정본에 외부 `preset.create` 7건이 들어와 바닥 번호가 바뀌었는데
+	 * 로그에 호출 흔적이 한 줄도 없어 누가·언제 불렀는지 알 수 없었다(RebuildSlotNumbers 결과만 남았다).
+	 */
+	bool ShouldLogRpcCall(const FString& Method)
+	{
+		static const TCHAR* Quiet[] = { TEXT("cam.captureJPG"), TEXT("cam.capturePNG"), TEXT("cam.streamStatus"), TEXT("system.ping"), TEXT("system.health") };
+		for (const TCHAR* Q : Quiet)
+		{
+			if (Method == Q) return false;
+		}
+		return true;
+	}
+
+	/** params 를 한 줄(공백 없는 JSON)로. 길면 자른다 — 배치 좌표 목록 같은 큰 인자로 로그를 채우지 않기 위해. */
+	FString ParamsForLog(const TSharedPtr<FJsonObject>& Params)
+	{
+		if (!Params.IsValid() || Params->Values.Num() == 0)
+		{
+			return TEXT("{}");
+		}
+		FString Out;
+		TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+			TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Out);
+		FJsonSerializer::Serialize(Params.ToSharedRef(), Writer);
+		constexpr int32 MaxLen = 300;
+		if (Out.Len() > MaxLen)
+		{
+			Out = Out.Left(MaxLen) + FString::Printf(TEXT("…(+%d)"), Out.Len() - MaxLen);
+		}
+		return Out;
+	}
+
 	TSharedPtr<FJsonObject> MakeResultResponse(const TSharedPtr<FJsonValue>& Id, const TSharedPtr<FJsonValue>& Result)
 	{
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
@@ -519,7 +553,7 @@ bool URpcServerSubsystem::PassAuthOrRespond(const FHttpServerRequest& Request, c
 	return false;
 }
 
-TSharedPtr<FJsonObject> URpcServerSubsystem::ProcessSingle(const TSharedPtr<FJsonObject>& RequestObj)
+TSharedPtr<FJsonObject> URpcServerSubsystem::ProcessSingle(const TSharedPtr<FJsonObject>& RequestObj, const FString& Peer)
 {
 	if (!RequestObj.IsValid())
 	{
@@ -548,7 +582,22 @@ TSharedPtr<FJsonObject> URpcServerSubsystem::ProcessSingle(const TSharedPtr<FJso
 
 	TSharedPtr<FJsonValue> Result;
 	FRpcError Err;
-	if (Dispatcher->Dispatch(Method, Params, Result, Err))
+	const bool bOk = Dispatcher->Dispatch(Method, Params, Result, Err);
+
+	// 호출 한 줄 로그(누가·무엇을·어떤 인자로). 상태를 바꾸는 호출이 화면에만 흔적을 남기면 나중에 원인을 못 찾는다.
+	if (ShouldLogRpcCall(Method))
+	{
+		if (bOk)
+		{
+			UE_LOG(LogTemp, Log, TEXT("[RPC] %s %s %s"), *Peer, *Method, *ParamsForLog(Params));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[RPC] %s %s %s -> 오류 %d: %s"), *Peer, *Method, *ParamsForLog(Params), Err.Code, *Err.Message);
+		}
+	}
+
+	if (bOk)
 	{
 		return MakeResultResponse(Id, Result);
 	}
@@ -569,6 +618,8 @@ bool URpcServerSubsystem::HandleRpc(const FHttpServerRequest& Request, const FHt
 		return true;
 	}
 
+	const FString Peer = ExtractPeerDisplay(Request);
+
 	if (Root->Type == EJson::Array)
 	{
 		TArray<TSharedPtr<FJsonValue>> Out;
@@ -576,7 +627,7 @@ bool URpcServerSubsystem::HandleRpc(const FHttpServerRequest& Request, const FHt
 		{
 			if (El.IsValid() && El->Type == EJson::Object)
 			{
-				Out.Add(MakeShared<FJsonValueObject>(ProcessSingle(El->AsObject())));
+				Out.Add(MakeShared<FJsonValueObject>(ProcessSingle(El->AsObject(), Peer)));
 			}
 		}
 		CompleteJson(OnComplete, SerializeArray(Out));
@@ -585,7 +636,7 @@ bool URpcServerSubsystem::HandleRpc(const FHttpServerRequest& Request, const FHt
 
 	if (Root->Type == EJson::Object)
 	{
-		CompleteJson(OnComplete, SerializeObject(ProcessSingle(Root->AsObject())));
+		CompleteJson(OnComplete, SerializeObject(ProcessSingle(Root->AsObject(), Peer)));
 		return true;
 	}
 

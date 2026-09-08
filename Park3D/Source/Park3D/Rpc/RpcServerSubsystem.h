@@ -62,8 +62,11 @@ private:
 	 */
 	bool HandleStream(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete);
 
-	/** 단건 JSON-RPC 요청 객체 → 응답 객체({jsonrpc,id,result|error}). */
-	TSharedPtr<FJsonObject> ProcessSingle(const TSharedPtr<FJsonObject>& RequestObj);
+	/**
+	 * 단건 JSON-RPC 요청 객체 → 응답 객체({jsonrpc,id,result|error}).
+	 * @param Peer 진단 로그에 찍을 호출자 주소(ExtractPeerDisplay). 판정에는 쓰지 않는다.
+	 */
+	TSharedPtr<FJsonObject> ProcessSingle(const TSharedPtr<FJsonObject>& RequestObj, const FString& Peer);
 
 	// ---- 인증 게이트 ----
 	/**

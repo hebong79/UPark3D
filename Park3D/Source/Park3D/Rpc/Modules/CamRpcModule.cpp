@@ -120,10 +120,11 @@ namespace
 		O->SetNumberField(TEXT("tilt"), Dir.tilt);
 		O->SetNumberField(TEXT("zoom"), Dir.zoom);
 		// 시작 슬롯: 기준 면(startFace, preset.numbers 의 faceKey)이 받는 번호(startSlot, 0=미지정)와
-		// 이어 매길 면의 개수(startCount, 0=묶음 끝까지).
+		// 이어 매길 면의 개수(startCount, 0=묶음 끝까지). autoRenumber 가 거짓(기본)이면 기준 면 한 장만 바뀐다.
 		O->SetNumberField(TEXT("startSlot"), Dir.start_slot);
 		O->SetStringField(TEXT("startFace"), Dir.start_face);
 		O->SetNumberField(TEXT("startCount"), Dir.start_count);
+		O->SetBoolField(TEXT("autoRenumber"), Dir.auto_renumber);
 		return RpcDto::MakeObject(O);
 	}
 
@@ -502,6 +503,10 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 		if (RpcParam::Has(P, TEXT("startCount")))
 		{
 			Dir->start_count = FMath::Max(0, RpcParam::GetInt(P, TEXT("startCount"), Dir->start_count));
+		}
+		if (RpcParam::Has(P, TEXT("autoRenumber")))
+		{
+			Dir->auto_renumber = RpcParam::GetBool(P, TEXT("autoRenumber"), Dir->auto_renumber);
 		}
 
 		const FString Path = ResolveCamPresetPath(P);

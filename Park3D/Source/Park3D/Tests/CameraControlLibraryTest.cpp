@@ -333,6 +333,7 @@ bool FCameraControlJsonRoundTripTest::RunTest(const FString& Parameters)
 			D.start_slot = 12; // 카메라 패널의 '시작 슬롯'(0=미지정). 파일에 남아야 다음에 열 때 보인다.
 			D.start_face = TEXT("level:BP_ParkingSlot_C_5#2"); // 기준 면 키 — 이것이 있어야 바닥 번호가 다시 매겨진다.
 			D.start_count = 7;                                 // 기준 면부터 7개만 재부여.
+			D.auto_renumber = true;                            // 뒤쪽 면 자동 이어 매기기(기본은 거짓=수동).
 			Cam0.datas.Add(D);
 		}
 		Src.datas.Add(Cam0);
@@ -367,6 +368,7 @@ bool FCameraControlJsonRoundTripTest::RunTest(const FString& Parameters)
 			TestEqual(TEXT("기준점 키"), Anchors[0].FaceKey, FString(TEXT("level:BP_ParkingSlot_C_5#2")));
 			TestEqual(TEXT("기준점 번호"), Anchors[0].Number, 12);
 			TestEqual(TEXT("기준점 갯수"), Anchors[0].Count, 7);
+			TestTrue(TEXT("기준점 자동 이어 매기기"), Anchors[0].bAuto);
 		}
 	}
 
@@ -392,6 +394,7 @@ bool FCameraControlJsonRoundTripTest::RunTest(const FString& Parameters)
 				TestEqual(TEXT("start_slot"), LD.start_slot, SD.start_slot);
 				TestEqual(TEXT("start_face"), LD.start_face, SD.start_face);
 				TestEqual(TEXT("start_count"), LD.start_count, SD.start_count);
+				TestEqual(TEXT("auto_renumber"), LD.auto_renumber, SD.auto_renumber);
 				TestEqual(TEXT("pos.x"), LD.pos.x, SD.pos.x, 1e-3f);
 				TestEqual(TEXT("pos.y"), LD.pos.y, SD.pos.y, 1e-3f);
 				TestEqual(TEXT("pos.z"), LD.pos.z, SD.pos.z, 1e-3f);
@@ -476,6 +479,7 @@ bool FCameraControlJsonFixtureTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("start_slot 없는 파일 → 0(미지정)"), D.start_slot, 0);
 		TestTrue(TEXT("start_face 없는 파일 → 빈 문자열"), D.start_face.IsEmpty());
 		TestEqual(TEXT("start_count 없는 파일 → 0(제한 없음)"), D.start_count, 0);
+		TestFalse(TEXT("auto_renumber 없는 파일 → 거짓(수동)"), D.auto_renumber);
 	}
 	else
 	{

@@ -15,6 +15,7 @@
 class UButton;
 class UComboBoxString;
 class UEditableTextBox;
+class UCheckBox;
 class USlider;
 class UImage;
 class UTextBlock;
@@ -115,6 +116,8 @@ public:
 	// 포인터는 비-UPROPERTY 로 둔다. 위젯 트리가 자식으로 붙들고 있어 GC 에 안전하다(PresetMaker 콤보와 같은 방식).
 	UEditableTextBox* Field_StartSlot = nullptr;
 	UEditableTextBox* Field_StartCount = nullptr;
+	/** 뒤쪽 면 자동 이어 매기기 스위치. 꺼져 있으면(기본) 기준 면 한 장만 바뀐다. */
+	UCheckBox* Check_StartAuto = nullptr;
 	UTextBlock* Txt_StartSlotHint = nullptr;
 	/** 줄에 올라와 있는 기준 면(FParkingSlotNumberInfo::FaceKey)과 그 순번. '수정' 전까지는 칸의 값이고 프리셋 값이 아니다. */
 	FString PickedStartFace;
@@ -340,6 +343,13 @@ private:
 
 	/** 갯수 칸의 숫자(빈칸/0 = 제한 없음). */
 	int32 ReadStartCountField() const;
+
+	/** 자동 이어 매기기 체크 상태(체크박스가 없으면 거짓=수동). */
+	bool ReadStartAutoField() const;
+
+	/** '자동' 체크가 바뀌면 갯수 칸 사용 가능 여부만 맞춘다 — 프리셋 반영은 '수정' 이 한다. */
+	UFUNCTION()
+	void HandleStartAutoChanged(bool bIsChecked);
 
 	/** 줄의 값(칸 + 기준 면)을 프리셋에 쓴다. 숫자가 0 이면 기준 면도 함께 지운다. */
 	void WriteStartSlotTo(FCamDir& Dir) const;

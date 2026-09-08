@@ -772,8 +772,9 @@ void AParkingPresetManager::ApplyNumberAnchors(TArray<FParkingSlotNumberInfo>& S
 		if (const FSlotNumberAnchor* A = ByKey.Find(S.FaceKey()))
 		{
 			Next = A->Number;
-			// 개수를 안 주면(0) 묶음 끝까지 — 09-08 최초 규약. 주면 그 개수만 바꾸고 뒤는 원래 순번.
-			Remaining = A->Count > 0 ? A->Count : TNumericLimits<int32>::Max();
+			// 자동 이어 매기기가 꺼져 있으면(기본) 기준 면 한 장만 — 뒤 면은 원래 순번으로 남는다.
+			// 켜면 개수를 안 준 경우(0) 묶음 끝까지, 주면 그 개수만.
+			Remaining = !A->bAuto ? 1 : (A->Count > 0 ? A->Count : TNumericLimits<int32>::Max());
 		}
 		if (Remaining > 0)
 		{

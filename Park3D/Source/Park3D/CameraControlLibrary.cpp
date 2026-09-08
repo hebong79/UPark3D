@@ -260,16 +260,40 @@ bool UCameraControlLibrary::LoadFromJson(const FString& Path, FCameraPosList& Ou
 void UCameraControlLibrary::CollectNumberAnchors(const FCameraPosList& Data, TArray<FSlotNumberAnchor>& Out)
 {
 	Out.Reset();
-	for (const FCameraPos& Cam : Data.datas)
+	for (const FCamSlotNumber& N : Data.slot_numbers)
 	{
-		for (const FCamDir& Dir : Cam.datas)
+		if (!N.face.IsEmpty() && N.slot > 0)
 		{
-			if (!Dir.start_face.IsEmpty() && Dir.start_slot > 0)
-			{
-				Out.Add(FSlotNumberAnchor{ Dir.start_face, Dir.start_slot, FMath::Max(0, Dir.start_count), Dir.auto_renumber });
-			}
+			Out.Add(FSlotNumberAnchor{ N.face, N.slot, FMath::Max(0, N.count), N.auto_renumber });
 		}
 	}
+}
+
+bool UCameraControlLibrary::SetSlotNumber(FCameraPosList& Data, const FString& Face, int32 Slot, int32 Count, bool bAuto)
+{
+	if (Face.IsEmpty())
+	{
+		return false;
+	}
+	if (Slot <= 0)
+	{
+		return Data.slot_numbers.RemoveAll([&Face](const FCamSlotNumber& N) { return N.face == Face; }) > 0;
+	}
+	FCamSlotNumber* Entry = Data.slot_numbers.FindByPredicate([&Face](const FCamSlotNumber& N) { return N.face == Face; });
+	if (!Entry)
+	{
+		Entry = &Data.slot_numbers[Data.slot_numbers.AddDefaulted()];
+		Entry->face = Face;
+	}
+	Entry->slot = Slot;
+	Entry->count = FMath::Max(0, Count);
+	Entry->auto_renumber = bAuto;
+	return true;
+}
+
+const FCamSlotNumber* UCameraControlLibrary::FindSlotNumber(const FCameraPosList& Data, const FString& Face)
+{
+	return Face.IsEmpty() ? nullptr : Data.slot_numbers.FindByPredicate([&Face](const FCamSlotNumber& N) { return N.face == Face; });
 }
 
 void UCameraControlLibrary::NormalizeLoaded(FCameraPosList& Data, bool bSourceIsUnreal)

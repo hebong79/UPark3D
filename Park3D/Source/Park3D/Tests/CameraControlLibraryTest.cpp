@@ -330,13 +330,13 @@ bool FCameraControlJsonRoundTripTest::RunTest(const FString& Parameters)
 			D.pos = {-3.5f, 8.f, 9.9f}; D.rot = {-10.f, 271.13f, 0.f};
 			D.pan = 271.13f; D.tilt = -10.f; D.zoom = 12.f;
 			D.ptzmin = {-180.f, -90.f, 1.f}; D.ptzmax = {180.f, 90.f, 36.f};
-			D.start_slot = 12; // 카메라 패널의 '시작 슬롯'(0=미지정). 파일에 남아야 다음에 열 때 보인다.
-			D.start_face = TEXT("level:BP_ParkingSlot_C_5#2"); // 기준 면 키 — 이것이 있어야 바닥 번호가 다시 매겨진다.
-			D.start_count = 7;                                 // 기준 면부터 7개만 재부여.
-			D.auto_renumber = true;                            // 뒤쪽 면 자동 이어 매기기(기본은 거짓=수동).
 			Cam0.datas.Add(D);
 		}
 		Src.datas.Add(Cam0);
+
+		// 바닥 번호 지정은 프리셋이 아니라 파일 전체에 하나인 목록이다 — 두 곳을 넣어 둘 다 살아 돌아오는지 본다.
+		Src.slot_numbers.Add(FCamSlotNumber{ TEXT("level:BP_ParkingSlot_C_5#2"), 12, 7, true });  // 자동 이어 매기기
+		Src.slot_numbers.Add(FCamSlotNumber{ TEXT("level:BP_ParkingSlot_C_4#0"), 30, 2, false }); // 수동 2장
 
 		FCameraPos Cam1;
 		Cam1.target_pos = 2.5f;
@@ -358,17 +358,22 @@ bool FCameraControlJsonRoundTripTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("새 UE 파일은 플래그 유지"), Loaded.isUnreal);
 	TestEqual(TEXT("카메라 수 동일"), Loaded.datas.Num(), Src.datas.Num());
 
-	// 기준점 수집: start_face 와 start_slot 이 둘 다 있는 프리셋만(위 픽스처에서는 Cam0/Preset 2 하나).
+	// 지정 목록 라운드트립 + 기준점 수집(항목마다 하나, 순서 유지).
+	TestEqual(TEXT("slot_numbers 2개"), Loaded.slot_numbers.Num(), Src.slot_numbers.Num());
 	{
 		TArray<FSlotNumberAnchor> Anchors;
 		UCameraControlLibrary::CollectNumberAnchors(Loaded, Anchors);
-		TestEqual(TEXT("기준점 1개"), Anchors.Num(), 1);
-		if (Anchors.Num() == 1)
+		TestEqual(TEXT("기준점 2개"), Anchors.Num(), 2);
+		if (Anchors.Num() == 2)
 		{
-			TestEqual(TEXT("기준점 키"), Anchors[0].FaceKey, FString(TEXT("level:BP_ParkingSlot_C_5#2")));
-			TestEqual(TEXT("기준점 번호"), Anchors[0].Number, 12);
-			TestEqual(TEXT("기준점 갯수"), Anchors[0].Count, 7);
-			TestTrue(TEXT("기준점 자동 이어 매기기"), Anchors[0].bAuto);
+			TestEqual(TEXT("기준점1 키"), Anchors[0].FaceKey, FString(TEXT("level:BP_ParkingSlot_C_5#2")));
+			TestEqual(TEXT("기준점1 번호"), Anchors[0].Number, 12);
+			TestEqual(TEXT("기준점1 갯수"), Anchors[0].Count, 7);
+			TestTrue(TEXT("기준점1 자동 이어 매기기"), Anchors[0].bAuto);
+			TestEqual(TEXT("기준점2 키"), Anchors[1].FaceKey, FString(TEXT("level:BP_ParkingSlot_C_4#0")));
+			TestEqual(TEXT("기준점2 번호"), Anchors[1].Number, 30);
+			TestEqual(TEXT("기준점2 갯수"), Anchors[1].Count, 2);
+			TestFalse(TEXT("기준점2 수동"), Anchors[1].bAuto);
 		}
 	}
 
@@ -390,11 +395,6 @@ bool FCameraControlJsonRoundTripTest::RunTest(const FString& Parameters)
 				TestEqual(TEXT("sname"), LD.sname, SD.sname);
 				TestEqual(TEXT("cam_id"), LD.cam_id, SD.cam_id);
 				TestEqual(TEXT("preset_id"), LD.preset_id, SD.preset_id);
-				// 시작 슬롯: 지정한 프리셋은 값이 살아 있고, 안 넣은 프리셋은 0(미지정)으로 남는다.
-				TestEqual(TEXT("start_slot"), LD.start_slot, SD.start_slot);
-				TestEqual(TEXT("start_face"), LD.start_face, SD.start_face);
-				TestEqual(TEXT("start_count"), LD.start_count, SD.start_count);
-				TestEqual(TEXT("auto_renumber"), LD.auto_renumber, SD.auto_renumber);
 				TestEqual(TEXT("pos.x"), LD.pos.x, SD.pos.x, 1e-3f);
 				TestEqual(TEXT("pos.y"), LD.pos.y, SD.pos.y, 1e-3f);
 				TestEqual(TEXT("pos.z"), LD.pos.z, SD.pos.z, 1e-3f);
@@ -426,6 +426,54 @@ bool FCameraControlJsonRoundTripTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("대문자 X 키 없음"), RawJson.Contains(TEXT("\"X\""), ESearchCase::CaseSensitive));
 
 	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*TempPath);
+	return true;
+}
+
+// ===== 바닥 번호 지정 목록: 추가·덮기·해제 =====
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCameraControlSlotNumbersTest,
+	"Park3D.CameraControl.SlotNumbers",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCameraControlSlotNumbersTest::RunTest(const FString& Parameters)
+{
+	FCameraPosList Data;
+	TestTrue(TEXT("A 추가"), UCameraControlLibrary::SetSlotNumber(Data, TEXT("level:X#0"), 10, 2, false));
+	TestTrue(TEXT("B 추가"), UCameraControlLibrary::SetSlotNumber(Data, TEXT("level:X#5"), 50, 0, true));
+	TestEqual(TEXT("두 곳"), Data.slot_numbers.Num(), 2);
+
+	// 같은 면을 다시 지정하면 그 항목만 바뀐다 — 다른 면(B)은 그대로.
+	// "수동인데 '수정'할 때마다 앞서 지정한 면이 되돌아간다"(2026-09-08 신고)의 반대 명제다.
+	TestTrue(TEXT("A 덮기"), UCameraControlLibrary::SetSlotNumber(Data, TEXT("level:X#0"), 11, 3, false));
+	TestEqual(TEXT("여전히 두 곳"), Data.slot_numbers.Num(), 2);
+	if (const FCamSlotNumber* A = UCameraControlLibrary::FindSlotNumber(Data, TEXT("level:X#0")))
+	{
+		TestEqual(TEXT("A slot 11"), A->slot, 11);
+		TestEqual(TEXT("A count 3"), A->count, 3);
+	}
+	else { AddError(TEXT("A 를 찾지 못함")); }
+	if (const FCamSlotNumber* B = UCameraControlLibrary::FindSlotNumber(Data, TEXT("level:X#5")))
+	{
+		TestEqual(TEXT("B slot 50 유지"), B->slot, 50);
+		TestTrue(TEXT("B 자동 유지"), B->auto_renumber);
+	}
+	else { AddError(TEXT("B 를 찾지 못함")); }
+
+	// slot 0 = 그 면의 지정 해제. 없는 면의 해제·빈 face 는 바뀐 것이 없다.
+	TestTrue(TEXT("A 해제"), UCameraControlLibrary::SetSlotNumber(Data, TEXT("level:X#0"), 0, 0, false));
+	TestEqual(TEXT("B 한 곳"), Data.slot_numbers.Num(), 1);
+	TestFalse(TEXT("없는 면 해제는 무변경"), UCameraControlLibrary::SetSlotNumber(Data, TEXT("level:none#0"), 0, 0, false));
+	TestFalse(TEXT("빈 face 는 무시"), UCameraControlLibrary::SetSlotNumber(Data, TEXT(""), 5, 0, false));
+	TestEqual(TEXT("여전히 한 곳"), Data.slot_numbers.Num(), 1);
+
+	// 매니저로 넘어가는 기준점도 같은 한 곳.
+	TArray<FSlotNumberAnchor> Anchors;
+	UCameraControlLibrary::CollectNumberAnchors(Data, Anchors);
+	TestEqual(TEXT("기준점 1개"), Anchors.Num(), 1);
+	if (Anchors.Num() == 1)
+	{
+		TestEqual(TEXT("기준점 키 B"), Anchors[0].FaceKey, FString(TEXT("level:X#5")));
+		TestTrue(TEXT("기준점 자동"), Anchors[0].bAuto);
+	}
 	return true;
 }
 
@@ -474,17 +522,14 @@ bool FCameraControlJsonFixtureTest::RunTest(const FString& Parameters)
 		// rot↔pan/tilt 동기화.
 		TestEqual(TEXT("pan=rot.y=45"), D.pan, 45.f, 1e-3f);
 		TestEqual(TEXT("tilt=rot.x=15"), D.tilt, 15.f, 1e-3f);
-		// start_slot 이 없는 옛 파일(Unity 산출물)은 0=미지정으로 읽혀야 한다 — 여기서 쓰레기 값이 들어오면
-		// 패널이 있지도 않은 면 번호를 표시한다.
-		TestEqual(TEXT("start_slot 없는 파일 → 0(미지정)"), D.start_slot, 0);
-		TestTrue(TEXT("start_face 없는 파일 → 빈 문자열"), D.start_face.IsEmpty());
-		TestEqual(TEXT("start_count 없는 파일 → 0(제한 없음)"), D.start_count, 0);
-		TestFalse(TEXT("auto_renumber 없는 파일 → 거짓(수동)"), D.auto_renumber);
 	}
 	else
 	{
 		AddError(TEXT("픽스처 2단 중첩 datas 파싱 실패"));
 	}
+	// slot_numbers 가 없는 옛 파일(Unity 산출물)은 빈 목록으로 읽혀야 한다 — 여기서 쓰레기 값이 들어오면
+	// 있지도 않은 면의 바닥 번호가 다시 매겨진다.
+	TestEqual(TEXT("slot_numbers 없는 파일 → 빈 목록"), Loaded.slot_numbers.Num(), 0);
 
 	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*TempPath);
 	return true;

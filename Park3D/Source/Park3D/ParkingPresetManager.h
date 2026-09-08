@@ -57,7 +57,7 @@ struct FParkingSlotNumberInfo
 
 /**
  * 번호 재부여 기준점 — "이 면(FaceKey)을 Number 번으로 한다". 뒤에 오는 면까지 이어 매길지는 bAuto 가 정한다.
- * 카메라 프리셋의 시작 슬롯(FCamDir.start_face/start_slot)이 이것으로 바뀌어 매니저에 들어온다.
+ * 카메라 파일의 바닥 번호 지정 목록(FCameraPosList.slot_numbers — 파일 전체에 하나)이 이것으로 바뀌어 매니저에 들어온다.
  */
 struct FSlotNumberAnchor
 {

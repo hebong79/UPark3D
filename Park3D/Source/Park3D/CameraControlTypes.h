@@ -61,30 +61,24 @@ struct FCamDir
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") float    zoom = 1.f;       // 줌 배율(1~36), FOV 아님
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") FCamPtz  ptzmin;           // 슬라이더 min(pan/tilt/zoom)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") FCamPtz  ptzmax;           // 슬라이더 max(pan/tilt/zoom)
+};
 
-	/**
-	 * 시작 슬롯 — 이 프리셋의 기준 면(start_face)이 바닥에서 받을 번호. 0=미지정.
-	 * start_face 가 함께 있으면 그 면의 바닥 번호가 **다시 매겨진다**(AParkingPresetManager::SetNumberAnchors).
-	 * 뒤에 오는 면까지 이어 매길지는 auto_renumber 가 정한다(기본은 기준 면 한 장만).
-	 * Unity SCamDir 에는 없는 키다. Unity 쪽 파서는 모르는 키를 무시하므로 파일 호환은 유지되고,
-	 * 이 값이 없는 옛 파일은 0(미지정)으로 읽힌다.
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") int32    start_slot = 0;
-	/**
-	 * 기준 면의 키(FParkingSlotNumberInfo::FaceKey — "level:<액터>#<인스턴스>" / "preset:<idx>#<slot>"). 빈 문자열=없음.
-	 * 순번이 아니라 키로 두는 이유: 순번은 프리셋을 만들거나 지우면 밀려 엉뚱한 면을 가리킨다.
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") FString  start_face;
-	/**
-	 * 수동(auto_renumber=false)일 때 기준 면부터 강제로 매길 면의 **개수**. 그 뒤 면은 손대지 않는다(번호가 겹쳐도 막지 않는다).
-	 * 0=기준 면 한 장. 예) start_slot=1, start_count=7 → 기준 면부터 7개 면이 1~7, 그 뒤는 원래 순번. 자동이면 무시된다.
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") int32    start_count = 0;
-	/**
-	 * 참(자동)이면 기준 면부터 묶음 끝까지 +1 씩 이어 매긴다(start_count 무시).
-	 * 거짓(기본, 수동)이면 start_count 장만 바뀐다. 이 값이 없는 옛 파일은 거짓=수동으로 읽힌다.
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") bool     auto_renumber = false;
+/**
+ * === 바닥 번호 지정 1건(UE 전용 — Unity SCameraPosList 에는 없다) ===
+ * "이 면(face)을 slot 번으로 한다". 수동(auto_renumber=false, 기본)이면 기준 면부터 count 장(0=한 장)만 바뀌고
+ * 뒤 면은 손대지 않는다(번호가 겹쳐도 막지 않는다). 자동이면 기준 면부터 묶음 끝까지 +1 씩 이어 매기고 count 는 무시한다.
+ * face 는 FParkingSlotNumberInfo::FaceKey("level:<액터>#<인스턴스>" / "preset:<idx>#<slot>") — 순번은 프리셋을
+ * 만들거나 지우면 밀려 엉뚱한 면을 가리키므로 키로 둔다.
+ */
+USTRUCT(BlueprintType)
+struct FCamSlotNumber
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") FString face;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") int32   slot = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") int32   count = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") bool    auto_renumber = false;
 };
 
 /** === Unity SCameraPos (카메라 1대의 프리셋 리스트) === 내부 datas 키 소문자. */
@@ -109,4 +103,13 @@ struct FCameraPosList
 	/** true이면 모든 FCamDir.pos가 Unreal 미터 좌표. 누락/false는 Unity legacy 형식. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") bool isUnreal = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") TArray<FCameraPos> datas;
+
+	/**
+	 * 바닥 번호 지정 목록 — 파일(주차장) 전체에 **하나**다. 프리셋 소속이 아니다.
+	 * 바닥 번호는 카메라·프리셋과 무관하게 한 벌뿐이라, 프리셋마다 기준점 하나씩 들고 있으면 새 면을 지정할 때마다
+	 * 앞서 지정한 면이 원래 번호로 되돌아간다(2026-09-08 신고 "자동이 아닌데 범위 밖 번호가 바뀐다"의 정체).
+	 * 지정한 face 마다 한 항목이 쌓이고, 같은 face 를 다시 지정하면 그 항목만 바뀐다. 파일에 같이 저장된다.
+	 * 이 키가 없는 옛 파일·Unity 파일은 빈 목록으로 읽히고, Unity 파서는 모르는 키를 무시하므로 파일 호환은 유지된다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") TArray<FCamSlotNumber> slot_numbers;
 };

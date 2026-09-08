@@ -127,11 +127,20 @@ public:
 	static bool LoadFromJson(const FString& Path, FCameraPosList& Out);
 
 	/**
-	 * 카메라 목록의 모든 프리셋에서 번호 재부여 기준점(start_face + start_slot)을 모은다.
-	 * 카메라 → 프리셋 순서 그대로이며, 매니저는 같은 면의 중복을 "뒤에 온 것이 이긴다"로 푼다.
+	 * 바닥 번호 지정 목록(slot_numbers)을 매니저의 기준점으로 바꾼다. face 가 비었거나 slot 이 0 이하인 항목은 버린다.
 	 * 패널(CamData)과 RPC(PresetMemory)가 같은 규칙으로 매니저에 넘기기 위한 한 곳.
 	 */
 	static void CollectNumberAnchors(const FCameraPosList& Data, TArray<FSlotNumberAnchor>& Out);
+
+	/**
+	 * 지정 목록에 face 를 slot 번으로 넣는다 — 이미 있으면 그 항목만 덮고, 없으면 뒤에 붙인다. 다른 face 의 항목은 건드리지 않는다.
+	 * slot 이 0 이하면 그 face 의 지정을 지운다. 패널 '수정' 과 RPC cam.setSlotNumber 가 같은 규칙을 쓰기 위한 한 곳.
+	 * @return 목록이 실제로 바뀌었으면 true(없는 face 를 지우려 한 경우 false).
+	 */
+	static bool SetSlotNumber(FCameraPosList& Data, const FString& Face, int32 Slot, int32 Count, bool bAuto);
+
+	/** face 의 지정 항목. 없으면 nullptr. */
+	static const FCamSlotNumber* FindSlotNumber(const FCameraPosList& Data, const FString& Face);
 
 private:
 	/** 로드 직후 각 FCamDir 에 기본값 보정 + pan/tilt 동기화 적용(§12-C). */

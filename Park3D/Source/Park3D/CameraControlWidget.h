@@ -119,7 +119,10 @@ public:
 	/** 뒤쪽 면 자동 이어 매기기 스위치. 꺼져 있으면(기본, 수동) 갯수만큼만, 켜면 묶음 끝까지(갯수 무시). */
 	UCheckBox* Check_StartAuto = nullptr;
 	UTextBlock* Txt_StartSlotHint = nullptr;
-	/** 줄에 올라와 있는 기준 면(FParkingSlotNumberInfo::FaceKey)과 그 순번. '수정' 전까지는 칸의 값이고 프리셋 값이 아니다. */
+	/**
+	 * 줄에 올라와 있는 기준 면(FParkingSlotNumberInfo::FaceKey)과 그 순번. '수정' 전까지는 칸의 값이고 목록 값이 아니다.
+	 * 지정 목록 자체는 CamData.slot_numbers(파일 전체에 하나) — 프리셋·카메라를 넘겨도 이 줄은 바뀌지 않는다.
+	 */
 	FString PickedStartFace;
 	int32 PickedStartBase = 0;
 
@@ -332,10 +335,17 @@ private:
 	 */
 	void BuildStartSlotRow();
 
-	/** 프리셋의 시작 슬롯(start_slot/start_face)을 줄에 올린다 — 칸 값·기준 면·안내 문구. */
-	void FillStartSlotRow(const FCamDir& Dir);
+	/** 줄을 비운다(기준 면 해제·칸 비움·자동 끔) — 파일을 열거나 초기화해 목록이 통째로 바뀐 뒤에 부른다. */
+	void ResetStartSlotRow();
 
-	/** 기준 면 유무·순번에 맞춰 안내 문구를 바꾼다. */
+	/**
+	 * 줄의 값(기준 면 + 칸)을 CamData.slot_numbers 에 넣는다 — 그 면의 항목만 덮거나 추가하고, 번호가 빈칸이면 그 면의 지정을 지운다.
+	 * 다른 면의 지정은 건드리지 않는다. 기준 면을 안 찍었으면 아무것도 하지 않는다. 바뀌었으면 바닥 번호를 다시 매긴다.
+	 * @return 알림에 덧붙일 요약(" · 면 #16 → 11번부터 2장(지정 3곳)"). 바뀐 게 없으면 빈 문자열.
+	 */
+	FString ApplyStartSlotRow();
+
+	/** 기준 면 유무·순번·지정 개수에 맞춰 안내 문구를 바꾼다. */
 	void RefreshStartSlotHint();
 
 	/** 시작 슬롯 칸의 숫자(빈칸/0 = 미지정). */
@@ -351,12 +361,9 @@ private:
 	UFUNCTION()
 	void HandleStartAutoChanged(bool bIsChecked);
 
-	/** 줄의 값(칸 + 기준 면)을 프리셋에 쓴다. 숫자가 0 이면 기준 면도 함께 지운다. */
-	void WriteStartSlotTo(FCamDir& Dir) const;
-
 	/**
-	 * CamData 의 모든 프리셋에서 기준점을 모아 매니저에 넘겨 바닥 번호를 다시 매긴다.
-	 * 프리셋 값이 바뀌는 곳(수정·추가·삭제·열기·초기화·카메라 삭제)마다 부른다 — 칸 편집만으로는 안 부른다.
+	 * CamData.slot_numbers 를 매니저에 넘겨 바닥 번호를 다시 매긴다.
+	 * 목록이 바뀌는 곳('수정'·열기·초기화)마다 부른다 — 칸 편집만으로는 안 부르고, 프리셋·카메라 추가/삭제는 목록과 무관하다.
 	 */
 	void SyncNumberAnchors();
 

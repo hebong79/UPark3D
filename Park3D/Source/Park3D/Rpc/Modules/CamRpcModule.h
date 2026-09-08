@@ -20,6 +20,7 @@ private:
 	/**
 	 * per-camera 프리셋 인메모리 사본(Unity CSaveInitCampPos 의 m_Data 대응).
 	 *  savePreset  : 현재 카메라 상태 → 이 메모리 갱신 + 파일 쓰기(카메라 적용 없음)
+	 *  setSlotNumber/slotNumbers : 바닥 번호 지정 목록(slot_numbers — 프리셋 값이 아니라 파일 전체에 하나) 갱신·조회
 	 *  loadPreset  : 파일 읽기 → 이 메모리 교체 + 카메라 적용
 	 *  applyPreset : 이 메모리를 읽어 카메라 적용(파일 I/O 없음)
 	 * 모듈은 URpcServerSubsystem 이 TUniquePtr 로 들고 있어 호출 사이에 살아 있다.

@@ -56,15 +56,17 @@ struct FParkingSlotNumberInfo
 };
 
 /**
- * 번호 재부여 기준점 — "이 면(FaceKey)을 Number 번으로 하고, 목록에서 그 뒤에 오는 면은 +1 씩 이어 매긴다".
+ * 번호 재부여 기준점 — "이 면(FaceKey)을 Number 번으로 한다". 뒤에 오는 면까지 이어 매길지는 bAuto 가 정한다.
  * 카메라 프리셋의 시작 슬롯(FCamDir.start_face/start_slot)이 이것으로 바뀌어 매니저에 들어온다.
  */
 struct FSlotNumberAnchor
 {
 	FString FaceKey;
 	int32 Number = 0;
-	/** 이어 매길 면의 개수. 0=제한 없음(묶음 끝까지). N=기준 면 포함 N개만 바꾸고 그 뒤는 원래 순번으로 둔다. */
+	/** 이어 매길 면의 개수. 0=제한 없음(묶음 끝까지). N=기준 면 포함 N개만 바꾸고 그 뒤는 원래 순번으로 둔다. bAuto 일 때만 쓰인다. */
 	int32 Count = 0;
+	/** 뒤쪽 면 자동 이어 매기기. 거짓(기본)이면 기준 면 한 장만 바꾼다 — 뒤 면은 손대지 않는다. */
+	bool bAuto = false;
 };
 
 UCLASS()

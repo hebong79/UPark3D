@@ -64,8 +64,8 @@ struct FCamDir
 
 	/**
 	 * 시작 슬롯 — 이 프리셋의 기준 면(start_face)이 바닥에서 받을 번호. 0=미지정.
-	 * start_face 가 함께 있으면 바닥 번호가 **다시 매겨진다**: 그 면이 start_slot 번이 되고 목록에서 뒤에 오는
-	 * 면은 +1 씩 이어진다(AParkingPresetManager::SetNumberAnchors). start_face 가 비어 있으면 기록만 남는다.
+	 * start_face 가 함께 있으면 그 면의 바닥 번호가 **다시 매겨진다**(AParkingPresetManager::SetNumberAnchors).
+	 * 뒤에 오는 면까지 이어 매길지는 auto_renumber 가 정한다(기본은 기준 면 한 장만).
 	 * Unity SCamDir 에는 없는 키다. Unity 쪽 파서는 모르는 키를 무시하므로 파일 호환은 유지되고,
 	 * 이 값이 없는 옛 파일은 0(미지정)으로 읽힌다.
 	 */
@@ -76,10 +76,15 @@ struct FCamDir
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") FString  start_face;
 	/**
-	 * 기준 면부터 이어 매길 면의 **개수**. 0=제한 없음(묶음 끝까지).
+	 * 기준 면부터 이어 매길 면의 **개수**. 0=제한 없음(묶음 끝까지). auto_renumber 가 참일 때만 쓰인다.
 	 * 예) start_slot=1, start_count=7 → 기준 면부터 7개 면이 1~7 이 되고 그 뒤 면은 원래 순번으로 남는다.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") int32    start_count = 0;
+	/**
+	 * 뒤쪽 면 자동 이어 매기기. 거짓(기본)이면 **기준 면 한 장만** start_slot 번이 되고 뒤 면은 원래 순번으로 남는다.
+	 * 참이면 start_count 개(0=묶음 끝까지)까지 +1 씩 이어 매긴다. 이 값이 없는 옛 파일은 거짓=수동으로 읽힌다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera") bool     auto_renumber = false;
 };
 
 /** === Unity SCameraPos (카메라 1대의 프리셋 리스트) === 내부 datas 키 소문자. */

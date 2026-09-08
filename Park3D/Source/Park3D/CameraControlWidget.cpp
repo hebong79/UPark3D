@@ -13,6 +13,7 @@
 #include "Components/Button.h"
 #include "Components/ComboBoxString.h"
 #include "Components/EditableTextBox.h"
+#include "Components/CheckBox.h"
 #include "Components/Slider.h"
 #include "Park3DPanelStyle.h"
 #include "Styling/CoreStyle.h"
@@ -1632,6 +1633,20 @@ void UCameraControlWidget::BuildStartSlotRow()
 	AddLabel(TEXT("갯수"), 10.f, 6.f);
 	Field_StartCount = MakeNumberField(TEXT("Field_StartCount"), 46.f);
 
+	// 자동 이어 매기기 스위치. 기본은 꺼짐(수동) — 기준 면 한 장만 바뀌고 뒤 면은 그대로 둔다(2026-09-08 사용자 지시).
+	Check_StartAuto = WidgetTree->ConstructWidget<UCheckBox>(UCheckBox::StaticClass(), TEXT("Check_StartAuto"));
+	Park3DPanelStyle::StyleCheckBox(Check_StartAuto); // 어두운 패널에서는 엔진 기본 회색이 배경에 묻힌다.
+	Check_StartAuto->OnCheckStateChanged.AddDynamic(this, &UCameraControlWidget::HandleStartAutoChanged);
+	if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(Check_StartAuto))
+	{
+		S->SetVerticalAlignment(VAlign_Center);
+		S->SetPadding(FMargin(10.f, 0.f, 0.f, 0.f));
+	}
+	AddLabel(TEXT("자동"), 4.f, 0.f);
+
+	// 안내 문구는 **아랫줄**에 둔다 — 체크박스가 들어오면서 칸 줄에 문구가 들어갈 가로 폭이 남지 않는다
+	// (패널 폭은 고정이고 넓히지 않는다는 결정이 2026-08-18 에 있었다).
+	UHorizontalBox* HintRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
 	Txt_StartSlotHint = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 	Txt_StartSlotHint->SetText(FText::FromString(TEXT("LShift+클릭으로 기준 면 지정"))); // 실제 문구는 RefreshStartSlotHint 가 정한다.
 	Txt_StartSlotHint->SetColorAndOpacity(FSlateColor(FLinearColor(0.72f, 0.72f, 0.74f, 1.f)));
@@ -1640,18 +1655,22 @@ void UCameraControlWidget::BuildStartSlotRow()
 		F.Size = 10;
 		Txt_StartSlotHint->SetFont(F);
 	}
-	if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(Txt_StartSlotHint))
+	if (UHorizontalBoxSlot* S = HintRow->AddChildToHorizontalBox(Txt_StartSlotHint))
 	{
 		S->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 		S->SetVerticalAlignment(VAlign_Center);
 		S->SetHorizontalAlignment(HAlign_Right);
-		S->SetPadding(FMargin(8.f, 0.f, 2.f, 0.f));
+		S->SetPadding(FMargin(2.f, 0.f, 2.f, 0.f));
 	}
 
 	const int32 InsertAt = Column->GetChildIndex(PresetRow) + 1;
 	if (UVerticalBoxSlot* VBSlot = Cast<UVerticalBoxSlot>(Column->InsertChildAt(InsertAt, Row)))
 	{
 		VBSlot->SetPadding(FMargin(0.f, 4.f, 0.f, 0.f));
+	}
+	if (UVerticalBoxSlot* VBSlot = Cast<UVerticalBoxSlot>(Column->InsertChildAt(InsertAt + 1, HintRow)))
+	{
+		VBSlot->SetPadding(FMargin(0.f, 1.f, 0.f, 0.f));
 	}
 
 	// 지금 선택된 프리셋 값으로 채운다(패널을 열 때마다 최신 상태가 보이도록).
@@ -1671,6 +1690,12 @@ void UCameraControlWidget::FillStartSlotRow(const FCamDir& Dir)
 	{
 		// 갯수 0 = 제한 없음(묶음 끝까지). 역시 빈칸으로 둔다.
 		Field_StartCount->SetText(Dir.start_count > 0 ? FText::AsNumber(Dir.start_count) : FText::GetEmpty());
+		Field_StartCount->SetIsEnabled(Dir.auto_renumber); // 자동이 꺼져 있으면 갯수는 쓰이지 않는다.
+	}
+	if (Check_StartAuto)
+	{
+		// SetIsChecked 는 OnCheckStateChanged 를 쏘지 않는다(SSlider 와 다르다) → 갯수 칸은 위에서 직접 맞췄다.
+		Check_StartAuto->SetIsChecked(Dir.auto_renumber);
 	}
 	PickedStartFace = Dir.start_face;
 	PickedStartBase = 0;
@@ -1732,10 +1757,25 @@ int32 UCameraControlWidget::ReadStartCountField() const
 	return S.IsEmpty() ? 0 : FMath::Max(0, FCString::Atoi(*S));
 }
 
+bool UCameraControlWidget::ReadStartAutoField() const
+{
+	return Check_StartAuto ? Check_StartAuto->IsChecked() : false;
+}
+
+void UCameraControlWidget::HandleStartAutoChanged(bool bIsChecked)
+{
+	if (Field_StartCount)
+	{
+		// 자동이 꺼져 있으면 갯수는 아무 데도 쓰이지 않는다 → 칸을 잠가 "넣었는데 안 먹는다"를 없앤다.
+		Field_StartCount->SetIsEnabled(bIsChecked);
+	}
+}
+
 void UCameraControlWidget::WriteStartSlotTo(FCamDir& Dir) const
 {
 	Dir.start_slot = ReadStartSlotField();
 	Dir.start_count = ReadStartCountField();
+	Dir.auto_renumber = ReadStartAutoField();
 	Dir.start_face = Dir.start_slot > 0 ? PickedStartFace : FString(); // 번호를 비우면 기준 면도 의미가 없다.
 }
 

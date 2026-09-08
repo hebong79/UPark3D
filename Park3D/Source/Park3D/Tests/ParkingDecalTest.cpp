@@ -529,9 +529,9 @@ bool FParkingSlotNumberTest::RunTest(const FString& Parameters)
 		Mgr->bShowSlotNumbers = true;
 	}
 
-	// TN-8: 기준점 재부여(카메라 프리셋 시작 슬롯). 갯수 0 일 때 모드가 갈린다:
-	//  - **기본(bAuto=false, 수동)**: 3번 면만 10번이 되고 뒤 면(4,5,6)은 손대지 않는다 — 2026-09-08 사용자 지시.
-	//  - bAuto=true: 뒤 면이 11,12,13 으로 이어진다(옛 기본값). 갯수 N 을 준 경우는 TN-9.
+	// TN-8: 기준점 재부여(카메라 프리셋 시작 슬롯).
+	//  - **기본(bAuto=false, 수동)**: 갯수 0 → 3번 면만 10번이 되고 뒤 면(4,5,6)은 손대지 않는다 — 2026-09-08 사용자 지시.
+	//  - bAuto=true: 뒤 면이 11,12,13 으로 묶음 끝까지 이어진다. 갯수를 준 경우는 TN-9.
 	// 레벨 면 묶음은 어느 쪽이든 프리셋 묶음의 이어 매기기에 끌려가지 않는다(경계에서 끊김).
 	{
 		TArray<FParkingSlotNumberInfo> Before;
@@ -605,8 +605,8 @@ bool FParkingSlotNumberTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("TN-8 기준점 해제 → 원래 3"), Third ? Third->Number : -1, 3);
 	}
 
-	// TN-9: 갯수 제한. 2번 면부터 3개만 10,11,12 로 — 앞(1)과 뒤(5,6)는 원래 순번 그대로.
-	//  갯수 N 은 **수동에서도 먹는다**(2026-09-08 사용자 지시 — 수동은 start slot 부터 N 장을 강제로 매기고 번호가 겹쳐도 된다).
+	// TN-9: 갯수. **수동**은 2번 면부터 갯수 3 → 10,11,12 만 바꾸고 앞(1)과 뒤(5,6)는 원래 순번 그대로(번호가 겹쳐도 된다).
+	//  **자동**은 갯수를 무시하고 묶음 끝까지 이어 매긴다 — 갯수를 존중하면 두 모드가 같아진다(2026-09-08 사용자 지적).
 	{
 		auto CheckPresetNumbers = [&](const TCHAR* Tag, const int32(&Want)[6])
 		{
@@ -621,7 +621,7 @@ bool FParkingSlotNumberTest::RunTest(const FString& Parameters)
 			}
 		};
 
-		// 수동 + 갯수 3: 자동과 같은 세 장.
+		// 수동 + 갯수 3: 세 장만 바뀌고 뒤(5,6)는 그대로.
 		TArray<FSlotNumberAnchor> Manual;
 		Manual.Add(FSlotNumberAnchor{ TEXT("preset:3#2"), 10, 3, false });
 		Mgr->SetNumberAnchors(Manual);
@@ -639,12 +639,13 @@ bool FParkingSlotNumberTest::RunTest(const FString& Parameters)
 			CheckPresetNumbers(TEXT("TN-9 수동 중복 허용"), Want);
 		}
 
+		// 자동 + 갯수 3: 갯수는 무시되고 끝까지 → 수동과 결과가 달라야 한다.
 		TArray<FSlotNumberAnchor> Anchors;
 		Anchors.Add(FSlotNumberAnchor{ TEXT("preset:3#2"), 10, 3, true });
 		Mgr->SetNumberAnchors(Anchors);
 		{
-			const int32 Want[6] = { 1, 10, 11, 12, 5, 6 };
-			CheckPresetNumbers(TEXT("TN-9 자동+갯수3"), Want);
+			const int32 Want[6] = { 1, 10, 11, 12, 13, 14 };
+			CheckPresetNumbers(TEXT("TN-9 자동+갯수3(무시, 끝까지)"), Want);
 		}
 
 		// 갯수가 남은 면 수보다 크면 묶음 끝에서 자연히 멈춘다(경계를 넘지 않는다). 수동도 같다.

@@ -1633,10 +1633,11 @@ void UCameraControlWidget::BuildStartSlotRow()
 	AddLabel(TEXT("갯수"), 10.f, 6.f);
 	Field_StartCount = MakeNumberField(TEXT("Field_StartCount"), 46.f);
 
-	// 자동 이어 매기기 스위치. 기본은 꺼짐(수동). 갯수 칸은 모드와 무관하게 늘 쓸 수 있다 —
-	// 갯수 N 은 어느 모드든 기준 면부터 N 장을 강제로 매기고, 빈칸일 때만 수동=한 장/자동=끝까지로 갈린다(2026-09-08 사용자 지시).
+	// 자동 이어 매기기 스위치. 기본은 꺼짐(수동) — 기준 면부터 **갯수만큼만** 바꾸고 뒤 면은 손대지 않는다.
+	// 켜면 묶음 끝까지 이어 매기고 갯수는 무시하므로 그때는 갯수 칸을 잠근다(2026-09-08 사용자 지시).
 	Check_StartAuto = WidgetTree->ConstructWidget<UCheckBox>(UCheckBox::StaticClass(), TEXT("Check_StartAuto"));
 	Park3DPanelStyle::StyleCheckBox(Check_StartAuto); // 어두운 패널에서는 엔진 기본 회색이 배경에 묻힌다.
+	Check_StartAuto->OnCheckStateChanged.AddDynamic(this, &UCameraControlWidget::HandleStartAutoChanged);
 	if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(Check_StartAuto))
 	{
 		S->SetVerticalAlignment(VAlign_Center);
@@ -1688,11 +1689,13 @@ void UCameraControlWidget::FillStartSlotRow(const FCamDir& Dir)
 	Field_StartSlot->SetText(Dir.start_slot > 0 ? FText::AsNumber(Dir.start_slot) : FText::GetEmpty());
 	if (Field_StartCount)
 	{
-		// 갯수 0 = 미지정(수동이면 기준 면 한 장, 자동이면 묶음 끝까지). 역시 빈칸으로 둔다.
+		// 갯수 0 = 기준 면 한 장. 역시 빈칸으로 둔다.
 		Field_StartCount->SetText(Dir.start_count > 0 ? FText::AsNumber(Dir.start_count) : FText::GetEmpty());
+		Field_StartCount->SetIsEnabled(!Dir.auto_renumber); // 자동이면 갯수는 쓰이지 않는다(끝까지).
 	}
 	if (Check_StartAuto)
 	{
+		// SetIsChecked 는 OnCheckStateChanged 를 쏘지 않는다(SSlider 와 다르다) → 갯수 칸은 위에서 직접 맞췄다.
 		Check_StartAuto->SetIsChecked(Dir.auto_renumber);
 	}
 	PickedStartFace = Dir.start_face;
@@ -1758,6 +1761,15 @@ int32 UCameraControlWidget::ReadStartCountField() const
 bool UCameraControlWidget::ReadStartAutoField() const
 {
 	return Check_StartAuto ? Check_StartAuto->IsChecked() : false;
+}
+
+void UCameraControlWidget::HandleStartAutoChanged(bool bIsChecked)
+{
+	if (Field_StartCount)
+	{
+		// 자동은 묶음 끝까지 이어 매겨 갯수를 안 본다 → 칸을 잠가 "넣었는데 안 먹는다"를 없앤다(값은 지우지 않는다).
+		Field_StartCount->SetIsEnabled(!bIsChecked);
+	}
 }
 
 void UCameraControlWidget::WriteStartSlotTo(FCamDir& Dir) const

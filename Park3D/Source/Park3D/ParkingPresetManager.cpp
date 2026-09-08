@@ -772,9 +772,10 @@ void AParkingPresetManager::ApplyNumberAnchors(TArray<FParkingSlotNumberInfo>& S
 		if (const FSlotNumberAnchor* A = ByKey.Find(S.FaceKey()))
 		{
 			Next = A->Number;
-			// 자동 이어 매기기가 꺼져 있으면(기본) 기준 면 한 장만 — 뒤 면은 원래 순번으로 남는다.
-			// 켜면 개수를 안 준 경우(0) 묶음 끝까지, 주면 그 개수만.
-			Remaining = !A->bAuto ? 1 : (A->Count > 0 ? A->Count : TNumericLimits<int32>::Max());
+			// 갯수 N 을 주면 어느 모드든 기준 면부터 N 장을 강제로 매긴다(2026-09-08 사용자 지시 — 수동에서도 갯수가 먹어야 한다).
+			// 갯수를 안 준 경우(0)만 갈린다: 수동(기본)은 기준 면 한 장, 자동은 묶음 끝까지.
+			// 번호 중복은 어느 모드에서도 막지 않는다(수동은 겹쳐도 된다는 것이 사용자 결정).
+			Remaining = A->Count > 0 ? A->Count : (A->bAuto ? TNumericLimits<int32>::Max() : 1);
 		}
 		if (Remaining > 0)
 		{

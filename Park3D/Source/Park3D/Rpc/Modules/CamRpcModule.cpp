@@ -95,7 +95,7 @@ namespace
 	}
 
 	/**
-	 * 메모리의 시작 슬롯 기준점(start_face/start_slot)을 바닥 번호에 반영한다.
+	 * 메모리의 바닥 번호 지정 목록(slot_numbers)을 바닥 번호에 반영한다.
 	 * 패널의 SyncNumberAnchors 와 같은 규칙이며 마지막에 넘긴 쪽(패널이든 RPC 든)이 이긴다 — 카메라 액터와 같은 성질.
 	 */
 	void PushCamNumberAnchors(UWorld* World, const FCameraPosList& Memory)
@@ -106,6 +106,22 @@ namespace
 			UCameraControlLibrary::CollectNumberAnchors(Memory, Anchors);
 			PresetMgr->SetNumberAnchors(Anchors);
 		}
+	}
+
+	/** 바닥 번호 지정 목록 → JSON 배열 [{face,slot,count,auto}]. */
+	TArray<TSharedPtr<FJsonValue>> SlotNumbersJson(const FCameraPosList& Memory)
+	{
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		for (const FCamSlotNumber& N : Memory.slot_numbers)
+		{
+			TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+			O->SetStringField(TEXT("face"), N.face);
+			O->SetNumberField(TEXT("slot"), N.slot);
+			O->SetNumberField(TEXT("count"), N.count);
+			O->SetBoolField(TEXT("auto"), N.auto_renumber);
+			Arr.Add(MakeShared<FJsonValueObject>(O));
+		}
+		return Arr;
 	}
 
 	/** 프리셋 적용 결과 공통 응답. */
@@ -119,12 +135,6 @@ namespace
 		O->SetNumberField(TEXT("pan"), Dir.pan);
 		O->SetNumberField(TEXT("tilt"), Dir.tilt);
 		O->SetNumberField(TEXT("zoom"), Dir.zoom);
-		// 시작 슬롯: 기준 면(startFace, preset.numbers 의 faceKey)이 받는 번호(startSlot, 0=미지정)와
-		// 수동일 때 강제로 매길 면의 개수(startCount, 0=기준 면 한 장). autoRenumber 가 참이면 묶음 끝까지 이어 매기고 startCount 는 무시한다.
-		O->SetNumberField(TEXT("startSlot"), Dir.start_slot);
-		O->SetStringField(TEXT("startFace"), Dir.start_face);
-		O->SetNumberField(TEXT("startCount"), Dir.start_count);
-		O->SetBoolField(TEXT("autoRenumber"), Dir.auto_renumber);
 		return RpcDto::MakeObject(O);
 	}
 
@@ -490,24 +500,7 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 		// 로드 시 pan/tilt 는 rot 에서 복원되므로(NormalizeLoaded) rot 도 반드시 같이 쓴다.
 		Dir->rot = FCamVec3{ Tilt, Pan, 0.f };
 		Dir->ptzmax.z = Cam->MaxZoom;
-		// 시작 슬롯은 카메라 상태에서 읽을 수 없는 값이다(사람이 정한다) — 준 경우에만 덮고, 아니면 기존 값을 지킨다.
-		// startFace 는 preset.numbers 의 faceKey("level:<액터>#<인스턴스>" / "preset:<idx>#<slot>"). 빈 문자열이면 기준 면을 푼다.
-		if (RpcParam::Has(P, TEXT("startSlot")))
-		{
-			Dir->start_slot = FMath::Max(0, RpcParam::GetInt(P, TEXT("startSlot"), Dir->start_slot));
-		}
-		if (RpcParam::Has(P, TEXT("startFace")))
-		{
-			Dir->start_face = RpcParam::GetString(P, TEXT("startFace"), Dir->start_face).TrimStartAndEnd();
-		}
-		if (RpcParam::Has(P, TEXT("startCount")))
-		{
-			Dir->start_count = FMath::Max(0, RpcParam::GetInt(P, TEXT("startCount"), Dir->start_count));
-		}
-		if (RpcParam::Has(P, TEXT("autoRenumber")))
-		{
-			Dir->auto_renumber = RpcParam::GetBool(P, TEXT("autoRenumber"), Dir->auto_renumber);
-		}
+		// 바닥 번호 지정은 프리셋 값이 아니다 — cam.setSlotNumber 가 파일 전체의 목록(slot_numbers)에 넣고, 여기서는 그 목록이 같이 저장될 뿐이다.
 
 		const FString Path = ResolveCamPresetPath(P);
 		if (!UCameraControlLibrary::SaveToJson(Path, PresetMemory))
@@ -515,7 +508,6 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 			E.FailDomain(FString::Printf(TEXT("카메라 프리셋 저장 실패: %s"), *Path));
 			return nullptr;
 		}
-		PushCamNumberAnchors(GetWorldPtr(), PresetMemory);
 
 		TSharedPtr<FJsonValue> Result = PresetResult(CamId, PresetId, *Dir);
 		Result->AsObject()->SetStringField(TEXT("path"), Path);
@@ -539,7 +531,7 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 			return nullptr;
 		}
 		PresetMemory = MoveTemp(Loaded); // 파일이 메모리를 교체한다(부분 병합 아님 — Unity 동일).
-		PushCamNumberAnchors(GetWorldPtr(), PresetMemory); // 파일의 기준점으로 바닥 번호를 다시 매긴다(패널 '열기'와 같다).
+		PushCamNumberAnchors(GetWorldPtr(), PresetMemory); // 파일의 지정 목록으로 바닥 번호를 다시 매긴다(패널 '열기'와 같다).
 
 		FCamDir* Dir = FindDirConst(PresetMemory, CamId, PresetId);
 		if (!Dir)
@@ -580,7 +572,6 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetBoolField(TEXT("ok"), true);
 		O->SetNumberField(TEXT("removed"), Removed);
 		O->SetNumberField(TEXT("remaining"), Dirs.Num());
-		PushCamNumberAnchors(GetWorldPtr(), PresetMemory); // 지운 프리셋의 기준점도 함께 빠진다.
 
 		if (RpcParam::GetBool(P, TEXT("save"), true))
 		{
@@ -592,6 +583,57 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 			}
 			O->SetStringField(TEXT("fileName"), FPaths::GetCleanFilename(Path));
 		}
+		return RpcDto::MakeObject(O);
+	});
+
+	// ---- 바닥 번호 지정(PresetMemory.slot_numbers 권위 — 프리셋이 아니라 파일 전체에 하나인 목록) ----
+	// 패널 "시작 슬롯" 줄과 같은 규칙(UCameraControlLibrary::SetSlotNumber): face(preset.numbers 의 faceKey)를 slot 번으로 하고,
+	// 수동이면 count 장(0=한 장)만, auto 면 묶음 끝까지 이어 매긴다. 같은 face 를 다시 주면 그 항목만 덮고, slot 0 은 그 face 의
+	// 지정을 지운다. 다른 face 의 지정은 건드리지 않는다. 바닥 반영은 즉시(패널 CamData 와는 별개 — 마지막에 넘긴 쪽이 이긴다).
+	Dispatcher.Register(TEXT("cam.setSlotNumber"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		FString Face;
+		if (!RpcParam::RequireString(P, TEXT("face"), Face, E)) return nullptr;
+		int32 Slot = 0;
+		if (!RpcParam::RequireInt(P, TEXT("slot"), Slot, E)) return nullptr;
+		Face.TrimStartAndEndInline();
+		if (Face.IsEmpty()) { E.FailDomain(TEXT("face 가 비어 있습니다 — preset.numbers 의 faceKey 를 주세요")); return nullptr; }
+		const bool bSave = RpcParam::GetBool(P, TEXT("save"), false);
+		// 저장은 파일 전체(카메라 목록 포함)를 덮어쓴다 — 메모리가 비어 있으면(cam.loadPreset 전) 카메라 0대짜리 파일이 되므로 바꾸기 전에 막는다.
+		if (bSave && PresetMemory.datas.Num() == 0)
+		{
+			E.FailDomain(TEXT("메모리에 카메라가 없어 저장할 수 없습니다 — 먼저 cam.loadPreset 을 호출하세요"));
+			return nullptr;
+		}
+		const bool bChanged = UCameraControlLibrary::SetSlotNumber(PresetMemory, Face, Slot,
+			FMath::Max(0, RpcParam::GetInt(P, TEXT("count"), 0)), RpcParam::GetBool(P, TEXT("auto"), false));
+		if (bChanged)
+		{
+			PushCamNumberAnchors(GetWorldPtr(), PresetMemory);
+		}
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetBoolField(TEXT("changed"), bChanged);
+		O->SetArrayField(TEXT("slotNumbers"), SlotNumbersJson(PresetMemory));
+		if (bSave)
+		{
+			const FString Path = ResolveCamPresetPath(P);
+			if (!UCameraControlLibrary::SaveToJson(Path, PresetMemory))
+			{
+				E.FailDomain(FString::Printf(TEXT("카메라 프리셋 저장 실패: %s"), *Path));
+				return nullptr;
+			}
+			O->SetStringField(TEXT("fileName"), FPaths::GetCleanFilename(Path));
+		}
+		return RpcDto::MakeObject(O);
+	});
+
+	Dispatcher.Register(TEXT("cam.slotNumbers"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetNumberField(TEXT("count"), PresetMemory.slot_numbers.Num());
+		O->SetArrayField(TEXT("slotNumbers"), SlotNumbersJson(PresetMemory));
 		return RpcDto::MakeObject(O);
 	});
 

@@ -486,6 +486,50 @@ bool FRpcCamModuleTest::RunTest(const FString& Parameters)
 		if (!SavedPath.IsEmpty()) { IFileManager::Get().Delete(*SavedPath, /*RequireExists=*/false); }
 	}
 
+	// 바닥 번호 지정: 프리셋이 아니라 파일 전체의 목록 — 두 번째 지정이 첫 지정을 지우면 안 된다(2026-09-08 신고의 핵심).
+	{
+		auto SetNum = [&](const TCHAR* Face, int32 Slot, int32 Count, bool bAuto, TSharedPtr<FJsonValue>& R) -> bool
+		{
+			TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+			P->SetStringField(TEXT("face"), Face);
+			P->SetNumberField(TEXT("slot"), Slot);
+			P->SetNumberField(TEXT("count"), Count);
+			P->SetBoolField(TEXT("auto"), bAuto);
+			return Dispatch(TEXT("cam.setSlotNumber"), P, R);
+		};
+		auto ListCount = [&]() -> int32
+		{
+			TSharedPtr<FJsonValue> R; Dispatch(TEXT("cam.slotNumbers"), nullptr, R);
+			double C = -1; if (R.IsValid() && R->Type == EJson::Object) { R->AsObject()->TryGetNumberField(TEXT("count"), C); }
+			return (int32)C;
+		};
+		TSharedPtr<FJsonValue> R1, R2, R3, R4, R5;
+		TestTrue(TEXT("setSlotNumber A"), SetNum(TEXT("level:_AutomationTest_A#0"), 10, 2, false, R1));
+		TestTrue(TEXT("setSlotNumber B"), SetNum(TEXT("level:_AutomationTest_B#0"), 50, 0, true, R2));
+		TestEqual(TEXT("두 곳 모두 남는다"), ListCount(), 2);
+		TestTrue(TEXT("setSlotNumber A 덮기"), SetNum(TEXT("level:_AutomationTest_A#0"), 11, 3, false, R3));
+		TestEqual(TEXT("같은 face 는 덮어 2곳 유지"), ListCount(), 2);
+		if (R3.IsValid() && R3->Type == EJson::Object)
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+			if (R3->AsObject()->TryGetArrayField(TEXT("slotNumbers"), Arr) && Arr->Num() == 2)
+			{
+				double Slot = 0; (*Arr)[0]->AsObject()->TryGetNumberField(TEXT("slot"), Slot);
+				TestEqual(TEXT("A 는 자리를 지키고 값만 11"), (int32)Slot, 11);
+			}
+			else { AddError(TEXT("slotNumbers 배열 2개가 아님")); }
+		}
+		TestTrue(TEXT("setSlotNumber A 해제(slot 0)"), SetNum(TEXT("level:_AutomationTest_A#0"), 0, 0, false, R4));
+		TestEqual(TEXT("A 만 빠지고 B 는 남는다"), ListCount(), 1);
+		// 에디터 월드의 매니저에 테스트 기준점을 남기지 않는다.
+		TestTrue(TEXT("setSlotNumber B 해제"), SetNum(TEXT("level:_AutomationTest_B#0"), 0, 0, false, R5));
+		TestEqual(TEXT("목록 비움"), ListCount(), 0);
+		// face 빈 문자열은 거부.
+		TSharedPtr<FJsonValue> BadR; FRpcError BadE;
+		TSharedPtr<FJsonObject> BadP = MakeShared<FJsonObject>(); BadP->SetStringField(TEXT("face"), TEXT("  ")); BadP->SetNumberField(TEXT("slot"), 1);
+		TestFalse(TEXT("빈 face 거부"), D->Dispatch(TEXT("cam.setSlotNumber"), BadP, BadR, BadE));
+	}
+
 	// delete: 1대뿐이면 ok=false(최소 1 유지)
 	TSharedPtr<FJsonObject> DelP = MakeShared<FJsonObject>(); DelP->SetNumberField(TEXT("camId"), CamId);
 	TSharedPtr<FJsonValue> DR;

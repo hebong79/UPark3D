@@ -529,9 +529,9 @@ bool FParkingSlotNumberTest::RunTest(const FString& Parameters)
 		Mgr->bShowSlotNumbers = true;
 	}
 
-	// TN-8: 기준점 재부여(카메라 프리셋 시작 슬롯).
+	// TN-8: 기준점 재부여(카메라 프리셋 시작 슬롯). 갯수 0 일 때 모드가 갈린다:
 	//  - **기본(bAuto=false, 수동)**: 3번 면만 10번이 되고 뒤 면(4,5,6)은 손대지 않는다 — 2026-09-08 사용자 지시.
-	//  - bAuto=true: 뒤 면이 11,12,13 으로 이어진다(옛 기본값).
+	//  - bAuto=true: 뒤 면이 11,12,13 으로 이어진다(옛 기본값). 갯수 N 을 준 경우는 TN-9.
 	// 레벨 면 묶음은 어느 쪽이든 프리셋 묶음의 이어 매기기에 끌려가지 않는다(경계에서 끊김).
 	{
 		TArray<FParkingSlotNumberInfo> Before;
@@ -605,47 +605,53 @@ bool FParkingSlotNumberTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("TN-8 기준점 해제 → 원래 3"), Third ? Third->Number : -1, 3);
 	}
 
-	// TN-9: 갯수 제한(자동일 때만 쓰인다). 2번 면부터 3개만 10,11,12 로 — 앞(1)과 뒤(5,6)는 원래 순번 그대로.
+	// TN-9: 갯수 제한. 2번 면부터 3개만 10,11,12 로 — 앞(1)과 뒤(5,6)는 원래 순번 그대로.
+	//  갯수 N 은 **수동에서도 먹는다**(2026-09-08 사용자 지시 — 수동은 start slot 부터 N 장을 강제로 매기고 번호가 겹쳐도 된다).
 	{
-		// 자동이 꺼져 있으면 갯수를 줘도 기준 면 한 장뿐이다.
+		auto CheckPresetNumbers = [&](const TCHAR* Tag, const int32(&Want)[6])
+		{
+			TArray<FParkingSlotNumberInfo> Slots;
+			Mgr->CollectSlotNumbers(Presets, Slots);
+			int32 k = 0;
+			for (const FParkingSlotNumberInfo& S : Slots)
+			{
+				if (!S.bFromPreset) continue;
+				if (k < 6) { TestEqual(*FString::Printf(TEXT("%s 면 %d 번호"), Tag, k + 1), S.Number, Want[k]); }
+				++k;
+			}
+		};
+
+		// 수동 + 갯수 3: 자동과 같은 세 장.
 		TArray<FSlotNumberAnchor> Manual;
 		Manual.Add(FSlotNumberAnchor{ TEXT("preset:3#2"), 10, 3, false });
 		Mgr->SetNumberAnchors(Manual);
-		TArray<FParkingSlotNumberInfo> ManualAfter;
-		Mgr->CollectSlotNumbers(Presets, ManualAfter);
 		{
-			const int32 Want[6] = { 1, 10, 3, 4, 5, 6 };
-			int32 k = 0;
-			for (const FParkingSlotNumberInfo& S : ManualAfter)
-			{
-				if (!S.bFromPreset) continue;
-				if (k < 6) { TestEqual(*FString::Printf(TEXT("TN-9 수동 면 %d 번호"), k + 1), S.Number, Want[k]); }
-				++k;
-			}
+			const int32 Want[6] = { 1, 10, 11, 12, 5, 6 };
+			CheckPresetNumbers(TEXT("TN-9 수동+갯수3"), Want);
+		}
+
+		// 수동 + 갯수 2 로 3번 면을 1번으로: 앞의 1,2 와 겹쳐도 막지 않는다 → 1,2,1,2,5,6.
+		Manual.Reset();
+		Manual.Add(FSlotNumberAnchor{ TEXT("preset:3#3"), 1, 2, false });
+		Mgr->SetNumberAnchors(Manual);
+		{
+			const int32 Want[6] = { 1, 2, 1, 2, 5, 6 };
+			CheckPresetNumbers(TEXT("TN-9 수동 중복 허용"), Want);
 		}
 
 		TArray<FSlotNumberAnchor> Anchors;
 		Anchors.Add(FSlotNumberAnchor{ TEXT("preset:3#2"), 10, 3, true });
 		Mgr->SetNumberAnchors(Anchors);
-
-		TArray<FParkingSlotNumberInfo> After;
-		Mgr->CollectSlotNumbers(Presets, After);
-		const int32 Expected[6] = { 1, 10, 11, 12, 5, 6 };
-		int32 i = 0;
-		for (const FParkingSlotNumberInfo& S : After)
 		{
-			if (!S.bFromPreset) continue;
-			if (i < 6)
-			{
-				TestEqual(*FString::Printf(TEXT("TN-9 면 %d 번호"), i + 1), S.Number, Expected[i]);
-			}
-			++i;
+			const int32 Want[6] = { 1, 10, 11, 12, 5, 6 };
+			CheckPresetNumbers(TEXT("TN-9 자동+갯수3"), Want);
 		}
 
-		// 갯수가 남은 면 수보다 크면 묶음 끝에서 자연히 멈춘다(경계를 넘지 않는다).
+		// 갯수가 남은 면 수보다 크면 묶음 끝에서 자연히 멈춘다(경계를 넘지 않는다). 수동도 같다.
 		Anchors.Reset();
-		Anchors.Add(FSlotNumberAnchor{ TEXT("preset:3#5"), 50, 99, true });
+		Anchors.Add(FSlotNumberAnchor{ TEXT("preset:3#5"), 50, 99, false });
 		Mgr->SetNumberAnchors(Anchors);
+		TArray<FParkingSlotNumberInfo> After;
 		Mgr->CollectSlotNumbers(Presets, After);
 		const FParkingSlotNumberInfo* FirstLevel = After.FindByPredicate([](const FParkingSlotNumberInfo& S) { return !S.bFromPreset; });
 		if (FirstLevel)

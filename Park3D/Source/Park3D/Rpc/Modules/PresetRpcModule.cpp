@@ -6,6 +6,7 @@
 #include "../../ParkingPresetManager.h"
 #include "../../PresetMakerWidget.h"
 #include "../../ParkingGeometryLibrary.h"
+#include "../../Park3DDataPaths.h"
 #include "Misc/Paths.h"
 
 namespace
@@ -17,15 +18,18 @@ namespace
 		{
 			return FullPath;
 		}
-		FString Dir = RpcParam::GetString(P, TEXT("path"));
-		if (Dir.IsEmpty())
-		{
-			Dir = FPaths::Combine(FPaths::ProjectDir(), TEXT("Save"), TEXT("3D"), TEXT("Preset"));
-		}
 		FString FileName = RpcParam::GetString(P, TEXT("fileName"), TEXT("preset"));
 		if (!FileName.EndsWith(TEXT(".json")))
 		{
 			FileName += TEXT(".json");
+		}
+		FString Dir = RpcParam::GetString(P, TEXT("path"));
+		if (Dir.IsEmpty())
+		{
+			// 패널(PresetMakerWidget)과 같은 Save 루트를 써야 한다. ProjectDir()/Save 를 직접 조합하면
+			// 패키지에서는 그 폴더가 없어 새로 만들어지고, 다음 기동부터 GetSaveRootDir() 가 그 빈 폴더를
+			// 골라 config·카메라·차량 파일을 전부 못 읽는다(레벨이 빈 부팅맵에 머문 사고, 2026-09-15).
+			return Park3DDataPaths::GetDataFilePath(TEXT("Preset"), *FileName);
 		}
 		return FPaths::Combine(Dir, FileName);
 	}

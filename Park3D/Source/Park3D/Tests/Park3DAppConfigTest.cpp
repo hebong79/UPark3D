@@ -196,10 +196,11 @@ bool FPark3DAppConfigStreamSlotsTest::RunTest(const FString& Parameters)
 {
 	FPark3DAppConfig Ok;
 	TestTrue(TEXT("파싱 성공"), UPark3DAppConfigLibrary::FromJson(
-		TEXT(R"({"stream_slots":10,"stream_hard_max_slots":16,"stream_total_fps":12.5})"), Ok));
+		TEXT(R"({"stream_slots":10,"stream_hard_max_slots":16,"stream_total_fps":12.5,"stream_main_fps":20})"), Ok));
 	TestEqual(TEXT("slots"), Ok.StreamSlots, 10);
 	TestEqual(TEXT("hard max"), Ok.StreamHardMaxSlots, 16);
 	TestEqual(TEXT("total fps"), Ok.StreamTotalFps, 12.5f);
+	TestEqual(TEXT("main fps"), Ok.StreamMainFps, 20.f);
 
 	// 키가 없으면 0 = 미지정. 이게 깨지면 config 에 안 적은 항목까지 ini 를 덮어 버린다.
 	FPark3DAppConfig None;
@@ -207,16 +208,19 @@ bool FPark3DAppConfigStreamSlotsTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("미지정 slots"), None.StreamSlots, 0);
 	TestEqual(TEXT("미지정 hard max"), None.StreamHardMaxSlots, 0);
 	TestEqual(TEXT("미지정 total fps"), None.StreamTotalFps, 0.f);
+	TestEqual(TEXT("미지정 main fps"), None.StreamMainFps, 0.f);
 
 	// 0·음수는 미지정 취급 — 그대로 적용하면 슬롯 0(아무도 못 봄)/fps 0(0 나눗셈)이 된다.
 	FPark3DAppConfig Zero, Neg;
-	UPark3DAppConfigLibrary::FromJson(TEXT(R"({"stream_slots":0,"stream_hard_max_slots":0,"stream_total_fps":0})"), Zero);
-	UPark3DAppConfigLibrary::FromJson(TEXT(R"({"stream_slots":-3,"stream_hard_max_slots":-1,"stream_total_fps":-2.5})"), Neg);
+	UPark3DAppConfigLibrary::FromJson(TEXT(R"({"stream_slots":0,"stream_hard_max_slots":0,"stream_total_fps":0,"stream_main_fps":0})"), Zero);
+	UPark3DAppConfigLibrary::FromJson(TEXT(R"({"stream_slots":-3,"stream_hard_max_slots":-1,"stream_total_fps":-2.5,"stream_main_fps":-1})"), Neg);
 	TestEqual(TEXT("0 slots 은 미지정"), Zero.StreamSlots, 0);
 	TestEqual(TEXT("0 fps 는 미지정"), Zero.StreamTotalFps, 0.f);
+	TestEqual(TEXT("0 main fps 는 미지정"), Zero.StreamMainFps, 0.f);
 	TestEqual(TEXT("음수 slots 은 미지정"), Neg.StreamSlots, 0);
 	TestEqual(TEXT("음수 hard max 는 미지정"), Neg.StreamHardMaxSlots, 0);
 	TestEqual(TEXT("음수 fps 는 미지정"), Neg.StreamTotalFps, 0.f);
+	TestEqual(TEXT("음수 main fps 는 미지정"), Neg.StreamMainFps, 0.f);
 
 	// 세 키는 서로를 요구하지 않는다(포트 대역과 달리 각자 완결되는 스칼라다).
 	FPark3DAppConfig OnlyCap;

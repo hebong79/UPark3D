@@ -100,6 +100,13 @@ void UCamStreamSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 			TotalFps, Applied);
 		TotalFps = Applied;
 	}
+	if (bHasConfig && AppConfig.StreamMainFps > 0.f && !FMath::IsNearlyEqual(AppConfig.StreamMainFps, MainFps))
+	{
+		const float Applied = FMath::Clamp(AppConfig.StreamMainFps, 0.1f, 60.f);
+		UE_LOG(LogCamStreamSub, Log, TEXT("[CamStream] 메인 뷰 캡처 %.2f → %.2f fps (출처: config_pmaker.json stream_main_fps)"),
+			MainFps, Applied);
+		MainFps = Applied;
+	}
 
 	// 채널 개설은 Tick 에서 한다 — 카메라 매니저 스폰(GameMode BeginPlay)과의 순서에
 	// 의존하지 않기 위해서다. 카메라가 생기는 순간 자동으로 포트가 열린다.

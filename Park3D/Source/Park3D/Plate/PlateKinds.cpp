@@ -15,8 +15,6 @@ namespace
 		TEXT("서울"), TEXT("부산"), TEXT("대구"), TEXT("인천"), TEXT("광주"), TEXT("대전"), TEXT("울산"), TEXT("경기"), TEXT("강원"),
 		TEXT("충북"), TEXT("충남"), TEXT("전북"), TEXT("전남"), TEXT("경북"), TEXT("경남"), TEXT("제주"), TEXT("세종") };
 
-	FORCEINLINE bool IsHangul(TCHAR Ch) { return Ch >= 0xAC00 && Ch <= 0xD7A3; }
-	FORCEINLINE bool IsDigitCh(TCHAR Ch) { return Ch >= TEXT('0') && Ch <= TEXT('9'); }
 
 	// plates.py EV_NAME_HINTS · TRUCK_TYPES(ECarType Bongo=5 · Truck=6)
 	const TCHAR* const EvNameHints[] = { TEXT("EV"), TEXT("아이오닉"), TEXT("IONIQ") };
@@ -141,14 +139,14 @@ namespace PlateKinds
 		int32 i = 0;
 		FString Region, Prefix, Usage, Serial;
 		// 지역명(한글 2자)은 뒤에 숫자가 이어질 때만 지역이다 — "가" 한 글자는 용도 한글이다.
-		if (S.Len() >= 2 && IsHangul(S[0]) && IsHangul(S[1]))
+		if (S.Len() >= 2 && PlateKinds::IsHangulCh(S[0]) && PlateKinds::IsHangulCh(S[1]))
 		{
 			Region = S.Mid(0, 2);
 			i = 2;
 		}
 		while (i < S.Len() && IsDigitCh(S[i])) { Prefix.AppendChar(S[i]); ++i; }
 		if (Prefix.Len() < 2 || Prefix.Len() > 3) { return false; }
-		if (i >= S.Len() || !IsHangul(S[i])) { return false; }
+		if (i >= S.Len() || !PlateKinds::IsHangulCh(S[i])) { return false; }
 		Usage.AppendChar(S[i]); ++i;
 		while (i < S.Len() && IsDigitCh(S[i])) { Serial.AppendChar(S[i]); ++i; }
 		if (Serial.Len() != 4 || i != S.Len()) { return false; }

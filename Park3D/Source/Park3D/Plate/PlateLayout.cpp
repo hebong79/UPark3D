@@ -8,7 +8,7 @@ namespace
 	constexpr double InkDigit = 0.88;
 	constexpr double InkHangul = 0.68;
 
-	FORCEINLINE bool IsDigitCh(TCHAR Ch) { return Ch >= TEXT('0') && Ch <= TEXT('9'); }
+	using PlateKinds::IsDigitCh;
 
 	FPlateCell MakeCell(TCHAR Ch, double X0, double Y0, double X1, double Y1, double InkH)
 	{

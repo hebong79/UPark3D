@@ -37,6 +37,11 @@ struct FPlateKindDef
 
 namespace PlateKinds
 {
+	// 글자 판정 — 이 헤더에 두는 이유: 익명 네임스페이스로 .cpp 마다 두면 유니티 빌드가 PlateKinds.cpp 와 PlateLayout.cpp 를
+	// 한 TU 로 묶을 때 C2084 로 충돌한다(2026-09-21 패키지 빌드 실측).
+	FORCEINLINE bool IsHangulCh(TCHAR Ch) { return Ch >= 0xAC00 && Ch <= 0xD7A3; }
+	FORCEINLINE bool IsDigitCh(TCHAR Ch) { return Ch >= TEXT('0') && Ch <= TEXT('9'); }
+
 	/** 종류 표(10종, OmiPark3D 와 같은 순서). */
 	const TArray<FPlateKindDef>& Kinds();
 	const FPlateKindDef* FindKind(const FString& Key);

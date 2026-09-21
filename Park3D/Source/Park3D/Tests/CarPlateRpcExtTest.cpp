@@ -19,9 +19,11 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
+// 도우미 이름에 Cp 접두사 — 익명 네임스페이스도 유니티 빌드(UAT 패키지)가 다른 테스트 .cpp 와 한 TU 로 묶으면
+// StrField/NumField 가 EnvSceneRpcModuleTest 와 C2084 로 충돌한다(2026-09-21 패키지 빌드 실측).
 namespace
 {
-	TArray<FCarPresetEntry> TestCatalog()
+	TArray<FCarPresetEntry> CpTestCatalog()
 	{
 		TArray<FCarPresetEntry> C;
 		FCarPresetEntry A; A.Idx = 1; A.PrefabName = TEXT("A"); C.Add(A);
@@ -30,12 +32,12 @@ namespace
 		return C;
 	}
 
-	UWorld* EditorWorld()
+	UWorld* CpEditorWorld()
 	{
 		return (GEngine && GEngine->GetWorldContexts().Num() > 0) ? GWorld : nullptr;
 	}
 
-	void CleanupCarManager(UWorld* World)
+	void CpCleanupCarManager(UWorld* World)
 	{
 		if (!World) return;
 		if (ACarPlacementManager* Mgr = Cast<ACarPlacementManager>(
@@ -46,7 +48,7 @@ namespace
 		}
 	}
 
-	void CleanupPresetManager(UWorld* World)
+	void CpCleanupPresetManager(UWorld* World)
 	{
 		if (!World) return;
 		if (AParkingPresetManager* Mgr = Cast<AParkingPresetManager>(
@@ -57,36 +59,36 @@ namespace
 		}
 	}
 
-	TSharedPtr<FJsonObject> Obj(const TSharedPtr<FJsonValue>& V)
+	TSharedPtr<FJsonObject> CpObj(const TSharedPtr<FJsonValue>& V)
 	{
 		return (V.IsValid() && V->Type == EJson::Object) ? V->AsObject() : nullptr;
 	}
 
-	int32 NumField(const TSharedPtr<FJsonValue>& V, const TCHAR* Key, int32 Default = -1)
+	int32 CpNumField(const TSharedPtr<FJsonValue>& V, const TCHAR* Key, int32 Default = -1)
 	{
-		const TSharedPtr<FJsonObject> O = Obj(V);
+		const TSharedPtr<FJsonObject> O = CpObj(V);
 		double D = Default;
 		if (O.IsValid()) { O->TryGetNumberField(Key, D); }
 		return static_cast<int32>(D);
 	}
 
-	FString StrField(const TSharedPtr<FJsonValue>& V, const TCHAR* Key)
+	FString CpStrField(const TSharedPtr<FJsonValue>& V, const TCHAR* Key)
 	{
-		const TSharedPtr<FJsonObject> O = Obj(V);
+		const TSharedPtr<FJsonObject> O = CpObj(V);
 		FString S;
 		if (O.IsValid()) { O->TryGetStringField(Key, S); }
 		return S;
 	}
 
-	int32 ArrayNum(const TSharedPtr<FJsonValue>& V, const TCHAR* Key)
+	int32 CpArrayNum(const TSharedPtr<FJsonValue>& V, const TCHAR* Key)
 	{
-		const TSharedPtr<FJsonObject> O = Obj(V);
+		const TSharedPtr<FJsonObject> O = CpObj(V);
 		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
 		return (O.IsValid() && O->TryGetArrayField(Key, Arr)) ? Arr->Num() : -1;
 	}
 
 	/** car.create {prefabId:1, pos:{x,z}} → carNameId. */
-	FString CreateCar(URpcDispatcher* D, double X, double Z)
+	FString CpCreateCar(URpcDispatcher* D, double X, double Z)
 	{
 		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
 		P->SetNumberField(TEXT("prefabId"), 1);
@@ -95,7 +97,7 @@ namespace
 		P->SetObjectField(TEXT("pos"), Pos);
 		TSharedPtr<FJsonValue> R; FRpcError E;
 		D->Dispatch(TEXT("car.create"), P, R, E);
-		return StrField(R, TEXT("carNameId"));
+		return CpStrField(R, TEXT("carNameId"));
 	}
 }
 
@@ -106,40 +108,40 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRpcCarExtPurgeTest,
 
 bool FRpcCarExtPurgeTest::RunTest(const FString& Parameters)
 {
-	UWorld* World = EditorWorld();
+	UWorld* World = CpEditorWorld();
 	if (!World) { AddWarning(TEXT("에디터 월드 없음 — 건너뜀.")); return true; }
-	CleanupCarManager(World);
+	CpCleanupCarManager(World);
 
 	URpcDispatcher* D = NewObject<URpcDispatcher>();
 	FCarRpcModule Car([World]() -> UWorld* { return World; });
-	Car.SetCatalog(TestCatalog());
+	Car.SetCatalog(CpTestCatalog());
 	Car.Register(*D);
 
 	// 목록 차량 2대 + 매니저를 거치지 않고 스폰한 유령 1대.
-	CreateCar(D, 1, 1);
-	CreateCar(D, 2, 2);
+	CpCreateCar(D, 1, 1);
+	CpCreateCar(D, 2, 2);
 	ACarActor* Ghost = World->SpawnActor<ACarActor>();
 	if (!TestNotNull(TEXT("유령 스폰"), Ghost)) return false;
 	TWeakObjectPtr<ACarActor> GhostWeak(Ghost);
 
 	TSharedPtr<FJsonValue> R; FRpcError E;
 	TestTrue(TEXT("car.purge 성공"), D->Dispatch(TEXT("car.purge"), nullptr, R, E));
-	TestEqual(TEXT("deletedCount = 목록 2대"), NumField(R, TEXT("deletedCount")), 2);
+	TestEqual(TEXT("deletedCount = 목록 2대"), CpNumField(R, TEXT("deletedCount")), 2);
 	// 에디터 월드에 다른 테스트가 남긴 ACarActor 가 있을 수 있어 유령 수는 하한으로 본다.
-	TestTrue(TEXT("ghostCount >= 유령 1대"), NumField(R, TEXT("ghostCount")) >= 1);
-	TestTrue(TEXT("destroyedCount >= 3"), NumField(R, TEXT("destroyedCount")) >= 3);
+	TestTrue(TEXT("ghostCount >= 유령 1대"), CpNumField(R, TEXT("ghostCount")) >= 1);
+	TestTrue(TEXT("destroyedCount >= 3"), CpNumField(R, TEXT("destroyedCount")) >= 3);
 	TestFalse(TEXT("유령 액터가 파괴됐다"), GhostWeak.IsValid() && !GhostWeak->IsActorBeingDestroyed());
 
 	TSharedPtr<FJsonValue> ListR; FRpcError ListE;
 	D->Dispatch(TEXT("car.list"), nullptr, ListR, ListE);
-	TestEqual(TEXT("purge 뒤 car.list 0대"), ArrayNum(ListR, TEXT("cars")), 0);
+	TestEqual(TEXT("purge 뒤 car.list 0대"), CpArrayNum(ListR, TEXT("cars")), 0);
 
 	// 빈 상태에서 다시 불러도 실패하지 않는다(멱등).
 	TSharedPtr<FJsonValue> R2; FRpcError E2;
 	TestTrue(TEXT("빈 상태 purge 성공"), D->Dispatch(TEXT("car.purge"), nullptr, R2, E2));
-	TestEqual(TEXT("빈 상태 deletedCount 0"), NumField(R2, TEXT("deletedCount")), 0);
+	TestEqual(TEXT("빈 상태 deletedCount 0"), CpNumField(R2, TEXT("deletedCount")), 0);
 
-	CleanupCarManager(World);
+	CpCleanupCarManager(World);
 	return true;
 }
 
@@ -150,39 +152,39 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRpcCarExtShowAllTest,
 
 bool FRpcCarExtShowAllTest::RunTest(const FString& Parameters)
 {
-	UWorld* World = EditorWorld();
+	UWorld* World = CpEditorWorld();
 	if (!World) { AddWarning(TEXT("에디터 월드 없음 — 건너뜀.")); return true; }
-	CleanupCarManager(World);
+	CpCleanupCarManager(World);
 
 	URpcDispatcher* D = NewObject<URpcDispatcher>();
 	FCarRpcModule Car([World]() -> UWorld* { return World; });
-	Car.SetCatalog(TestCatalog());
+	Car.SetCatalog(CpTestCatalog());
 	Car.Register(*D);
 
-	const FString IdA = CreateCar(D, 1, 1);
-	const FString IdB = CreateCar(D, 2, 2);
+	const FString IdA = CpCreateCar(D, 1, 1);
+	const FString IdB = CpCreateCar(D, 2, 2);
 	TestFalse(TEXT("차량 2대 생성"), IdA.IsEmpty() || IdB.IsEmpty());
 
 	TSharedPtr<FJsonObject> HideP = MakeShared<FJsonObject>(); HideP->SetBoolField(TEXT("hidden"), true);
 	TSharedPtr<FJsonValue> HideR; FRpcError HideE;
 	TestTrue(TEXT("car.hideAll 성공"), D->Dispatch(TEXT("car.hideAll"), HideP, HideR, HideE));
-	TestEqual(TEXT("hideAll changedCount 2"), NumField(HideR, TEXT("changedCount")), 2);
+	TestEqual(TEXT("hideAll changedCount 2"), CpNumField(HideR, TEXT("changedCount")), 2);
 
 	TSharedPtr<FJsonValue> ShowR; FRpcError ShowE;
 	TestTrue(TEXT("car.showAll 성공"), D->Dispatch(TEXT("car.showAll"), nullptr, ShowR, ShowE));
-	TestEqual(TEXT("showAll changedCount 2"), NumField(ShowR, TEXT("changedCount")), 2);
-	TestEqual(TEXT("showAll carCount 2"), NumField(ShowR, TEXT("carCount")), 2);
-	TestEqual(TEXT("shownCarNameIds 2개"), ArrayNum(ShowR, TEXT("shownCarNameIds")), 2);
+	TestEqual(TEXT("showAll changedCount 2"), CpNumField(ShowR, TEXT("changedCount")), 2);
+	TestEqual(TEXT("showAll carCount 2"), CpNumField(ShowR, TEXT("carCount")), 2);
+	TestEqual(TEXT("shownCarNameIds 2개"), CpArrayNum(ShowR, TEXT("shownCarNameIds")), 2);
 
 	// car.list 전부 visible.
 	TSharedPtr<FJsonValue> ListR; FRpcError ListE;
 	D->Dispatch(TEXT("car.list"), nullptr, ListR, ListE);
 	const TArray<TSharedPtr<FJsonValue>>* Cars = nullptr;
-	if (Obj(ListR).IsValid() && Obj(ListR)->TryGetArrayField(TEXT("cars"), Cars))
+	if (CpObj(ListR).IsValid() && CpObj(ListR)->TryGetArrayField(TEXT("cars"), Cars))
 	{
 		for (const TSharedPtr<FJsonValue>& V : *Cars)
 		{
-			bool bVisible = false; Obj(V)->TryGetBoolField(TEXT("visible"), bVisible);
+			bool bVisible = false; CpObj(V)->TryGetBoolField(TEXT("visible"), bVisible);
 			TestTrue(TEXT("showAll 뒤 visible"), bVisible);
 		}
 	}
@@ -191,9 +193,9 @@ bool FRpcCarExtShowAllTest::RunTest(const FString& Parameters)
 	// 재호출은 0.
 	TSharedPtr<FJsonValue> ShowR2; FRpcError ShowE2;
 	D->Dispatch(TEXT("car.showAll"), nullptr, ShowR2, ShowE2);
-	TestEqual(TEXT("재호출 changedCount 0"), NumField(ShowR2, TEXT("changedCount")), 0);
+	TestEqual(TEXT("재호출 changedCount 0"), CpNumField(ShowR2, TEXT("changedCount")), 0);
 
-	CleanupCarManager(World);
+	CpCleanupCarManager(World);
 	return true;
 }
 
@@ -204,17 +206,17 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRpcCarExtSetPlateTest,
 
 bool FRpcCarExtSetPlateTest::RunTest(const FString& Parameters)
 {
-	UWorld* World = EditorWorld();
+	UWorld* World = CpEditorWorld();
 	if (!World) { AddWarning(TEXT("에디터 월드 없음 — 건너뜀.")); return true; }
-	CleanupCarManager(World);
+	CpCleanupCarManager(World);
 
 	URpcDispatcher* D = NewObject<URpcDispatcher>();
 	FCarRpcModule Car([World]() -> UWorld* { return World; });
-	Car.SetCatalog(TestCatalog());
+	Car.SetCatalog(CpTestCatalog());
 	Car.Register(*D);
 
-	const FString IdA = CreateCar(D, 1, 1);
-	const FString IdB = CreateCar(D, 2, 2);
+	const FString IdA = CpCreateCar(D, 1, 1);
+	const FString IdB = CpCreateCar(D, 2, 2);
 
 	// 고정 번호 → car.get 의 plate 로 되읽힌다(공백은 빠진다).
 	{
@@ -223,14 +225,14 @@ bool FRpcCarExtSetPlateTest::RunTest(const FString& Parameters)
 		P->SetStringField(TEXT("plate"), TEXT("123가 4567"));
 		TSharedPtr<FJsonValue> R; FRpcError E;
 		TestTrue(TEXT("car.setPlate 성공"), D->Dispatch(TEXT("car.setPlate"), P, R, E));
-		TestEqual(TEXT("응답 plate 정규형"), StrField(R, TEXT("plate")), FString(TEXT("123가4567")));
+		TestEqual(TEXT("응답 plate 정규형"), CpStrField(R, TEXT("plate")), FString(TEXT("123가4567")));
 		// kind 를 안 주면 그 차의 종류(id 로 결정적 배정)를 유지한다. 표시 글자는 그 종류의 규칙(자릿수·지역)을 따른다.
-		const FString KindA = StrField(R, TEXT("plateKind"));
+		const FString KindA = CpStrField(R, TEXT("plateKind"));
 		const FPlateKindDef* KA = PlateRpc::FindKind(KindA);
 		TestNotNull(TEXT("응답 plateKind 는 표의 종류"), KA);
 		if (KA)
 		{
-			TestEqual(TEXT("응답 plateText"), StrField(R, TEXT("plateText")),
+			TestEqual(TEXT("응답 plateText"), CpStrField(R, TEXT("plateText")),
 				PlateRpc::DisplayText(*KA, TEXT("123가4567"), PlateKinds::IdSalt(IdA)));
 		}
 		// kind 를 명시하면 그 종류로 바뀌고 plateText 가 따라간다(구형 지역판 → "서울 23가 4567" 꼴).
@@ -239,24 +241,24 @@ bool FRpcCarExtSetPlateTest::RunTest(const FString& Parameters)
 		PK->SetStringField(TEXT("kind"), TEXT("old_green_region"));
 		TSharedPtr<FJsonValue> RK; FRpcError EK;
 		TestTrue(TEXT("car.setPlate kind 성공"), D->Dispatch(TEXT("car.setPlate"), PK, RK, EK));
-		TestEqual(TEXT("종류 변경"), StrField(RK, TEXT("plateKind")), FString(TEXT("old_green_region")));
-		TestEqual(TEXT("종류 변경 후 번호 유지"), StrField(RK, TEXT("plate")), FString(TEXT("123가4567")));
+		TestEqual(TEXT("종류 변경"), CpStrField(RK, TEXT("plateKind")), FString(TEXT("old_green_region")));
+		TestEqual(TEXT("종류 변경 후 번호 유지"), CpStrField(RK, TEXT("plate")), FString(TEXT("123가4567")));
 		{
 			FString Region, Prefix, Usage, Serial;
-			TestTrue(TEXT("plateText 문법"), PlateRpc::ParsePlate(StrField(RK, TEXT("plateText")), Region, Prefix, Usage, Serial));
+			TestTrue(TEXT("plateText 문법"), PlateRpc::ParsePlate(CpStrField(RK, TEXT("plateText")), Region, Prefix, Usage, Serial));
 			TestEqual(TEXT("지역판은 지역명이 붙는다"), Region.Len(), 2);
 			TestEqual(TEXT("2자리 종류는 앞자리를 자른다"), Prefix, FString(TEXT("23")));
 		}
 		// rendered 는 판을 실제로 정렬·합성한 뒤에만 참이다(테스트 카탈로그 차량은 메시가 없을 수 있다) — 참이면 에셋이 있어야 한다.
 		// 실차 메시로 종류별 판이 실제 붙는지는 CarActorTest(Park3D.CarPlacement.PlateNumber)가 본다.
 		bool bRendered = false;
-		if (Obj(RK).IsValid()) { Obj(RK)->TryGetBoolField(TEXT("rendered"), bRendered); }
+		if (CpObj(RK).IsValid()) { CpObj(RK)->TryGetBoolField(TEXT("rendered"), bRendered); }
 		if (bRendered) { TestTrue(TEXT("rendered 면 종류 인스턴스 에셋이 있다"), PlateKinds::IsKindRendered(TEXT("old_green_region"))); }
 
 		TSharedPtr<FJsonObject> GP = MakeShared<FJsonObject>(); GP->SetStringField(TEXT("carNameId"), IdA);
 		TSharedPtr<FJsonValue> GR; FRpcError GE;
 		TestTrue(TEXT("car.get 성공"), D->Dispatch(TEXT("car.get"), GP, GR, GE));
-		TestEqual(TEXT("car.get plate 왕복"), StrField(GR, TEXT("plate")), FString(TEXT("123가4567")));
+		TestEqual(TEXT("car.get plate 왕복"), CpStrField(GR, TEXT("plate")), FString(TEXT("123가4567")));
 	}
 
 	// 문법 위반 → -32000.
@@ -292,7 +294,7 @@ bool FRpcCarExtSetPlateTest::RunTest(const FString& Parameters)
 			P->SetNumberField(TEXT("seed"), 4242);
 			TSharedPtr<FJsonValue> R; FRpcError E;
 			if (!D->Dispatch(TEXT("car.setPlate"), P, R, E)) { AddError(FString::Printf(TEXT("random setPlate 실패: %s"), *E.Message)); }
-			return StrField(R, TEXT("plate"));
+			return CpStrField(R, TEXT("plate"));
 		};
 		const FString PA = RandomPlate(IdA);
 		const FString PB = RandomPlate(IdB);
@@ -307,11 +309,11 @@ bool FRpcCarExtSetPlateTest::RunTest(const FString& Parameters)
 	{
 		TSharedPtr<FJsonValue> R; FRpcError E;
 		TestTrue(TEXT("car.plateKinds 성공"), D->Dispatch(TEXT("car.plateKinds"), nullptr, R, E));
-		TestEqual(TEXT("종류 10개"), ArrayNum(R, TEXT("kinds")), 10);
-		TestEqual(TEXT("default normal_film"), StrField(R, TEXT("default")), FString(TEXT("normal_film")));
+		TestEqual(TEXT("종류 10개"), CpArrayNum(R, TEXT("kinds")), 10);
+		TestEqual(TEXT("default normal_film"), CpStrField(R, TEXT("default")), FString(TEXT("normal_film")));
 	}
 
-	CleanupCarManager(World);
+	CpCleanupCarManager(World);
 	return true;
 }
 
@@ -322,10 +324,10 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRpcCarExtPlaceAtSlotTest,
 
 bool FRpcCarExtPlaceAtSlotTest::RunTest(const FString& Parameters)
 {
-	UWorld* World = EditorWorld();
+	UWorld* World = CpEditorWorld();
 	if (!World) { AddWarning(TEXT("에디터 월드 없음 — 건너뜀.")); return true; }
-	CleanupCarManager(World);
-	CleanupPresetManager(World);
+	CpCleanupCarManager(World);
+	CpCleanupPresetManager(World);
 
 	// 합성 프리셋 3면. 에디터 월드의 레벨 면과 겹치지 않는 먼 자리(ParkingDecalTest 와 같은 이유).
 	AParkingPresetManager* Presets = World->SpawnActor<AParkingPresetManager>();
@@ -349,7 +351,7 @@ bool FRpcCarExtPlaceAtSlotTest::RunTest(const FString& Parameters)
 
 	URpcDispatcher* D = NewObject<URpcDispatcher>();
 	FCarRpcModule Car([World]() -> UWorld* { return World; });
-	Car.SetCatalog(TestCatalog());
+	Car.SetCatalog(CpTestCatalog());
 	Car.Register(*D);
 
 	auto Numbers = [](std::initializer_list<int32> Ns) -> TSharedPtr<FJsonObject>
@@ -382,18 +384,18 @@ bool FRpcCarExtPlaceAtSlotTest::RunTest(const FString& Parameters)
 		P->SetNumberField(TEXT("seed"), 9);
 		TSharedPtr<FJsonValue> R; FRpcError E;
 		TestTrue(TEXT("car.placeAtSlot 성공"), D->Dispatch(TEXT("car.placeAtSlot"), P, R, E));
-		TestEqual(TEXT("placedCount 2"), NumField(R, TEXT("placedCount")), 2);
-		TestEqual(TEXT("notFound 1개"), ArrayNum(R, TEXT("notFound")), 1);
+		TestEqual(TEXT("placedCount 2"), CpNumField(R, TEXT("placedCount")), 2);
+		TestEqual(TEXT("notFound 1개"), CpArrayNum(R, TEXT("notFound")), 1);
 
 		const TArray<TSharedPtr<FJsonValue>>* Placed = nullptr;
-		if (Obj(R).IsValid() && Obj(R)->TryGetArrayField(TEXT("placed"), Placed) && Placed->Num() == 2)
+		if (CpObj(R).IsValid() && CpObj(R)->TryGetArrayField(TEXT("placed"), Placed) && Placed->Num() == 2)
 		{
 			const TSharedPtr<FJsonValue>& Row1 = (*Placed)[0];
-			TestEqual(TEXT("1번 행 number"), NumField(Row1, TEXT("number")), 1);
-			TestEqual(TEXT("1번 행 faceKey"), StrField(Row1, TEXT("faceKey")), Face1->FaceKey());
-			CarOn1 = StrField(Row1, TEXT("carNameId"));
+			TestEqual(TEXT("1번 행 number"), CpNumField(Row1, TEXT("number")), 1);
+			TestEqual(TEXT("1번 행 faceKey"), CpStrField(Row1, TEXT("faceKey")), Face1->FaceKey());
+			CarOn1 = CpStrField(Row1, TEXT("carNameId"));
 			const TSharedPtr<FJsonObject>* Pos = nullptr;
-			if (Obj(Row1).IsValid() && Obj(Row1)->TryGetObjectField(TEXT("pos"), Pos))
+			if (CpObj(Row1).IsValid() && CpObj(Row1)->TryGetObjectField(TEXT("pos"), Pos))
 			{
 				double X = 0, Y = 0; (*Pos)->TryGetNumberField(TEXT("x"), X); (*Pos)->TryGetNumberField(TEXT("y"), Y);
 				// pos 는 Unreal 미터, 면 중심은 월드 cm.
@@ -401,11 +403,11 @@ bool FRpcCarExtPlaceAtSlotTest::RunTest(const FString& Parameters)
 				TestTrue(TEXT("1번 면 중심 Y"), FMath::IsNearlyEqual(Y, Face1->Center.Y / 100.0, 0.02));
 			}
 			else { AddError(TEXT("placed[0].pos 없음")); }
-			double RotY = -1; Obj(Row1)->TryGetNumberField(TEXT("rotY"), RotY);
+			double RotY = -1; CpObj(Row1)->TryGetNumberField(TEXT("rotY"), RotY);
 			TestTrue(TEXT("rotY [0,360)"), RotY >= 0.0 && RotY < 360.0);
 
-			TestEqual(TEXT("3번 행 number"), NumField((*Placed)[1], TEXT("number")), 3);
-			TestEqual(TEXT("3번 행 faceKey"), StrField((*Placed)[1], TEXT("faceKey")), Face3->FaceKey());
+			TestEqual(TEXT("3번 행 number"), CpNumField((*Placed)[1], TEXT("number")), 3);
+			TestEqual(TEXT("3번 행 faceKey"), CpStrField((*Placed)[1], TEXT("faceKey")), Face3->FaceKey());
 		}
 		else { AddError(TEXT("placed 배열 2개가 아님")); }
 	}
@@ -415,8 +417,8 @@ bool FRpcCarExtPlaceAtSlotTest::RunTest(const FString& Parameters)
 		TSharedPtr<FJsonObject> GP = MakeShared<FJsonObject>(); GP->SetStringField(TEXT("carNameId"), CarOn1);
 		TSharedPtr<FJsonValue> GR; FRpcError GE;
 		TestTrue(TEXT("car.get 성공"), D->Dispatch(TEXT("car.get"), GP, GR, GE));
-		TestEqual(TEXT("presetId 7"), NumField(GR, TEXT("presetId")), 7);
-		TestEqual(TEXT("faceSlot 1"), NumField(GR, TEXT("faceSlot")), 1);
+		TestEqual(TEXT("presetId 7"), CpNumField(GR, TEXT("presetId")), 7);
+		TestEqual(TEXT("faceSlot 1"), CpNumField(GR, TEXT("faceSlot")), 1);
 	}
 
 	// replace=true 로 1번에 다시 → 기존 차 1대 제거, 총 대수 유지(2).
@@ -426,11 +428,11 @@ bool FRpcCarExtPlaceAtSlotTest::RunTest(const FString& Parameters)
 		P->SetNumberField(TEXT("prefabId"), 2);
 		TSharedPtr<FJsonValue> R; FRpcError E;
 		TestTrue(TEXT("replace 성공"), D->Dispatch(TEXT("car.placeAtSlot"), P, R, E));
-		TestEqual(TEXT("removed 1"), ArrayNum(R, TEXT("removed")), 1);
-		TestEqual(TEXT("placedCount 1"), NumField(R, TEXT("placedCount")), 1);
+		TestEqual(TEXT("removed 1"), CpArrayNum(R, TEXT("removed")), 1);
+		TestEqual(TEXT("placedCount 1"), CpNumField(R, TEXT("placedCount")), 1);
 		TSharedPtr<FJsonValue> ListR; FRpcError ListE;
 		D->Dispatch(TEXT("car.list"), nullptr, ListR, ListE);
-		TestEqual(TEXT("총 2대 유지"), ArrayNum(ListR, TEXT("cars")), 2);
+		TestEqual(TEXT("총 2대 유지"), CpArrayNum(ListR, TEXT("cars")), 2);
 	}
 
 	// seed 재현: 같은 seed 로 놓은 무작위 차종이 같다.
@@ -442,8 +444,8 @@ bool FRpcCarExtPlaceAtSlotTest::RunTest(const FString& Parameters)
 			TSharedPtr<FJsonValue> R; FRpcError E;
 			D->Dispatch(TEXT("car.placeAtSlot"), P, R, E);
 			const TArray<TSharedPtr<FJsonValue>>* Placed = nullptr;
-			return (Obj(R).IsValid() && Obj(R)->TryGetArrayField(TEXT("placed"), Placed) && Placed->Num() == 1)
-				? NumField((*Placed)[0], TEXT("prefabId")) : -1;
+			return (CpObj(R).IsValid() && CpObj(R)->TryGetArrayField(TEXT("placed"), Placed) && Placed->Num() == 1)
+				? CpNumField((*Placed)[0], TEXT("prefabId")) : -1;
 		};
 		const int32 A = PlacePrefab();
 		const int32 B = PlacePrefab();
@@ -451,8 +453,8 @@ bool FRpcCarExtPlaceAtSlotTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("같은 seed → 같은 차종"), A, B);
 	}
 
-	CleanupCarManager(World);
-	CleanupPresetManager(World);
+	CpCleanupCarManager(World);
+	CpCleanupPresetManager(World);
 	return true;
 }
 
@@ -463,7 +465,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRpcPlateModuleTest,
 
 bool FRpcPlateModuleTest::RunTest(const FString& Parameters)
 {
-	UWorld* World = EditorWorld();
+	UWorld* World = CpEditorWorld();
 	URpcDispatcher* D = NewObject<URpcDispatcher>();
 	FPlateRpcModule Plate([World]() -> UWorld* { return World; });
 	Plate.Register(*D);
@@ -472,18 +474,18 @@ bool FRpcPlateModuleTest::RunTest(const FString& Parameters)
 	{
 		TSharedPtr<FJsonValue> R; FRpcError E;
 		TestTrue(TEXT("plate.kinds 성공"), D->Dispatch(TEXT("plate.kinds"), nullptr, R, E));
-		TestEqual(TEXT("종류 10개"), ArrayNum(R, TEXT("kinds")), 10);
-		TestEqual(TEXT("default normal_film"), StrField(R, TEXT("default")), FString(TEXT("normal_film")));
+		TestEqual(TEXT("종류 10개"), CpArrayNum(R, TEXT("kinds")), 10);
+		TestEqual(TEXT("default normal_film"), CpStrField(R, TEXT("default")), FString(TEXT("normal_film")));
 		const TArray<TSharedPtr<FJsonValue>>* Kinds = nullptr;
 		int32 Rendered = 0, Expected = 0;
-		if (Obj(R).IsValid() && Obj(R)->TryGetArrayField(TEXT("kinds"), Kinds))
+		if (CpObj(R).IsValid() && CpObj(R)->TryGetArrayField(TEXT("kinds"), Kinds))
 		{
 			for (const TSharedPtr<FJsonValue>& V : *Kinds)
 			{
-				bool b = false; Obj(V)->TryGetBoolField(TEXT("rendered"), b);
+				bool b = false; CpObj(V)->TryGetBoolField(TEXT("rendered"), b);
 				if (b) { ++Rendered; }
-				if (PlateKinds::IsKindRendered(StrField(V, TEXT("key")))) { ++Expected; }
-				TestFalse(TEXT("example 비어있지 않음"), StrField(V, TEXT("example")).IsEmpty());
+				if (PlateKinds::IsKindRendered(CpStrField(V, TEXT("key")))) { ++Expected; }
+				TestFalse(TEXT("example 비어있지 않음"), CpStrField(V, TEXT("example")).IsEmpty());
 			}
 		}
 		TestEqual(TEXT("rendered = 인스턴스 에셋이 있는 종류 수"), Rendered, Expected);
@@ -503,17 +505,17 @@ bool FRpcPlateModuleTest::RunTest(const FString& Parameters)
 		};
 		const TSharedPtr<FJsonValue> R1 = Draw(3, 77, nullptr);
 		const TSharedPtr<FJsonValue> R2 = Draw(3, 77, nullptr);
-		TestEqual(TEXT("count 3"), NumField(R1, TEXT("count")), 3);
+		TestEqual(TEXT("count 3"), CpNumField(R1, TEXT("count")), 3);
 		const TArray<TSharedPtr<FJsonValue>>* A = nullptr; const TArray<TSharedPtr<FJsonValue>>* B = nullptr;
-		if (Obj(R1)->TryGetArrayField(TEXT("plates"), A) && Obj(R2)->TryGetArrayField(TEXT("plates"), B) && A->Num() == 3 && B->Num() == 3)
+		if (CpObj(R1)->TryGetArrayField(TEXT("plates"), A) && CpObj(R2)->TryGetArrayField(TEXT("plates"), B) && A->Num() == 3 && B->Num() == 3)
 		{
 			for (int32 i = 0; i < 3; ++i)
 			{
-				TestEqual(TEXT("같은 seed → 같은 plate"), StrField((*A)[i], TEXT("plate")), StrField((*B)[i], TEXT("plate")));
-				TestEqual(TEXT("같은 seed → 같은 kind"), StrField((*A)[i], TEXT("kind")), StrField((*B)[i], TEXT("kind")));
-				TestNotNull(TEXT("kind 는 표의 key"), PlateRpc::FindKind(StrField((*A)[i], TEXT("kind"))));
+				TestEqual(TEXT("같은 seed → 같은 plate"), CpStrField((*A)[i], TEXT("plate")), CpStrField((*B)[i], TEXT("plate")));
+				TestEqual(TEXT("같은 seed → 같은 kind"), CpStrField((*A)[i], TEXT("kind")), CpStrField((*B)[i], TEXT("kind")));
+				TestNotNull(TEXT("kind 는 표의 key"), PlateRpc::FindKind(CpStrField((*A)[i], TEXT("kind"))));
 				FString Region, Prefix, Usage, Serial;
-				TestTrue(TEXT("plate 문법 통과"), PlateRpc::ParsePlate(StrField((*A)[i], TEXT("plate")), Region, Prefix, Usage, Serial));
+				TestTrue(TEXT("plate 문법 통과"), PlateRpc::ParsePlate(CpStrField((*A)[i], TEXT("plate")), Region, Prefix, Usage, Serial));
 			}
 		}
 		else { AddError(TEXT("plates 배열 3개가 아님")); }
@@ -521,21 +523,21 @@ bool FRpcPlateModuleTest::RunTest(const FString& Parameters)
 		// kind 고정(사업용 지역판): 지역 2자 + 2자리 + 사업용 한글 + 4자리.
 		const TSharedPtr<FJsonValue> R3 = Draw(1, 5, TEXT("commercial"));
 		const TArray<TSharedPtr<FJsonValue>>* C = nullptr;
-		if (Obj(R3).IsValid() && Obj(R3)->TryGetArrayField(TEXT("plates"), C) && C->Num() == 1)
+		if (CpObj(R3).IsValid() && CpObj(R3)->TryGetArrayField(TEXT("plates"), C) && C->Num() == 1)
 		{
-			const FString Pl = StrField((*C)[0], TEXT("plate"));
+			const FString Pl = CpStrField((*C)[0], TEXT("plate"));
 			FString Region, Prefix, Usage, Serial;
 			TestTrue(TEXT("commercial 문법"), PlateRpc::ParsePlate(Pl, Region, Prefix, Usage, Serial));
 			TestEqual(TEXT("commercial 지역 2자"), Region.Len(), 2);
 			TestEqual(TEXT("commercial 앞자리 2"), Prefix.Len(), 2);
 			TestTrue(TEXT("commercial 한글 바사아자"), FString(TEXT("바사아자")).Contains(Usage));
-			TestEqual(TEXT("kind 그대로"), StrField((*C)[0], TEXT("kind")), FString(TEXT("commercial")));
+			TestEqual(TEXT("kind 그대로"), CpStrField((*C)[0], TEXT("kind")), FString(TEXT("commercial")));
 		}
 		else { AddError(TEXT("commercial plates 1개가 아님")); }
 
 		// count 0 → 1, count 1000 → 100.
-		TestEqual(TEXT("count 하한 1"), NumField(Draw(0, 1, nullptr), TEXT("count")), 1);
-		TestEqual(TEXT("count 상한 100"), NumField(Draw(1000, 1, nullptr), TEXT("count")), 100);
+		TestEqual(TEXT("count 하한 1"), CpNumField(Draw(0, 1, nullptr), TEXT("count")), 1);
+		TestEqual(TEXT("count 상한 100"), CpNumField(Draw(1000, 1, nullptr), TEXT("count")), 100);
 
 		// 모르는 kind → -32000.
 		TSharedPtr<FJsonObject> BadP = MakeShared<FJsonObject>(); BadP->SetStringField(TEXT("kind"), TEXT("nope"));
@@ -553,7 +555,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRpcPlateBakeTest,
 
 bool FRpcPlateBakeTest::RunTest(const FString& Parameters)
 {
-	UWorld* World = EditorWorld();
+	UWorld* World = CpEditorWorld();
 	URpcDispatcher* D = NewObject<URpcDispatcher>();
 	FPlateRpcModule Plate([World]() -> UWorld* { return World; });
 	Plate.Register(*D);
@@ -577,14 +579,14 @@ bool FRpcPlateBakeTest::RunTest(const FString& Parameters)
 		AddInfo(FString::Printf(TEXT("plate.bake 미수행(아틀라스 없음으로 간주): %s"), *E.Message));
 		return true;
 	}
-	TestEqual(TEXT("plate 그대로"), StrField(R, TEXT("plate")), FString(TEXT("123가4567")));
-	TestEqual(TEXT("plateText"), StrField(R, TEXT("plateText")), FString(TEXT("123가 4567")));
-	TestEqual(TEXT("kind 기본형"), StrField(R, TEXT("kind")), FString(TEXT("normal_film")));
-	TestEqual(TEXT("format png"), StrField(R, TEXT("format")), FString(TEXT("png")));
-	TestEqual(TEXT("width 1024"), NumField(R, TEXT("width")), 1024);
-	TestEqual(TEXT("height 256"), NumField(R, TEXT("height")), 256);
+	TestEqual(TEXT("plate 그대로"), CpStrField(R, TEXT("plate")), FString(TEXT("123가4567")));
+	TestEqual(TEXT("plateText"), CpStrField(R, TEXT("plateText")), FString(TEXT("123가 4567")));
+	TestEqual(TEXT("kind 기본형"), CpStrField(R, TEXT("kind")), FString(TEXT("normal_film")));
+	TestEqual(TEXT("format png"), CpStrField(R, TEXT("format")), FString(TEXT("png")));
+	TestEqual(TEXT("width 1024"), CpNumField(R, TEXT("width")), 1024);
+	TestEqual(TEXT("height 256"), CpNumField(R, TEXT("height")), 256);
 	TArray<uint8> Png;
-	TestTrue(TEXT("base64 디코드"), FBase64::Decode(StrField(R, TEXT("img_bytes")), Png));
+	TestTrue(TEXT("base64 디코드"), FBase64::Decode(CpStrField(R, TEXT("img_bytes")), Png));
 	if (Png.Num() > 8)
 	{
 		TestTrue(TEXT("PNG 시그니처"), Png[0] == 0x89 && Png[1] == 0x50 && Png[2] == 0x4E && Png[3] == 0x47);
@@ -595,7 +597,7 @@ bool FRpcPlateBakeTest::RunTest(const FString& Parameters)
 	P->SetStringField(TEXT("map"), TEXT("sdf"));
 	TSharedPtr<FJsonValue> R2; FRpcError E2;
 	TestTrue(TEXT("map=sdf 성공"), D->Dispatch(TEXT("plate.bake"), P, R2, E2));
-	TestEqual(TEXT("map 응답 sdf"), StrField(R2, TEXT("map")), FString(TEXT("sdf")));
+	TestEqual(TEXT("map 응답 sdf"), CpStrField(R2, TEXT("map")), FString(TEXT("sdf")));
 	return true;
 }
 

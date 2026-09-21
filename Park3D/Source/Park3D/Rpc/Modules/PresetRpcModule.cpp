@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "PresetRpcModule.h"
+#include "CarFilePaths.h"
 #include "../RpcDispatcher.h"
 #include "../RpcParamUtil.h"
 #include "../../ParkingPresetManager.h"
@@ -8,6 +9,10 @@
 #include "../../ParkingGeometryLibrary.h"
 #include "../../Park3DDataPaths.h"
 #include "Misc/Paths.h"
+#include "HAL/FileManager.h"
+#include "JsonObjectConverter.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonReader.h"
 
 namespace
 {
@@ -32,6 +37,118 @@ namespace
 			return Park3DDataPaths::GetDataFilePath(TEXT("Preset"), *FileName);
 		}
 		return FPaths::Combine(Dir, FileName);
+	}
+
+	/**
+	 * preset.importFile 의 쓰기 자리 — fullPath > Save/3D/Preset + fileName, **하나는 필수**(OmiPark3D preset_write_path).
+	 * preset.save 처럼 기본 이름(preset.json)으로 조용히 덮어쓰지 않는다. fileName 은 이름만(경로·'.' 시작 불가).
+	 *
+	 * OmiPark3D 는 fullPath 를 그대로 믿지만 여기서는 car.deleteFile 과 같은 이유로 가둔다 — RPC 서버가
+	 * AllowAnonymous 일 수 있어 경로를 믿으면 네트워크의 누구나 아무 데나 .json 을 쓸 수 있다.
+	 * 허용 폴더는 Save/3D/Preset 하나(패키지에서는 스테이지 루트 — Park3DDataPaths 가 해석)다.
+	 */
+	bool ResolvePresetWritePath(const TSharedPtr<FJsonObject>& P, FString& OutPath, FRpcError& OutError)
+	{
+		const FString Root = CarFilePaths::Normalize(FPaths::GetPath(Park3DDataPaths::GetDataFilePath(TEXT("Preset"), TEXT("x.json"))));
+
+		const FString FullPath = RpcParam::GetString(P, TEXT("fullPath"));
+		if (!FullPath.IsEmpty())
+		{
+			OutPath = CarFilePaths::Normalize(FullPath);
+		}
+		else
+		{
+			FString Name;
+			if (!RpcParam::RequireString(P, TEXT("fileName"), Name, OutError)) return false;
+			Name.TrimStartAndEndInline();
+			if (Name.IsEmpty() || Name.Contains(TEXT("/")) || Name.Contains(TEXT("\\")) || Name.StartsWith(TEXT(".")))
+			{
+				OutError.FailDomain(FString::Printf(TEXT("fileName 이 잘못됐다 — 파일 이름만(경로·'.' 시작 불가): '%s'"), *Name));
+				return false;
+			}
+			if (!Name.EndsWith(TEXT(".json"), ESearchCase::IgnoreCase)) Name += TEXT(".json");
+			OutPath = CarFilePaths::Normalize(Root / Name);
+		}
+
+		if (!OutPath.EndsWith(TEXT(".json"), ESearchCase::IgnoreCase))
+		{
+			OutError.FailDomain(FString::Printf(TEXT("프리셋 파일이 아닙니다(.json 만 쓸 수 있습니다): %s"), *OutPath));
+			return false;
+		}
+		if (!CarFilePaths::IsInside(OutPath, Root))
+		{
+			OutError.FailDomain(FString::Printf(TEXT("프리셋 폴더 밖입니다: %s (허용: %s)"), *OutPath, *Root));
+			return false;
+		}
+		return true;
+	}
+
+	/**
+	 * content(JSON 문자열 | 객체) → 프리셋 목록. 프리셋 파일 형식(preset.load 가 읽는 {isUnreal, datas:[SDPresetInfo…]})인지
+	 * 검증한다 — 루트 datas[] 가 배열이고 객체 항목마다 faceCount 가 있어야 한다(차량·카메라 파일을 거른다, OmiPark3D presets_from_doc).
+	 */
+	bool PresetsFromContent(const TSharedPtr<FJsonObject>& P, TArray<FParkingPreset>& Out, FRpcError& OutError)
+	{
+		TSharedPtr<FJsonObject> Doc;
+		const TSharedPtr<FJsonValue> Raw = (P.IsValid() && P->Values.Contains(TEXT("content"))) ? P->Values[TEXT("content")] : nullptr;
+		if (Raw.IsValid() && Raw->Type == EJson::String)
+		{
+			TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Raw->AsString());
+			TSharedPtr<FJsonValue> Parsed;
+			if (!FJsonSerializer::Deserialize(Reader, Parsed) || !Parsed.IsValid())
+			{
+				OutError.FailDomain(FString::Printf(TEXT("JSON 파싱 실패: %s"), *Reader->GetErrorMessage()));
+				return false;
+			}
+			Doc = Parsed->Type == EJson::Object ? Parsed->AsObject() : nullptr;
+		}
+		else if (Raw.IsValid() && Raw->Type == EJson::Object)
+		{
+			Doc = Raw->AsObject();
+		}
+		else
+		{
+			OutError.FailDomain(TEXT("필수 파라미터 누락: content (프리셋 JSON 문자열 또는 객체)"));
+			return false;
+		}
+
+		static const TCHAR* FormatError = TEXT("프리셋 파일 형식이 아니다 — 루트 datas[] 에 faceCount 를 가진 프리셋 항목이 하나 이상 있어야 한다");
+		const TArray<TSharedPtr<FJsonValue>>* Datas = nullptr;
+		if (!Doc.IsValid() || !Doc->TryGetArrayField(TEXT("datas"), Datas))
+		{
+			OutError.FailDomain(FormatError);
+			return false;
+		}
+		int32 Items = 0;
+		for (const TSharedPtr<FJsonValue>& V : *Datas)
+		{
+			if (!V.IsValid() || V->Type != EJson::Object) continue; // 객체 아닌 항목은 무시(파이썬 동일)
+			if (!V->AsObject()->HasField(TEXT("faceCount")))
+			{
+				OutError.FailDomain(FormatError);
+				return false;
+			}
+			++Items;
+		}
+		if (Items == 0)
+		{
+			OutError.FailDomain(FormatError);
+			return false;
+		}
+
+		FParkingPresetDTOList List;
+		if (!FJsonObjectConverter::JsonObjectToUStruct(Doc.ToSharedRef(), &List, 0, 0))
+		{
+			OutError.FailDomain(FormatError);
+			return false;
+		}
+		Out.Reset();
+		Out.Reserve(List.datas.Num());
+		for (const FParkingPresetDTO& D : List.datas)
+		{
+			Out.Add(UPresetMakerWidget::FromDTO(D, List.isUnreal)); // Unity 형식(isUnreal:false)은 언리얼 미터로 정규화
+		}
+		return Out.Num() > 0;
 	}
 
 	/** 전달된 키만 프리셋 필드에 반영(update/setSize 공용). */
@@ -189,6 +306,46 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetNumberField(TEXT("count"), Mgr->StoredPresets.Num());
 		return RpcDto::MakeObject(O);
 	});
+
+	/**
+	 * preset.importFile — 프리셋 파일 JSON(content) 을 검증해 Save/3D/Preset/<fileName>.json 으로 쓴다(OmiPark3D 확장 이식).
+	 * 씬·메모리는 건드리지 않는다(적용은 preset.load). 외부 PC 가 만든 주차면을 이 폴더에 두는 길이다.
+	 * 같은 이름은 overwrite:true 로만 덮어쓴다. 저장은 preset.save 와 같은 함수라 항상 isUnreal:true 로 정규화된다.
+	 */
+	Dispatcher.Register(TEXT("preset.importFile"), [](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		FString Path;
+		if (!ResolvePresetWritePath(P, Path, E)) return nullptr;
+		TArray<FParkingPreset> Loaded;
+		if (!PresetsFromContent(P, Loaded, E)) return nullptr;
+
+		const bool bExisted = IFileManager::Get().FileExists(*Path);
+		if (bExisted && !RpcParam::GetBool(P, TEXT("overwrite"), false))
+		{
+			E.FailDomain(FString::Printf(TEXT("이미 있는 파일: %s — overwrite:true 로 덮어쓴다"), *FPaths::GetCleanFilename(Path)));
+			return nullptr;
+		}
+		if (!UPresetMakerWidget::SavePresetsToJson(Path, Loaded))
+		{
+			E.FailDomain(FString::Printf(TEXT("프리셋 저장 실패: %s"), *Path));
+			return nullptr;
+		}
+		UE_LOG(LogTemp, Log, TEXT("[Preset] 파일 가져오기: %s (%d개, 덮어씀=%s)"), *Path, Loaded.Num(), bExisted ? TEXT("예") : TEXT("아니오"));
+
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		for (const FParkingPreset& Pr : Loaded) { Arr.Add(RpcDto::PresetToDtoValue(Pr)); }
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetBoolField(TEXT("overwritten"), bExisted);
+		O->SetStringField(TEXT("path"), Path);
+		O->SetStringField(TEXT("fileName"), FPaths::GetCleanFilename(Path));
+		O->SetNumberField(TEXT("count"), Loaded.Num());
+		O->SetArrayField(TEXT("presets"), Arr);
+		return RpcDto::MakeObject(O);
+	});
+	Dispatcher.SetMethodMeta(TEXT("preset.importFile"), { /*bMutating=*/false, /*bDestructive=*/false,
+		TEXT("fileName | fullPath(필수) content(JSON 문자열|객체) overwrite?=false"),
+		TEXT("프리셋 파일 JSON({isUnreal, datas:[SDPresetInfo…]}, preset.save 가 쓰는 구조)을 검증해 Save/3D/Preset/<fileName>.json 으로 쓴다 — 메모리는 그대로(적용은 preset.load). 같은 이름은 overwrite:true 로만 → {ok, overwritten, path, fileName, count, presets[]}") });
 
 	// ---- 생성/수정/삭제 ----
 	Dispatcher.Register(TEXT("preset.create"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>

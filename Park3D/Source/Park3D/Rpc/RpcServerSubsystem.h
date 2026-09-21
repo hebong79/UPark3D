@@ -20,6 +20,10 @@
 #include "Modules/LightRpcModule.h"
 #include "Modules/EnvRpcModule.h"
 #include "Modules/ScenarioRpcModule.h"
+#include "Modules/BayRpcModule.h"
+#include "Modules/SceneRpcModule.h"
+#include "Modules/PlateRpcModule.h"
+#include "Modules/FileRpcModule.h"
 #include "MjpegStreamManager.h"
 #include "RpcServerSubsystem.generated.h"
 
@@ -109,6 +113,11 @@ private:
 	TUniquePtr<FLightRpcModule> LightModule;
 	TUniquePtr<FScenarioRpcModule> ScenarioModule;
 	TUniquePtr<FEnvRpcModule> EnvModule;
+	// OmiPark3D 에서 이식한 확장 모듈(system.describe 의 extensions[] 에 잡힌다).
+	TUniquePtr<FBayRpcModule> BayModule;
+	TUniquePtr<FSceneRpcModule> SceneModule;
+	TUniquePtr<FPlateRpcModule> PlateModule;
+	TUniquePtr<FFileRpcModule> FileModule;
 
 	TSharedPtr<IHttpRouter> Router;
 	TArray<FHttpRouteHandle> RouteHandles;

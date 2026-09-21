@@ -52,9 +52,54 @@ TArray<AActor*> Park3DEnv::SetHiddenByNames(UWorld* World, const TSet<FString>& 
 		{
 			continue;
 		}
-		Actor->SetActorHiddenInGame(bHidden);
-		Actor->SetActorEnableCollision(!bHidden);
+		SetActorHidden(Actor, bHidden);
 		Changed.Add(Actor);
 	}
 	return Changed;
+}
+
+void Park3DEnv::SetActorHidden(AActor* Actor, bool bHidden)
+{
+	if (!Actor)
+	{
+		return;
+	}
+	Actor->SetActorHiddenInGame(bHidden);
+	Actor->SetActorEnableCollision(!bHidden);
+}
+
+bool Park3DEnv::IsMapKeepActor(const AActor* Actor)
+{
+	if (!Actor)
+	{
+		return false;
+	}
+	const FString Class = Actor->GetClass()->GetName();
+	if (Class.StartsWith(TEXT("BP_ParkingSlot")))
+	{
+		return true; // 레벨 주차면 — 바닥 번호·bay.* 가 이것을 센다.
+	}
+	// 하늘·대기·안개·조명·포스트프로세스는 "맵 오브젝트"가 아니라 무대 자체다 — 숨기면 배경이 검게 되고 조명이 사라진다
+	// (실측: 스카이 BP 가 숨겨져 검은 하늘). 클래스 이름으로만 본다 — 이름으로 보면 가로등(street_light)까지 남는다.
+	static const TCHAR* KeepClassTokens[] = { TEXT("Sky"), TEXT("Atmosphere"), TEXT("Fog"), TEXT("Light"), TEXT("PostProcess") };
+	for (const TCHAR* Token : KeepClassTokens)
+	{
+		if (Class.Contains(Token, ESearchCase::IgnoreCase))
+		{
+			return true;
+		}
+	}
+	static const TCHAR* KeepTokens[] = { TEXT("Road"), TEXT("Ground"), TEXT("Floor"), TEXT("Landscape"), TEXT("Asphalt") };
+	const FString Name = Actor->GetName();
+	const FString Label = Actor->GetActorNameOrLabel();
+	for (const TCHAR* Token : KeepTokens)
+	{
+		if (Name.Contains(Token, ESearchCase::IgnoreCase)
+			|| Label.Contains(Token, ESearchCase::IgnoreCase)
+			|| Class.Contains(Token, ESearchCase::IgnoreCase))
+		{
+			return true;
+		}
+	}
+	return false;
 }

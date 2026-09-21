@@ -8,6 +8,7 @@
 #include "../CarPlacementLibrary.h"
 #include "../UnityUnrealCoordinateConverter.h"
 #include "../ParkingCarTypes.h"
+#include "../Plate/PlateKinds.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "Engine/StaticMesh.h"
@@ -244,14 +245,30 @@ bool FCarActorPlateNumberTest::RunTest(const FString& Parameters)
 			// 슬롯 0=테두리(M_PlateFrame) 1=판 앞면(M_PlateFront). 번호 SDF 는 슬롯 1 의
 			// NumberSDF 파라미터에 물리므로 이 순서가 뒤집히면 번호가 조용히 안 나온다.
 			// 런타임에 MID 가 씌워질 수 있어 이름은 베이스 머티리얼에서 본다.
+			// 2026-09-21: 종류별 판(MI_Plate_<kind>, 부모 M_PlateKind)이 있으면 슬롯 1 은 그것으로 갈아 끼워진다.
+			// 인스턴스 에셋이 없는 환경에서만 옛 M_PlateFront 가 남는다 — 어느 쪽인지는 액터가 말한다(IsPlateKindRendered).
+			TestEqual(TEXT("종류별 판 적용 여부 = 인스턴스 에셋 존재 여부"),
+				Car->IsPlateKindRendered(), PlateKinds::IsKindRendered(Car->GetPlateKind()));
+			TestNotNull(TEXT("자동 배정 종류는 표에 있다"), PlateKinds::FindKind(Car->GetPlateKind()));
+			const TCHAR* ExpectedFront = Car->IsPlateKindRendered() ? TEXT("M_PlateKind") : TEXT("M_PlateFront");
 			for (UStaticMeshComponent* PlateComp : { Car->FrontPlateComp, Car->BackPlateComp })
 			{
 				UMaterialInterface* Slot0 = PlateComp->GetMaterial(0);
 				UMaterialInterface* Slot1 = PlateComp->GetMaterial(1);
 				TestTrue(TEXT("번호판 슬롯0 = M_PlateFrame"),
 					Slot0 && Slot0->GetBaseMaterial() && Slot0->GetBaseMaterial()->GetName() == TEXT("M_PlateFrame"));
-				TestTrue(TEXT("번호판 슬롯1 = M_PlateFront"),
-					Slot1 && Slot1->GetBaseMaterial() && Slot1->GetBaseMaterial()->GetName() == TEXT("M_PlateFront"));
+				TestTrue(*FString::Printf(TEXT("번호판 슬롯1 = %s"), ExpectedFront),
+					Slot1 && Slot1->GetBaseMaterial() && Slot1->GetBaseMaterial()->GetName() == ExpectedFront);
+			}
+			if (Car->IsPlateKindRendered())
+			{
+				// 종류별 판은 판 크기가 종류 mm 를 따른다(52×11 메시를 축마다 늘린다).
+				const FPlateKindDef* K = PlateKinds::FindKind(Car->GetPlateKind());
+				const FVector Ext = Car->FrontPlateComp->GetStaticMesh()->GetBounds().BoxExtent;
+				const FVector S = Car->FrontPlateComp->GetRelativeScale3D();
+				const double WidthCm = FMath::Max3(Ext.X * S.X, Ext.Y * S.Y, Ext.Z * S.Z) * 2.0;
+				TestEqual(TEXT("앞판 폭 = 종류 폭(mm/10)"), WidthCm, K->WidthMm * 0.1, 0.05);
+				TestTrue(TEXT("뒷판 봉인 캡 표시"), Car->BackPlateSealComp && Car->BackPlateSealComp->IsVisible());
 			}
 		}
 

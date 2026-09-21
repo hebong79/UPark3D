@@ -32,6 +32,8 @@
 #include "PlateGlyphAtlas.generated.h"
 
 class UTexture2D;
+class UMaterialInterface;
+struct FPlateKindDef;
 
 /** 아틀라스 한 칸. `Tools/plate_sdf/bake_glyph_sdf.py` 가 내보내는 metrics JSON 과 1:1 이다. */
 struct FPlateGlyphCell
@@ -42,6 +44,11 @@ struct FPlateGlyphCell
 	float Advance = 0.f;
 	/** 셀 안에서 어드밴스 박스가 시작하는 x(셀 픽셀). 이 박스만 잘라 붙인다. */
 	float BoxX0 = 0.f;
+	/**
+	 * 잉크 상자(셀 픽셀, 위→아래). 종류별 조판(BuildKindSdf)은 어드밴스가 아니라 **잉크 높이**를 고시 mm 에 맞춘다.
+	 * 옛 메트릭(2026-08-27)에는 없다 — 그때는 어드밴스 박스·베이스라인에서 근사한다(EnsureLoaded).
+	 */
+	float InkX0 = 0.f, InkY0 = 0.f, InkX1 = 0.f, InkY1 = 0.f;
 };
 
 /**
@@ -68,6 +75,12 @@ public:
 	/** Save/Config/<파일명> 절대 경로. */
 	static FString GetConfigFilePath(const TCHAR* FileName);
 
+	/**
+	 * 월드에 맞는 아틀라스. 게임 인스턴스가 있으면 그 서브시스템, 없으면(에디터 월드의 자동화 테스트·커맨드릿) 파일만 읽는
+	 * 독립 인스턴스를 하나 만들어 돌려 쓴다 — 차량 액터와 RPC 가 같은 창구를 쓴다.
+	 */
+	static UPlateGlyphAtlasSubsystem* Resolve(const UWorld* World);
+
 	/** 아틀라스와 메트릭이 모두 준비됐는가. 아니면 번호를 못 그린다(폴백 위젯이 남는다). */
 	bool IsReady();
 
@@ -81,12 +94,38 @@ public:
 	 */
 	UTexture2D* BuildNumberSdf(UObject* Outer, const FString& DisplayText, double PlateAspect);
 
+	/**
+	 * 종류(kind)별 조판으로 번호 SDF 를 합성한다 — 한 줄 판 1024×256, 두 줄 판 512×256(판 mm 비율에 가깝게).
+	 * 칸 배치는 PlateLayout::Cells(고시 mm), 글자는 칸의 **잉크 높이**에 맞춰 세로 배율을 잡고 가로는 칸 폭
+	 * [80 %(넓은 숫자만), 92 %] 로 누르거나 늘린다(OmiPark3D plategen._glyph_mask 와 같은 규칙).
+	 * `Shown` 은 PlateKinds::DisplayNumber 가 준 정규 번호. 아틀라스에 없는 글자가 있으면 nullptr.
+	 * 텍셀 크기는 종류마다 다르므로 머티리얼(M_PlateKind)이 셰이더에서 직접 잰다.
+	 */
+	UTexture2D* BuildKindSdf(UObject* Outer, const FPlateKindDef& Kind, const FString& Shown);
+
+	/**
+	 * 종류별 판 머티리얼 인스턴스(`MI_Plate_<key>`, Tools/plate_kinds/build_plate_assets.py). 없으면 nullptr —
+	 * 그때 차량은 옛 판(M_PlateFront · normal_film 한 가지)으로 되돌아간다. 한 번 찾은(못 찾은) 결과는 기억한다.
+	 */
+	UMaterialInterface* GetKindMaterial(const FString& Key);
+
 	/** 합성 텍스처 크기(판 앞면 전체를 덮는다). 머티리얼의 SdfTexelU/V 와 같은 값이어야 한다. */
 	static constexpr int32 TexWidth = 1024;
 	static constexpr int32 TexHeight = 256;
 
 private:
 	void EnsureLoaded();
+
+	/** 밉 0 을 받아 박스 필터 밉 체인을 만들고 G8 텍스처로 올린다(BuildNumberSdf · BuildKindSdf 공용). */
+	UTexture2D* MakeSdfTexture(UObject* Outer, TArray<uint8>&& Mip0, int32 W, int32 H, int32& OutMipCount);
+
+	/** 아틀라스 셀 하나를 Dst 사각형(텍셀, 실수)에 바이리니어로 옮긴다. 겹치는 곳은 최댓값. */
+	void BlitCell(TArray<uint8>& Mip0, int32 W, int32 H, const FPlateGlyphCell& Cell,
+		double SrcX0, double SrcY0, double SrcX1, double SrcY1, double DstX0, double DstY0, double ScaleX, double ScaleY) const;
+
+	/** 종류별 머티리얼 캐시. 찾지 못한 키는 빈 값으로 넣어 두 번 찾지 않는다. */
+	UPROPERTY()
+	TMap<FString, TObjectPtr<UMaterialInterface>> KindMaterials;
 
 	/** 로드 시도를 한 번만 하기 위한 표식. 실패해도 매번 다시 읽지 않는다. */
 	bool bLoadAttempted = false;
@@ -101,4 +140,6 @@ private:
 	float Baseline = 0.f;
 	float FontSize = 0.f;
 	float SpaceAdvance = 0.f;
+	/** 거리장 유효 반경(셀 px). 잉크 상자 밖으로 이만큼은 같이 옮겨야 모따기·그림자가 잘리지 않는다. */
+	float Spread = 8.f;
 };

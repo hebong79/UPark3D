@@ -1,322 +1,729 @@
 {
  "font": "Suseong Dotum",
- "fontFile": "suseong.ttf",
+ "fontFile": "suseong_dotum.ttf",
  "fontSize": 166,
  "cell": 256,
  "cols": 6,
- "rows": 8,
+ "rows": 11,
  "baseline": 200,
  "spread": 8.0,
  "spaceAdvance": 49.75,
- "atlas": "suseong_sdf.png",
+ "atlas": "plate_glyph_sdf.png",
  "glyphs": [
   {
    "char": "0",
    "col": 0,
    "row": 0,
    "advance": 115.5,
-   "boxX0": 70.25
+   "boxX0": 70.25,
+   "inkX0": 77.5,
+   "inkY0": 70.75,
+   "inkX1": 179.0,
+   "inkY1": 211.5
   },
   {
    "char": "1",
    "col": 1,
    "row": 0,
    "advance": 115.5,
-   "boxX0": 70.25
+   "boxX0": 70.25,
+   "inkX0": 93.75,
+   "inkY0": 70.75,
+   "inkX1": 154.0,
+   "inkY1": 211.5
   },
   {
    "char": "2",
    "col": 2,
    "row": 0,
    "advance": 115.5,
-   "boxX0": 70.25
+   "boxX0": 70.25,
+   "inkX0": 82.0,
+   "inkY0": 70.75,
+   "inkX1": 170.75,
+   "inkY1": 210.25
   },
   {
    "char": "3",
    "col": 3,
    "row": 0,
    "advance": 115.5,
-   "boxX0": 70.25
+   "boxX0": 70.25,
+   "inkX0": 77.5,
+   "inkY0": 72.0,
+   "inkX1": 173.75,
+   "inkY1": 211.5
   },
   {
    "char": "4",
    "col": 4,
    "row": 0,
    "advance": 115.5,
-   "boxX0": 70.25
+   "boxX0": 70.25,
+   "inkX0": 76.75,
+   "inkY0": 70.5,
+   "inkX1": 179.25,
+   "inkY1": 211.5
   },
   {
    "char": "5",
    "col": 5,
    "row": 0,
    "advance": 115.5,
-   "boxX0": 70.25
+   "boxX0": 70.25,
+   "inkX0": 80.75,
+   "inkY0": 72.0,
+   "inkX1": 175.5,
+   "inkY1": 211.5
   },
   {
    "char": "6",
    "col": 0,
    "row": 1,
    "advance": 115.5,
-   "boxX0": 70.25
+   "boxX0": 70.25,
+   "inkX0": 78.5,
+   "inkY0": 71.75,
+   "inkX1": 180.75,
+   "inkY1": 212.5
   },
   {
    "char": "7",
    "col": 1,
    "row": 1,
    "advance": 115.5,
-   "boxX0": 70.25
+   "boxX0": 70.25,
+   "inkX0": 80.5,
+   "inkY0": 72.0,
+   "inkX1": 174.0,
+   "inkY1": 211.5
   },
   {
    "char": "8",
    "col": 2,
    "row": 1,
    "advance": 115.5,
-   "boxX0": 70.25
+   "boxX0": 70.25,
+   "inkX0": 78.0,
+   "inkY0": 70.25,
+   "inkX1": 178.25,
+   "inkY1": 212.0
   },
   {
    "char": "9",
    "col": 3,
    "row": 1,
    "advance": 115.5,
-   "boxX0": 70.25
+   "boxX0": 70.25,
+   "inkX0": 75.25,
+   "inkY0": 71.0,
+   "inkX1": 177.5,
+   "inkY1": 211.75
   },
   {
    "char": "가",
    "col": 4,
    "row": 1,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 53.75,
+   "inkY0": 67.0,
+   "inkX1": 203.25,
+   "inkY1": 225.0
   },
   {
    "char": "나",
    "col": 5,
    "row": 1,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 61.0,
+   "inkY0": 67.0,
+   "inkX1": 205.25,
+   "inkY1": 225.25
   },
   {
    "char": "다",
    "col": 0,
    "row": 2,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 59.75,
+   "inkY0": 67.0,
+   "inkX1": 205.75,
+   "inkY1": 225.25
   },
   {
    "char": "라",
    "col": 1,
    "row": 2,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 57.0,
+   "inkY0": 67.0,
+   "inkX1": 205.75,
+   "inkY1": 225.25
   },
   {
    "char": "마",
    "col": 2,
    "row": 2,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 58.75,
+   "inkY0": 67.0,
+   "inkX1": 205.75,
+   "inkY1": 225.25
   },
   {
    "char": "바",
    "col": 3,
    "row": 2,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 58.5,
+   "inkY0": 67.0,
+   "inkX1": 206.5,
+   "inkY1": 225.25
   },
   {
    "char": "사",
    "col": 4,
    "row": 2,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 48.75,
+   "inkY0": 67.0,
+   "inkX1": 205.75,
+   "inkY1": 225.25
   },
   {
    "char": "거",
    "col": 5,
    "row": 2,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 57.0,
+   "inkY0": 67.0,
+   "inkX1": 189.75,
+   "inkY1": 225.25
   },
   {
    "char": "너",
    "col": 0,
    "row": 3,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 64.25,
+   "inkY0": 67.0,
+   "inkX1": 189.75,
+   "inkY1": 225.25
   },
   {
    "char": "더",
    "col": 1,
    "row": 3,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 61.5,
+   "inkY0": 67.0,
+   "inkX1": 189.75,
+   "inkY1": 225.25
   },
   {
    "char": "러",
    "col": 2,
    "row": 3,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 59.0,
+   "inkY0": 67.0,
+   "inkX1": 189.75,
+   "inkY1": 225.25
   },
   {
    "char": "머",
    "col": 3,
    "row": 3,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 62.0,
+   "inkY0": 67.0,
+   "inkX1": 189.75,
+   "inkY1": 225.25
   },
   {
    "char": "버",
    "col": 4,
    "row": 3,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 62.0,
+   "inkY0": 67.0,
+   "inkX1": 189.75,
+   "inkY1": 225.25
   },
   {
    "char": "서",
    "col": 5,
    "row": 3,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 49.25,
+   "inkY0": 67.0,
+   "inkX1": 189.75,
+   "inkY1": 225.25
   },
   {
    "char": "어",
    "col": 0,
    "row": 4,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 58.75,
+   "inkY0": 67.0,
+   "inkX1": 189.75,
+   "inkY1": 225.25
   },
   {
    "char": "저",
    "col": 1,
    "row": 4,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 52.25,
+   "inkY0": 67.25,
+   "inkX1": 189.75,
+   "inkY1": 225.25
   },
   {
    "char": "고",
    "col": 2,
    "row": 4,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 58.25,
+   "inkY0": 74.5,
+   "inkX1": 198.0,
+   "inkY1": 204.0
   },
   {
    "char": "노",
    "col": 3,
    "row": 4,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 58.25,
+   "inkY0": 69.75,
+   "inkX1": 198.0,
+   "inkY1": 204.0
   },
   {
    "char": "도",
    "col": 4,
    "row": 4,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 58.25,
+   "inkY0": 71.25,
+   "inkX1": 198.0,
+   "inkY1": 205.75
   },
   {
    "char": "로",
    "col": 5,
    "row": 4,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 58.25,
+   "inkY0": 67.75,
+   "inkX1": 198.0,
+   "inkY1": 207.25
   },
   {
    "char": "모",
    "col": 0,
    "row": 5,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 58.25,
+   "inkY0": 71.25,
+   "inkX1": 198.0,
+   "inkY1": 205.75
   },
   {
    "char": "보",
    "col": 1,
    "row": 5,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 58.25,
+   "inkY0": 69.5,
+   "inkX1": 198.0,
+   "inkY1": 205.75
   },
   {
    "char": "소",
    "col": 2,
    "row": 5,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 58.25,
+   "inkY0": 71.25,
+   "inkX1": 198.0,
+   "inkY1": 205.75
   },
   {
    "char": "오",
    "col": 3,
    "row": 5,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 58.25,
+   "inkY0": 71.25,
+   "inkX1": 198.0,
+   "inkY1": 205.75
   },
   {
    "char": "조",
    "col": 4,
    "row": 5,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 58.25,
+   "inkY0": 71.25,
+   "inkX1": 198.0,
+   "inkY1": 205.75
   },
   {
    "char": "구",
    "col": 5,
    "row": 5,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 58.25,
+   "inkY0": 72.0,
+   "inkX1": 198.0,
+   "inkY1": 225.25
   },
   {
    "char": "누",
    "col": 0,
    "row": 6,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 58.25,
+   "inkY0": 70.25,
+   "inkX1": 198.0,
+   "inkY1": 225.25
   },
   {
    "char": "두",
    "col": 1,
    "row": 6,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 58.25,
+   "inkY0": 71.75,
+   "inkX1": 198.0,
+   "inkY1": 225.25
   },
   {
    "char": "루",
    "col": 2,
    "row": 6,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 58.25,
+   "inkY0": 69.0,
+   "inkX1": 198.0,
+   "inkY1": 225.25
   },
   {
    "char": "무",
    "col": 3,
    "row": 6,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 58.25,
+   "inkY0": 71.75,
+   "inkX1": 198.0,
+   "inkY1": 225.25
   },
   {
    "char": "부",
    "col": 4,
    "row": 6,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 58.25,
+   "inkY0": 70.75,
+   "inkX1": 198.0,
+   "inkY1": 225.25
   },
   {
    "char": "수",
    "col": 5,
    "row": 6,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 58.25,
+   "inkY0": 67.0,
+   "inkX1": 198.0,
+   "inkY1": 225.25
   },
   {
    "char": "우",
    "col": 0,
    "row": 7,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 58.25,
+   "inkY0": 71.75,
+   "inkX1": 198.0,
+   "inkY1": 225.25
   },
   {
    "char": "주",
    "col": 1,
    "row": 7,
    "advance": 157.75,
-   "boxX0": 49.125
+   "boxX0": 49.125,
+   "inkX0": 58.25,
+   "inkY0": 71.75,
+   "inkX1": 198.0,
+   "inkY1": 225.25
+  },
+  {
+   "char": "하",
+   "col": 2,
+   "row": 7,
+   "advance": 157.75,
+   "boxX0": 49.125,
+   "inkX0": 52.0,
+   "inkY0": 63.75,
+   "inkX1": 205.75,
+   "inkY1": 225.25
+  },
+  {
+   "char": "허",
+   "col": 3,
+   "row": 7,
+   "advance": 157.75,
+   "boxX0": 49.125,
+   "inkX0": 53.5,
+   "inkY0": 63.75,
+   "inkX1": 189.75,
+   "inkY1": 225.25
+  },
+  {
+   "char": "호",
+   "col": 4,
+   "row": 7,
+   "advance": 157.75,
+   "boxX0": 49.125,
+   "inkX0": 58.25,
+   "inkY0": 56.5,
+   "inkX1": 198.0,
+   "inkY1": 207.25
+  },
+  {
+   "char": "아",
+   "col": 5,
+   "row": 7,
+   "advance": 157.75,
+   "boxX0": 49.125,
+   "inkX0": 57.5,
+   "inkY0": 67.0,
+   "inkX1": 205.5,
+   "inkY1": 225.25
+  },
+  {
+   "char": "울",
+   "col": 0,
+   "row": 8,
+   "advance": 157.75,
+   "boxX0": 49.125,
+   "inkX0": 58.25,
+   "inkY0": 64.75,
+   "inkX1": 198.0,
+   "inkY1": 233.5
+  },
+  {
+   "char": "산",
+   "col": 1,
+   "row": 8,
+   "advance": 157.75,
+   "boxX0": 49.125,
+   "inkX0": 49.5,
+   "inkY0": 67.0,
+   "inkX1": 205.0,
+   "inkY1": 228.75
+  },
+  {
+   "char": "대",
+   "col": 2,
+   "row": 8,
+   "advance": 157.75,
+   "boxX0": 49.125,
+   "inkX0": 57.0,
+   "inkY0": 67.0,
+   "inkX1": 196.75,
+   "inkY1": 225.25
+  },
+  {
+   "char": "인",
+   "col": 3,
+   "row": 8,
+   "advance": 157.75,
+   "boxX0": 49.125,
+   "inkX0": 60.25,
+   "inkY0": 66.5,
+   "inkX1": 194.25,
+   "inkY1": 228.75
+  },
+  {
+   "char": "천",
+   "col": 4,
+   "row": 8,
+   "advance": 157.75,
+   "boxX0": 49.125,
+   "inkX0": 54.0,
+   "inkY0": 56.5,
+   "inkX1": 194.25,
+   "inkY1": 228.75
+  },
+  {
+   "char": "광",
+   "col": 5,
+   "row": 8,
+   "advance": 157.75,
+   "boxX0": 49.125,
+   "inkX0": 51.25,
+   "inkY0": 67.0,
+   "inkX1": 206.0,
+   "inkY1": 233.25
+  },
+  {
+   "char": "전",
+   "col": 0,
+   "row": 9,
+   "advance": 157.75,
+   "boxX0": 49.125,
+   "inkX0": 53.5,
+   "inkY0": 67.0,
+   "inkX1": 194.25,
+   "inkY1": 228.75
+  },
+  {
+   "char": "경",
+   "col": 1,
+   "row": 9,
+   "advance": 157.75,
+   "boxX0": 49.125,
+   "inkX0": 60.5,
+   "inkY0": 67.0,
+   "inkX1": 191.75,
+   "inkY1": 233.25
+  },
+  {
+   "char": "기",
+   "col": 2,
+   "row": 9,
+   "advance": 157.75,
+   "boxX0": 49.125,
+   "inkX0": 58.75,
+   "inkY0": 67.0,
+   "inkX1": 189.75,
+   "inkY1": 225.25
+  },
+  {
+   "char": "강",
+   "col": 3,
+   "row": 9,
+   "advance": 157.75,
+   "boxX0": 49.125,
+   "inkX0": 57.0,
+   "inkY0": 67.0,
+   "inkX1": 205.0,
+   "inkY1": 233.25
+  },
+  {
+   "char": "원",
+   "col": 4,
+   "row": 9,
+   "advance": 157.75,
+   "boxX0": 49.125,
+   "inkX0": 52.0,
+   "inkY0": 64.75,
+   "inkX1": 195.0,
+   "inkY1": 230.75
+  },
+  {
+   "char": "충",
+   "col": 5,
+   "row": 9,
+   "advance": 157.75,
+   "boxX0": 49.125,
+   "inkX0": 58.25,
+   "inkY0": 56.5,
+   "inkX1": 198.0,
+   "inkY1": 233.25
+  },
+  {
+   "char": "북",
+   "col": 0,
+   "row": 10,
+   "advance": 157.75,
+   "boxX0": 49.125,
+   "inkX0": 58.25,
+   "inkY0": 66.25,
+   "inkX1": 198.0,
+   "inkY1": 230.25
+  },
+  {
+   "char": "남",
+   "col": 1,
+   "row": 10,
+   "advance": 157.75,
+   "boxX0": 49.125,
+   "inkX0": 59.75,
+   "inkY0": 67.0,
+   "inkX1": 205.0,
+   "inkY1": 232.5
+  },
+  {
+   "char": "제",
+   "col": 2,
+   "row": 10,
+   "advance": 157.75,
+   "boxX0": 49.125,
+   "inkX0": 48.75,
+   "inkY0": 67.0,
+   "inkX1": 196.75,
+   "inkY1": 225.25
+  },
+  {
+   "char": "세",
+   "col": 3,
+   "row": 10,
+   "advance": 157.75,
+   "boxX0": 49.125,
+   "inkX0": 48.0,
+   "inkY0": 67.0,
+   "inkX1": 196.75,
+   "inkY1": 225.25
+  },
+  {
+   "char": "종",
+   "col": 4,
+   "row": 10,
+   "advance": 157.75,
+   "boxX0": 49.125,
+   "inkX0": 58.25,
+   "inkY0": 68.0,
+   "inkX1": 198.0,
+   "inkY1": 233.25
   }
  ]
 }

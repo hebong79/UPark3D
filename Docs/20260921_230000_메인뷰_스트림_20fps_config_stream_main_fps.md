@@ -36,6 +36,13 @@
 
 재쿡 없이 반영하려면 배포본의 `Save/Config/config_pmaker.json` 에 `"stream_main_fps": 20.0` 을 넣고 exe 를 이 빌드로 갈아끼운 뒤 재기동한다. 판정은 기동 로그의 `메인 뷰 캡처 … (출처: config_pmaker.json stream_main_fps)` 한 줄.
 
+## 4-1. 머지·패키지·기동 (같은 날 23:00~23:06)
+
+- main 머지 `11fa329`(--no-ff). `BuildPackage.bat`(기본 `Package\Windows`) → 쿡 2351/2351, `AutomationTool exiting with ExitCode=0`. DDC 가 차 있어 전체 3분(exe 23:02, pak 23:04).
+- 스테이징된 `Package/Windows/Save/Config/config_pmaker.json` 에 `stream_main_fps: 20.0` 들어감(빌드 전 차이는 이 키 하나뿐).
+- 정본 기동(13510): `cam.streamStatus.main.targetFps = 20`, `http://localhost:13600/stream` 8초 실측 **162장 / 8.06s = 20.10 fps**, 리슨 포트 13510·13600·13611·13612.
+- 이번엔 `메인 뷰 캡처 10.00 → 20.00` 로그가 **안 찍힌다** — 재쿡된 ini 도 20 이라 config 값과 같아 `IsNearlyEqual` 로 건너뛴다. 그 부재가 곧 ①(ini 기본값)이 pak 에 들어갔다는 증거다.
+
 ## 5. 함정·메모
 
 - 정본 인스턴스(PID 9612, 22:05 기동)가 13510·13600 모두 연결 거부 — `Get-NetTCPConnection` 으로 보니 리슨 포트가 하나도 없다. 원인은 이번 범위 밖(별도 확인 필요).

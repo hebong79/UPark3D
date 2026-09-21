@@ -11,6 +11,7 @@
 	"stream_slots": 30,
 	"stream_hard_max_slots": 30,
 	"stream_total_fps": 30.0,
+	"stream_main_fps": 20.0,
 	"preset_file": "",
 	"carpos_file": "",
 	"camerapos_file": "",

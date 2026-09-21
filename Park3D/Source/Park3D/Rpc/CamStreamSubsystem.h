@@ -228,7 +228,10 @@ public:
 	UPROPERTY(config, EditAnywhere, Category = "CamStream|Main")
 	int32 MainPort = 13600;
 
-	/** 메인 뷰 캡처 fps. 카메라 슬롯 예산(TotalFps)과 별도로 계산된다. */
+	/**
+	 * 메인 뷰 캡처 fps. 카메라 슬롯 예산(TotalFps)과 별도로 계산된다.
+	 * config_pmaker.json 의 stream_main_fps 가 있으면 기동 시 그 값으로 덮인다.
+	 */
 	UPROPERTY(config, EditAnywhere, Category = "CamStream|Main", meta = (ClampMin = "0.1", ClampMax = "60"))
 	float MainFps = 5.f;
 

@@ -98,6 +98,11 @@ bool UPark3DAppConfigLibrary::FromJson(const FString& Json, FPark3DAppConfig& Ou
 		const float V = static_cast<float>(Num);
 		Parsed.StreamTotalFps = (V > 0.f) ? V : 0.f;
 	}
+	if (Root->TryGetNumberField(TEXT("stream_main_fps"), Num))
+	{
+		const float V = static_cast<float>(Num);
+		Parsed.StreamMainFps = (V > 0.f) ? V : 0.f;
+	}
 
 	bool bFlag = false;
 	if (Root->TryGetBoolField(TEXT("map_floor"), bFlag)) { Parsed.bMapFloor = bFlag; }

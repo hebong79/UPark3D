@@ -170,6 +170,14 @@ struct FPark3DAppConfig
 	float StreamTotalFps = 0.f;
 
 	/**
+	 * 메인 뷰(플레이어 카메라, main_port) 캡처 fps. 0 이하 = 미지정(ini 의 MainFps).
+	 * 카메라 슬롯 예산(StreamTotalFps)과 별개 축이다 — 운영자가 손으로 조작하는 화면이라
+	 * 카메라 채널보다 느리면 안 되는데 ini 는 pak 에 구워져 현장에서 못 바꾸므로 config 로 연다.
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = "Config")
+	float StreamMainFps = 0.f;
+
+	/**
 	 * RPC 리스너 바인드 주소. "any" = 모든 인터페이스, "localhost" = 루프백 전용. 빈 문자열 = 기본값("any").
 	 * 이 값이 곧 [HTTPServer.Listeners] 의 포트별 override 로 런타임에 등록된다 —
 	 * ini 에 포트를 박아 두면 rpc_port 를 바꿀 때마다 목록이 빗나가 조용히 루프백으로 떨어지기 때문이다.

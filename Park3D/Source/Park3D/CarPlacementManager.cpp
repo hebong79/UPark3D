@@ -15,6 +15,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
 #include "Math/RandomStream.h"
+#include "Plate/PlateKinds.h"
 
 ACarPlacementManager::ACarPlacementManager()
 {
@@ -779,7 +780,8 @@ int32 ACarPlacementManager::RandomizeVisiblePlateNumbers(int32 Seed)
 			}
 		}
 
-		Car->SetPlateNumber(Number);
+		// 종류도 같이 뽑는다 — "여러 타입의 번호판이 랜덤으로"(2026-09-21). 전기차판은 차종 이름이 EV 일 때만.
+		Car->SetPlate(Number, PlateKinds::RandomKindFor(Stream, Car->CarData.prefabName));
 		Used.Add(Car->GetPlateNumber());
 		++Changed;
 	}

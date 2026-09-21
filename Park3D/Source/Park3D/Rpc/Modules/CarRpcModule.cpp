@@ -987,9 +987,9 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 
 	/**
 	 * 번호판 번호·종류 변경(OmiPark3D 확장 이식). plate=[지역2]?숫자2~3+한글+숫자4, kind=car.plateKinds 의 key | auto | random.
-	 * random=true 면 안 준 쪽을 무작위(seed). 언리얼 판은 종류가 하나(normal_film)뿐이라 kind 는 응답에만 실리고
-	 * auto/빈 값은 기본형이 된다. applied 는 SDF 텍스처가 실제로 새로 구워졌는지 — 아틀라스에 없는 글자(지역명·사업용 한글)나
-	 * 아직 판을 굽지 않은 차량(헤드리스)이면 번호 문자열만 바뀌고 화면은 그대로다.
+	 * random=true 면 안 준 쪽을 무작위(seed). kind 를 안 주면 그 차의 현재 종류를 유지하고, auto 는 id·차종으로 결정적 배정.
+	 * rendered 는 종류별 판(MI_Plate_<key>)으로 실제 그려졌는지(에셋이 없으면 옛 판 폴백), applied 는 SDF 텍스처가
+	 * 새로 구워졌는지 — 아틀라스에 없는 글자나 아직 판을 굽지 않은 차량(헤드리스)이면 문자열만 바뀌고 화면은 그대로다.
 	 */
 	Dispatcher.Register(TEXT("car.setPlate"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
@@ -1009,26 +1009,25 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		{
 			FRandomStream Stream = PlateRpc::MakeStream(Seed);
 			if (Number.IsEmpty() && bRandom) { Number = ACarActor::MakeRandomPlateNumber(Stream); }
-			if (Kind.IsEmpty() || Kind == PlateRpc::RandomKind()) { Kind = PlateRpc::PickRandomKind(Stream); }
+			if (Kind.IsEmpty() || Kind == PlateRpc::RandomKind()) { Kind = PlateKinds::RandomKindFor(Stream, Car->CarData.prefabName); }
 		}
 		if (Number.IsEmpty() && Kind.IsEmpty())
 		{
 			E.FailDomain(TEXT("plate 또는 kind 가 필요합니다(random=true 면 둘 다 무작위)"));
 			return nullptr;
 		}
-		if (Kind.IsEmpty() || Kind == PlateRpc::AutoKind()) { Kind = PlateRpc::DefaultKind(); }
+		if (Kind == PlateRpc::AutoKind()) { Kind = PlateKinds::AutoKindFor(Car->CarData.id, Car->CarData.prefabName, Car->CarData.type); }
 
 		UTexture2D* Before = Car->PlateNumberSdf.Get();
-		if (!Number.IsEmpty()) { Car->SetPlateNumber(Number); }
-		const FPlateKindDef* K = PlateRpc::FindKind(Kind);
+		const bool bRendered = Car->SetPlate(Number, Kind);
 
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetBoolField(TEXT("ok"), true);
 		O->SetStringField(TEXT("carNameId"), Car->CarData.id);
 		O->SetStringField(TEXT("plate"), Car->GetPlateNumber());
-		O->SetStringField(TEXT("plateKind"), Kind);
-		O->SetStringField(TEXT("plateText"), K ? PlateRpc::DisplayText(*K, Car->GetPlateNumber(), static_cast<uint32>(Seed)) : Car->GetPlateNumber());
-		O->SetBoolField(TEXT("rendered"), Kind == PlateRpc::DefaultKind());
+		O->SetStringField(TEXT("plateKind"), Car->GetPlateKind());
+		O->SetStringField(TEXT("plateText"), Car->GetPlateDisplayText());
+		O->SetBoolField(TEXT("rendered"), bRendered);
 		O->SetBoolField(TEXT("applied"), Car->PlateNumberSdf != nullptr && Car->PlateNumberSdf.Get() != Before);
 		return RpcDto::MakeObject(O);
 	});

@@ -224,8 +224,34 @@ bool FRpcCarExtSetPlateTest::RunTest(const FString& Parameters)
 		TSharedPtr<FJsonValue> R; FRpcError E;
 		TestTrue(TEXT("car.setPlate 성공"), D->Dispatch(TEXT("car.setPlate"), P, R, E));
 		TestEqual(TEXT("응답 plate 정규형"), StrField(R, TEXT("plate")), FString(TEXT("123가4567")));
-		TestEqual(TEXT("응답 plateKind 기본형"), StrField(R, TEXT("plateKind")), FString(TEXT("normal_film")));
-		TestEqual(TEXT("응답 plateText"), StrField(R, TEXT("plateText")), FString(TEXT("123가 4567")));
+		// kind 를 안 주면 그 차의 종류(id 로 결정적 배정)를 유지한다. 표시 글자는 그 종류의 규칙(자릿수·지역)을 따른다.
+		const FString KindA = StrField(R, TEXT("plateKind"));
+		const FPlateKindDef* KA = PlateRpc::FindKind(KindA);
+		TestNotNull(TEXT("응답 plateKind 는 표의 종류"), KA);
+		if (KA)
+		{
+			TestEqual(TEXT("응답 plateText"), StrField(R, TEXT("plateText")),
+				PlateRpc::DisplayText(*KA, TEXT("123가4567"), PlateKinds::IdSalt(IdA)));
+		}
+		// kind 를 명시하면 그 종류로 바뀌고 plateText 가 따라간다(구형 지역판 → "서울 23가 4567" 꼴).
+		TSharedPtr<FJsonObject> PK = MakeShared<FJsonObject>();
+		PK->SetStringField(TEXT("carNameId"), IdA);
+		PK->SetStringField(TEXT("kind"), TEXT("old_green_region"));
+		TSharedPtr<FJsonValue> RK; FRpcError EK;
+		TestTrue(TEXT("car.setPlate kind 성공"), D->Dispatch(TEXT("car.setPlate"), PK, RK, EK));
+		TestEqual(TEXT("종류 변경"), StrField(RK, TEXT("plateKind")), FString(TEXT("old_green_region")));
+		TestEqual(TEXT("종류 변경 후 번호 유지"), StrField(RK, TEXT("plate")), FString(TEXT("123가4567")));
+		{
+			FString Region, Prefix, Usage, Serial;
+			TestTrue(TEXT("plateText 문법"), PlateRpc::ParsePlate(StrField(RK, TEXT("plateText")), Region, Prefix, Usage, Serial));
+			TestEqual(TEXT("지역판은 지역명이 붙는다"), Region.Len(), 2);
+			TestEqual(TEXT("2자리 종류는 앞자리를 자른다"), Prefix, FString(TEXT("23")));
+		}
+		// rendered 는 판을 실제로 정렬·합성한 뒤에만 참이다(테스트 카탈로그 차량은 메시가 없을 수 있다) — 참이면 에셋이 있어야 한다.
+		// 실차 메시로 종류별 판이 실제 붙는지는 CarActorTest(Park3D.CarPlacement.PlateNumber)가 본다.
+		bool bRendered = false;
+		if (Obj(RK).IsValid()) { Obj(RK)->TryGetBoolField(TEXT("rendered"), bRendered); }
+		if (bRendered) { TestTrue(TEXT("rendered 면 종류 인스턴스 에셋이 있다"), PlateKinds::IsKindRendered(TEXT("old_green_region"))); }
 
 		TSharedPtr<FJsonObject> GP = MakeShared<FJsonObject>(); GP->SetStringField(TEXT("carNameId"), IdA);
 		TSharedPtr<FJsonValue> GR; FRpcError GE;
@@ -442,24 +468,25 @@ bool FRpcPlateModuleTest::RunTest(const FString& Parameters)
 	FPlateRpcModule Plate([World]() -> UWorld* { return World; });
 	Plate.Register(*D);
 
-	// plate.kinds: 10종, default normal_film, normal_film 만 rendered.
+	// plate.kinds: 10종, default normal_film, rendered = 종류별 인스턴스(MI_Plate_<key>) 존재 여부(에셋이 있는 에디터에선 10종 전부).
 	{
 		TSharedPtr<FJsonValue> R; FRpcError E;
 		TestTrue(TEXT("plate.kinds 성공"), D->Dispatch(TEXT("plate.kinds"), nullptr, R, E));
 		TestEqual(TEXT("종류 10개"), ArrayNum(R, TEXT("kinds")), 10);
 		TestEqual(TEXT("default normal_film"), StrField(R, TEXT("default")), FString(TEXT("normal_film")));
 		const TArray<TSharedPtr<FJsonValue>>* Kinds = nullptr;
-		int32 Rendered = 0;
+		int32 Rendered = 0, Expected = 0;
 		if (Obj(R).IsValid() && Obj(R)->TryGetArrayField(TEXT("kinds"), Kinds))
 		{
 			for (const TSharedPtr<FJsonValue>& V : *Kinds)
 			{
 				bool b = false; Obj(V)->TryGetBoolField(TEXT("rendered"), b);
-				if (b) { ++Rendered; TestEqual(TEXT("rendered 는 normal_film"), StrField(V, TEXT("key")), FString(TEXT("normal_film"))); }
+				if (b) { ++Rendered; }
+				if (PlateKinds::IsKindRendered(StrField(V, TEXT("key")))) { ++Expected; }
 				TestFalse(TEXT("example 비어있지 않음"), StrField(V, TEXT("example")).IsEmpty());
 			}
 		}
-		TestEqual(TEXT("rendered 1종"), Rendered, 1);
+		TestEqual(TEXT("rendered = 인스턴스 에셋이 있는 종류 수"), Rendered, Expected);
 	}
 
 	// plate.random: count/seed 재현, count 는 1~100 으로 가둔다.

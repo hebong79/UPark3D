@@ -1,0 +1,445 @@
+{
+ "pxPerMmBake": 3.0,
+ "kinds": [
+  {
+   "key": "normal_film",
+   "name": "비사업용 8자리 필름식",
+   "sizeMm": [
+    520,
+    110
+   ],
+   "layout": "one_row",
+   "film": true,
+   "bg": [
+    0.96,
+    0.955,
+    0.95
+   ],
+   "fg": [
+    0.09,
+    0.085,
+    0.09
+   ],
+   "band": "hologram",
+   "region": false,
+   "digits": 3,
+   "texSize": [
+    2048,
+    512
+   ],
+   "seed": 20262089,
+   "age": 0.1205,
+   "bolts": [
+    [
+     20.0,
+     55.0
+    ],
+    [
+     500.0,
+     55.0
+    ]
+   ],
+   "files": {
+    "base": "normal_film_base.png",
+    "normal": "normal_film_normal.png",
+    "orm": "normal_film_orm.png"
+   }
+  },
+  {
+   "key": "normal_paint8",
+   "name": "비사업용 8자리 페인트식",
+   "sizeMm": [
+    520,
+    110
+   ],
+   "layout": "one_row",
+   "film": false,
+   "bg": [
+    0.96,
+    0.955,
+    0.95
+   ],
+   "fg": [
+    0.09,
+    0.085,
+    0.09
+   ],
+   "band": "",
+   "region": false,
+   "digits": 3,
+   "texSize": [
+    2048,
+    512
+   ],
+   "seed": 20262261,
+   "age": 0.2299,
+   "bolts": [
+    [
+     20.0,
+     55.0
+    ],
+    [
+     500.0,
+     55.0
+    ]
+   ],
+   "files": {
+    "base": "normal_paint8_base.png",
+    "normal": "normal_paint8_normal.png",
+    "orm": "normal_paint8_orm.png"
+   }
+  },
+  {
+   "key": "normal_paint7",
+   "name": "비사업용 7자리 유럽형",
+   "sizeMm": [
+    520,
+    110
+   ],
+   "layout": "one_row",
+   "film": false,
+   "bg": [
+    0.96,
+    0.955,
+    0.95
+   ],
+   "fg": [
+    0.09,
+    0.085,
+    0.09
+   ],
+   "band": "",
+   "region": false,
+   "digits": 2,
+   "texSize": [
+    2048,
+    512
+   ],
+   "seed": 20262260,
+   "age": 0.1055,
+   "bolts": [
+    [
+     20.0,
+     55.0
+    ],
+    [
+     500.0,
+     55.0
+    ]
+   ],
+   "files": {
+    "base": "normal_paint7_base.png",
+    "normal": "normal_paint7_normal.png",
+    "orm": "normal_paint7_orm.png"
+   }
+  },
+  {
+   "key": "ev",
+   "name": "전기·수소차",
+   "sizeMm": [
+    520,
+    110
+   ],
+   "layout": "one_row",
+   "film": true,
+   "bg": [
+    0.62,
+    0.82,
+    0.94
+   ],
+   "fg": [
+    0.09,
+    0.085,
+    0.09
+   ],
+   "band": "ev",
+   "region": false,
+   "digits": 3,
+   "texSize": [
+    2048,
+    512
+   ],
+   "seed": 20261140,
+   "age": 0.2895,
+   "bolts": [
+    [
+     24.7,
+     52.0
+    ],
+    [
+     495.3,
+     52.0
+    ]
+   ],
+   "files": {
+    "base": "ev_base.png",
+    "normal": "ev_normal.png",
+    "orm": "ev_orm.png"
+   }
+  },
+  {
+   "key": "commercial",
+   "name": "자동차 운수 사업용",
+   "sizeMm": [
+    520,
+    110
+   ],
+   "layout": "one_row",
+   "film": false,
+   "bg": [
+    0.95,
+    0.74,
+    0.05
+   ],
+   "fg": [
+    0.09,
+    0.085,
+    0.09
+   ],
+   "band": "",
+   "region": true,
+   "digits": 2,
+   "texSize": [
+    2048,
+    512
+   ],
+   "seed": 20261973,
+   "age": 0.0512,
+   "bolts": [
+    [
+     20.0,
+     55.0
+    ],
+    [
+     500.0,
+     55.0
+    ]
+   ],
+   "files": {
+    "base": "commercial_base.png",
+    "normal": "commercial_normal.png",
+    "orm": "commercial_orm.png"
+   }
+  },
+  {
+   "key": "corporate",
+   "name": "법인 업무용 고가차량(연두)",
+   "sizeMm": [
+    520,
+    110
+   ],
+   "layout": "one_row",
+   "film": true,
+   "bg": [
+    0.74,
+    0.92,
+    0.3
+   ],
+   "fg": [
+    0.09,
+    0.085,
+    0.09
+   ],
+   "band": "hologram",
+   "region": false,
+   "digits": 3,
+   "texSize": [
+    2048,
+    512
+   ],
+   "seed": 20261896,
+   "age": 0.0829,
+   "bolts": [
+    [
+     20.0,
+     55.0
+    ],
+    [
+     500.0,
+     55.0
+    ]
+   ],
+   "files": {
+    "base": "corporate_base.png",
+    "normal": "corporate_normal.png",
+    "orm": "corporate_orm.png"
+   }
+  },
+  {
+   "key": "short_white",
+   "name": "비사업용 두 줄",
+   "sizeMm": [
+    335,
+    155
+   ],
+   "layout": "two_row",
+   "film": false,
+   "bg": [
+    0.96,
+    0.955,
+    0.95
+   ],
+   "fg": [
+    0.09,
+    0.085,
+    0.09
+   ],
+   "band": "",
+   "region": false,
+   "digits": 2,
+   "texSize": [
+    1024,
+    512
+   ],
+   "seed": 20262121,
+   "age": 0.2157,
+   "bolts": [
+    [
+     22.0,
+     24.0
+    ],
+    [
+     313.0,
+     24.0
+    ]
+   ],
+   "files": {
+    "base": "short_white_base.png",
+    "normal": "short_white_normal.png",
+    "orm": "short_white_orm.png"
+   }
+  },
+  {
+   "key": "old_green_region",
+   "name": "구형 자가용 지역판(녹색)",
+   "sizeMm": [
+    335,
+    170
+   ],
+   "layout": "two_row",
+   "film": false,
+   "bg": [
+    0.04,
+    0.33,
+    0.2
+   ],
+   "fg": [
+    0.97,
+    0.97,
+    0.95
+   ],
+   "band": "",
+   "region": true,
+   "digits": 2,
+   "texSize": [
+    1024,
+    512
+   ],
+   "seed": 20262603,
+   "age": 0.1819,
+   "bolts": [
+    [
+     22.0,
+     24.0
+    ],
+    [
+     313.0,
+     24.0
+    ]
+   ],
+   "files": {
+    "base": "old_green_region_base.png",
+    "normal": "old_green_region_normal.png",
+    "orm": "old_green_region_orm.png"
+   }
+  },
+  {
+   "key": "old_green_national",
+   "name": "구형 자가용 전국판(녹색)",
+   "sizeMm": [
+    335,
+    170
+   ],
+   "layout": "two_row",
+   "film": false,
+   "bg": [
+    0.04,
+    0.33,
+    0.2
+   ],
+   "fg": [
+    0.97,
+    0.97,
+    0.95
+   ],
+   "band": "",
+   "region": false,
+   "digits": 2,
+   "texSize": [
+    1024,
+    512
+   ],
+   "seed": 20262813,
+   "age": 0.1897,
+   "bolts": [
+    [
+     22.0,
+     24.0
+    ],
+    [
+     313.0,
+     24.0
+    ]
+   ],
+   "files": {
+    "base": "old_green_national_base.png",
+    "normal": "old_green_national_normal.png",
+    "orm": "old_green_national_orm.png"
+   }
+  },
+  {
+   "key": "old_business",
+   "name": "구형 영업용(노란 바탕 청색 글자)",
+   "sizeMm": [
+    335,
+    170
+   ],
+   "layout": "two_row",
+   "film": false,
+   "bg": [
+    0.95,
+    0.74,
+    0.05
+   ],
+   "fg": [
+    0.08,
+    0.16,
+    0.45
+   ],
+   "band": "",
+   "region": true,
+   "digits": 2,
+   "texSize": [
+    1024,
+    512
+   ],
+   "seed": 20262211,
+   "age": 0.0919,
+   "bolts": [
+    [
+     22.0,
+     24.0
+    ],
+    [
+     313.0,
+     24.0
+    ]
+   ],
+   "files": {
+    "base": "old_business_base.png",
+    "normal": "old_business_normal.png",
+    "orm": "old_business_orm.png"
+   }
+  }
+ ]
+}

@@ -150,6 +150,9 @@ namespace RpcDto
 		// 번호판 번호(canonical "123다4567"). 저장 파일에는 없는 런타임 값이고,
 		// 이게 없으면 car.randomizePlates 의 결과를 로그 grep 말고는 확인할 방법이 없다.
 		O->SetStringField(TEXT("plate"), Car->GetPlateNumber());
+		// 종류(kind)와 판에 실제 그려진 글자(지역명·자릿수 적용). OmiPark3D CarDto 의 가산 키와 같은 이름.
+		O->SetStringField(TEXT("plateKind"), Car->GetPlateKind());
+		O->SetStringField(TEXT("plateText"), Car->GetPlateDisplayText());
 		return O;
 	}
 

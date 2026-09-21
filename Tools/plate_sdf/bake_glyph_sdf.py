@@ -30,7 +30,10 @@ from PIL import Image, ImageDraw, ImageFont
 # CarActor.cpp 의 AllowedPassengerChars 와 같아야 한다. 여기가 어긋나면 그 글자만 빈칸으로 나온다.
 DIGITS = "0123456789"
 HANGUL = "가나다라마바사거너더러머버서어저고노도로모보소오조구누두루무부수우주"
-GLYPHS = DIGITS + HANGUL
+# 종류(kind) 10종이 더 요구하는 글자(Source/Park3D/Plate/PlateKinds.cpp 와 같아야 한다):
+#   대여 하허호 · 사업용 아(바사자는 위에 있다) · 지역명 17곳(서울…세종)의 한글.
+EXTRA = "하허호아서울부산대인천광전경기강원충북남제세종"
+GLYPHS = DIGITS + HANGUL + "".join(ch for ch in EXTRA if ch not in HANGUL)
 
 CELL = 256          # 아틀라스 셀 한 변(px). 런타임 렌더타깃 높이와 같게 두어 1:1 로 블릿한다.
 BASELINE = 200      # 셀 안 베이스라인 y. 모든 글자가 같은 값을 쓰므로 세로 정렬이 자동이다.
@@ -112,6 +115,15 @@ def bake(font_path, out_png, out_json, font_size, label):
         if not cov.any():
             print(f"  [경고] '{ch}' 가 비어 있다 — 폰트에 글리프가 없다", file=sys.stderr)
 
+        # 잉크 상자(셀 px). 종류별 조판(PlateLayout)은 어드밴스가 아니라 **잉크 높이**로 글자를 칸에 맞춘다 —
+        # 고시 별표가 잉크 높이(숫자 74.8 / 한글 57 mm)로 적혀 있고, 한글은 어드밴스 기준 정렬로는 숫자보다 작아야 할
+        # 높이를 못 맞춘다. 상자가 없으면(빈 글리프) 셀 전체.
+        ys, xs = np.nonzero(cov)
+        if len(xs):
+            ink = (xs.min() / SS, ys.min() / SS, (xs.max() + 1) / SS, (ys.max() + 1) / SS)
+        else:
+            ink = (0.0, 0.0, float(CELL), float(CELL))
+
         # 클램프 반경보다 조금 넉넉하게 재야 평균 후에도 포화 경계가 안 보인다.
         sd = signed_distance(cov, int(SPREAD * SS) + 8)   # SS 배 픽셀 단위
         sd = box_mean(sd, SS) / SS                # 셀 픽셀 단위로 환산
@@ -124,6 +136,8 @@ def bake(font_path, out_png, out_json, font_size, label):
             "row": row,
             "advance": round(advance, 4),   # 셀 px
             "boxX0": round(box_x0, 4),      # 셀 안 어드밴스 박스 왼쪽 끝(px)
+            "inkX0": round(ink[0], 4), "inkY0": round(ink[1], 4),   # 잉크 상자(셀 px, 위→아래)
+            "inkX1": round(ink[2], 4), "inkY1": round(ink[3], 4),
         })
         print(f"  {ch}  advance={advance:7.2f}  box_x0={box_x0:7.2f}")
 

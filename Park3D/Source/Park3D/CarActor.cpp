@@ -19,6 +19,7 @@
 #include "Engine/Texture.h"
 #include "Engine/Texture2D.h"
 #include "Plate/PlateGlyphAtlas.h"
+#include "Plate/PlateKinds.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace
@@ -62,6 +63,21 @@ namespace
 		Component->SetGenerateOverlapEvents(false);
 		Component->SetCastShadow(false);
 		Component->SetVisibility(false, true);
+	}
+
+	// 봉인 캡 — OmiPark3D carassets.py SEAL_R_M 0.0113 · SEAL_T_M 0.003 · SEAL_RGB. 엔진 Cylinder 는 지름·높이 100.
+	constexpr float SealRadiusCm = 1.13f;
+	constexpr float SealThickCm = 0.3f;
+	const FLinearColor SealColor(0.55f, 0.56f, 0.58f, 1.f);
+
+	/** 종류별 좌측 볼트 위치(mm, 판 좌상단 기준) — OmiPark3D plategen.bolt_positions 의 첫 항목. */
+	FVector2D FirstBoltMm(const FPlateKindDef& Kind)
+	{
+		if (Kind.IsTwoRow())
+		{
+			return FVector2D(22.0, 24.0);
+		}
+		return FCString::Strcmp(Kind.Band, TEXT("ev")) == 0 ? FVector2D(24.7, 52.0) : FVector2D(20.0, Kind.HeightMm * 0.5);
 	}
 }
 
@@ -147,9 +163,17 @@ ACarActor::ACarActor()
 		PlateText->SetRelativeRotation(FRotator(0.f, 90.f, 0.f));
 	}
 
+	// 봉인 캡은 뒷판의 자식이지만 **스케일은 절대**로 둔다 — 두 줄 판(335×170)은 판 메시를 비등방으로 늘리는데
+	// 그 스케일을 물려받으면 원판이 타원이 된다.
+	BackPlateSealComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BackPlateSealComp"));
+	BackPlateSealComp->SetupAttachment(BackPlateComp);
+	BackPlateSealComp->SetAbsolute(false, false, true);
+	ConfigurePlateVisual(BackPlateSealComp);
+
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> FrontPlateFinder(TEXT("/Game/Actors/Car/Plates/Meshs/SM_Plate_F"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> BackPlateFinder(TEXT("/Game/Actors/Car/Plates/Meshs/SM_Plate_B"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> PlateDetailCubeFinder(TEXT("/Engine/BasicShapes/Cube"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SealCylinderFinder(TEXT("/Engine/BasicShapes/Cylinder"));
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> WhitePlateBaseMatFinder(TEXT("/Engine/BasicShapes/BasicShapeMaterial"));
 	static ConstructorHelpers::FObjectFinder<UFont> PlateFontFinder(TEXT("/Game/Actors/Car/Plates/Font/수성돋움체"));
 	// 프로젝트 사본이던 DefaultTextMaterialTranslucent1 이 사라져 엔진 원본을 쓴다(내용 동일).
@@ -193,7 +217,12 @@ ACarActor::ACarActor()
 		{
 			ApplyColoredPlateDetail(SecurityStrip, KoreaSecurityBlue);
 		}
-
+		if (SealCylinderFinder.Succeeded())
+		{
+			BackPlateSealComp->SetStaticMesh(SealCylinderFinder.Object);
+			BackPlateSealComp->SetRelativeScale3D(FVector(SealRadiusCm * 2.f / 100.f, SealRadiusCm * 2.f / 100.f, SealThickCm / 100.f));
+			ApplyColoredPlateDetail(BackPlateSealComp, SealColor);
+		}
 	}
 	for (UTextRenderComponent* PlateText : { FrontPlateText, BackPlateText })
 	{
@@ -245,21 +274,43 @@ void ACarActor::InitializePlateNumberOnce()
 	{
 		PlateNumber = MakeDeterministicPlateNumber(CarData);
 	}
+	if (PlateKind.IsEmpty())
+	{
+		// 종류도 id 에서 결정적으로 — 같은 파일을 다시 열어도 같은 차가 같은 판을 단다(번호와 같은 계약).
+		PlateKind = PlateKinds::AutoKindFor(CarData.id, CarData.prefabName, CarData.type);
+	}
 
-	const FText Text = FText::FromString(MakePlateDisplayText(PlateNumber));
+	const FText Text = FText::FromString(GetPlateDisplayText());
 	if (FrontPlateText) FrontPlateText->SetText(Text);
 	if (BackPlateText) BackPlateText->SetText(Text);
 }
 
+FString ACarActor::GetPlateDisplayText() const
+{
+	if (const FPlateKindDef* K = PlateKinds::FindKind(PlateKind))
+	{
+		return PlateKinds::DisplayText(*K, PlateNumber, PlateKinds::IdSalt(CarData.id));
+	}
+	return MakePlateDisplayText(PlateNumber);
+}
+
 void ACarActor::SetPlateNumber(const FString& InCanonicalNumber)
 {
-	if (InCanonicalNumber.IsEmpty() || InCanonicalNumber == PlateNumber)
-	{
-		return;
-	}
-	PlateNumber = InCanonicalNumber;
+	SetPlate(InCanonicalNumber, FString());
+}
 
-	const FString Display = MakePlateDisplayText(PlateNumber);
+bool ACarActor::SetPlate(const FString& InCanonicalNumber, const FString& InKind)
+{
+	const bool bNumberChanged = !InCanonicalNumber.IsEmpty() && InCanonicalNumber != PlateNumber;
+	const bool bKindChanged = !InKind.IsEmpty() && InKind != PlateKind && PlateKinds::FindKind(InKind) != nullptr;
+	if (!bNumberChanged && !bKindChanged)
+	{
+		return bPlateKindRendered;
+	}
+	if (bNumberChanged) { PlateNumber = InCanonicalNumber; }
+	if (bKindChanged) { PlateKind = InKind; }
+
+	const FString Display = GetPlateDisplayText();
 	const FText Text = FText::FromString(Display);
 	if (FrontPlateText) FrontPlateText->SetText(Text);
 	if (BackPlateText) BackPlateText->SetText(Text);
@@ -273,7 +324,70 @@ void ACarActor::SetPlateNumber(const FString& InCanonicalNumber)
 		}
 	}
 
-	RefreshPlateNumberSdf();
+	if (bKindChanged && bPlateNumberSdfBuilt)
+	{
+		// 종류가 바뀌면 판 머티리얼·크기·글자 배치가 전부 달라진다 → 처음 정렬과 같은 길을 다시 간다.
+		// MID 를 버려야 Bind 가 새 종류의 인스턴스에서 다시 만든다(옛 MID 에 텍스처만 갈면 바탕이 옛 종류로 남는다).
+		bPlateNumberSdfBuilt = false;
+		FrontPlateMid = nullptr;
+		BackPlateMid = nullptr;
+		PlateNumberSdf = nullptr;
+		UpdatePlatePresentation();
+	}
+	else
+	{
+		RefreshPlateNumberSdf();
+	}
+	return bPlateKindRendered;
+}
+
+const FPlateKindDef* ACarActor::ResolveRenderedKind() const
+{
+	const FPlateKindDef* K = PlateKinds::FindKind(PlateKind);
+	if (K == nullptr)
+	{
+		return nullptr;
+	}
+	UPlateGlyphAtlasSubsystem* Atlas = UPlateGlyphAtlasSubsystem::Resolve(GetWorld());
+	return (Atlas && Atlas->GetKindMaterial(PlateKind) != nullptr) ? K : nullptr;
+}
+
+UTexture2D* ACarActor::BuildPlateSdfTexture()
+{
+	UPlateGlyphAtlasSubsystem* Atlas = UPlateGlyphAtlasSubsystem::Resolve(GetWorld());
+	if (Atlas == nullptr)
+	{
+		return nullptr;
+	}
+	if (const FPlateKindDef* K = bPlateKindRendered ? PlateKinds::FindKind(PlateKind) : nullptr)
+	{
+		return Atlas->BuildKindSdf(this, *K, PlateKinds::DisplayNumber(*K, PlateNumber, PlateKinds::IdSalt(CarData.id)));
+	}
+	return PlateSdfAspect > 0.0 ? Atlas->BuildNumberSdf(this, MakePlateDisplayText(PlateNumber), PlateSdfAspect) : nullptr;
+}
+
+void ACarActor::PlaceSeal(const FCarPlateFrame& Frame, const FPlateKindDef* Kind)
+{
+	if (BackPlateSealComp == nullptr)
+	{
+		return;
+	}
+	if (Kind == nullptr || Frame.WidthCm <= 0.0 || Frame.HeightCm <= 0.0)
+	{
+		BackPlateSealComp->SetVisibility(false, true);
+		return;
+	}
+	// 판 로컬(스케일 전) 좌표. 부모 스케일이 축마다 다르므로 mm 위치를 그 축 스케일로 되돌린다.
+	const FVector2D Bolt = FirstBoltMm(*Kind);
+	const double ScaleWide = FMath::Max(1e-6, FVector::DotProduct(Frame.Scale, Frame.Wide.GetAbs()));
+	const double ScaleTall = FMath::Max(1e-6, FVector::DotProduct(Frame.Scale, Frame.Tall.GetAbs()));
+	const double AlongWide = (Bolt.X * 0.1 - Frame.WidthCm * 0.5) / ScaleWide;
+	const double AlongTall = (Frame.HeightCm * 0.5 - Bolt.Y * 0.1) / ScaleTall;
+	const FVector Local = Frame.Origin + Frame.Outward * (Frame.HalfThickness + 0.15 + SealThickCm * 0.5)
+		+ Frame.Wide * AlongWide + Frame.Tall * AlongTall;
+	BackPlateSealComp->SetRelativeLocation(Local);
+	BackPlateSealComp->SetRelativeRotation(FRotationMatrix::MakeFromZ(Frame.Outward).Rotator());
+	BackPlateSealComp->SetVisibility(true, true);
 }
 
 void ACarActor::RefreshPlateNumberSdf()
@@ -283,9 +397,7 @@ void ACarActor::RefreshPlateNumberSdf()
 		return;
 	}
 
-	const UGameInstance* GameInstance = GetGameInstance();
-	UPlateGlyphAtlasSubsystem* Atlas = GameInstance ? GameInstance->GetSubsystem<UPlateGlyphAtlasSubsystem>() : nullptr;
-	UTexture2D* NewSdf = Atlas ? Atlas->BuildNumberSdf(this, MakePlateDisplayText(PlateNumber), PlateSdfAspect) : nullptr;
+	UTexture2D* NewSdf = BuildPlateSdfTexture();
 	if (NewSdf == nullptr)
 	{
 		// 실패하면 옛 텍스처를 그대로 둔다 — 파라미터에 null 을 넣으면 번호가 통째로 사라진다.
@@ -348,9 +460,26 @@ void ACarActor::AlignPlateAndText(UStaticMeshComponent* Plate, UTextRenderCompon
 	Frame.Origin = BoundsOrigin;
 	Frame.Outward = OutwardLocal;
 	Frame.Wide = MeshWide;
+	Frame.Tall = Axes[TallAxis];
 	Frame.HalfThickness = ThinExtent;
 	Frame.WidthCm = Ext[WideAxis] * 2.0;
 	Frame.HeightCm = Ext[TallAxis] * 2.0;
+
+	// 종류별 판 크기 — 메시(52×11)를 축마다 늘여 335×170 등을 낸다. 종류별 인스턴스가 없으면(옛 패키지) 원래 크기.
+	// 앞·뒤 판이 같은 종류이므로 "종류별 판인가"는 앞판 정렬에서 정하고 뒤판이 따른다.
+	const FPlateKindDef* Kind = ResolveRenderedKind();
+	if (bFront) { bPlateKindRendered = Kind != nullptr; }
+	if (Kind != nullptr && Frame.WidthCm > 0.0 && Frame.HeightCm > 0.0)
+	{
+		const double KindWidthCm = Kind->WidthMm * 0.1;
+		const double KindHeightCm = Kind->HeightMm * 0.1;
+		Frame.Scale[WideAxis] = KindWidthCm / Frame.WidthCm;
+		Frame.Scale[TallAxis] = KindHeightCm / Frame.HeightCm;
+		Frame.WidthCm = KindWidthCm;
+		Frame.HeightCm = KindHeightCm;
+	}
+	Plate->SetRelativeScale3D(Frame.Scale);
+	if (!bFront) { PlaceSeal(Frame, Kind); }
 
 	const FVector TextLocal = BoundsOrigin + OutwardLocal * (ThinExtent + PlateTextSurfaceGap) + MeshWide * PlateTextSideShift;
 	Text->SetRelativeLocation(TextLocal);
@@ -369,7 +498,7 @@ void ACarActor::AlignPlateAndText(UStaticMeshComponent* Plate, UTextRenderCompon
 		Widget->SetRelativeScale3D(FVector(Scale));
 		if (UCarPlateNumberWidget* PlateWidget = Cast<UCarPlateNumberWidget>(Widget->GetUserWidgetObject()))
 		{
-			PlateWidget->SetPlateNumber(MakePlateDisplayText(PlateNumber));
+			PlateWidget->SetPlateNumber(GetPlateDisplayText());
 		}
 	}
 
@@ -390,8 +519,7 @@ void ACarActor::ApplyPlateNumberSdf(const FCarPlateFrame& Frame)
 		return;
 	}
 
-	const UGameInstance* GameInstance = GetGameInstance();
-	UPlateGlyphAtlasSubsystem* Atlas = GameInstance ? GameInstance->GetSubsystem<UPlateGlyphAtlasSubsystem>() : nullptr;
+	UPlateGlyphAtlasSubsystem* Atlas = UPlateGlyphAtlasSubsystem::Resolve(GetWorld());
 	if (Atlas == nullptr)
 	{
 		return;
@@ -399,9 +527,12 @@ void ACarActor::ApplyPlateNumberSdf(const FCarPlateFrame& Frame)
 
 	bPlateNumberSdfBuilt = true;   // 실패해도 매 정렬마다 다시 시도하지 않는다(로그만 쌓인다).
 
-	const FString Display = MakePlateDisplayText(PlateNumber);
 	PlateSdfAspect = Frame.WidthCm / Frame.HeightCm;   // 번호만 바꿔 다시 구울 때 재사용한다.
-	PlateNumberSdf = Atlas->BuildNumberSdf(this, Display, PlateSdfAspect);
+	PlateNumberSdf = BuildPlateSdfTexture();
+
+	// 종류별 판이면 그 인스턴스(MI_Plate_<key>: 바탕 3장·글자색·양각)를 판 앞면 슬롯에 먼저 건다. 그러면 아래 Bind 가
+	// 그 위에 MID 를 만들어 SDF 만 물린다. 옛 판(인스턴스 없음)은 메시에 박힌 M_PlateFront 그대로.
+	UMaterialInterface* const KindMaterial = bPlateKindRendered ? Atlas->GetKindMaterial(PlateKind) : nullptr;
 
 	// 앞/뒤 판이 같은 머티리얼(M_PlateFront)을 쓰므로 인스턴스를 각각 만들어 같은 SDF 를 물린다.
 	//
@@ -409,7 +540,7 @@ void ACarActor::ApplyPlateNumberSdf(const FCarPlateFrame& Frame)
 	// **슬롯 1 이 M_PlateFront(판 앞면)** 다 — 0 을 쓰면 테두리 머티리얼의 MID 를 만들어
 	// `NumberSDF` 를 조용히 아무 데도 안 넣는다(실측: 판정 로그가 front=0 back=0 으로 나왔다).
 	// 그래서 **파라미터가 있는 슬롯을 찾는다** — 메시 슬롯 순서가 바뀌어도 따라간다.
-	auto Bind = [this](UStaticMeshComponent* Plate, TObjectPtr<UMaterialInstanceDynamic>& OutMid)
+	auto Bind = [this, KindMaterial](UStaticMeshComponent* Plate, TObjectPtr<UMaterialInstanceDynamic>& OutMid)
 	{
 		if (Plate == nullptr || PlateNumberSdf == nullptr)
 		{
@@ -424,6 +555,10 @@ void ACarActor::ApplyPlateNumberSdf(const FCarPlateFrame& Frame)
 				UTexture* Existing = nullptr;
 				if (Mat != nullptr && Mat->GetTextureParameterValue(FHashedMaterialParameterInfo(FMaterialParameterInfo(TEXT("NumberSDF"))), Existing))
 				{
+					if (KindMaterial != nullptr && Mat != KindMaterial)
+					{
+						Plate->SetMaterial(Slot, KindMaterial);
+					}
 					OutMid = Plate->CreateDynamicMaterialInstance(Slot);
 					break;
 				}
@@ -473,8 +608,10 @@ void ACarActor::UpdatePlatePresentation()
 	}
 	// Existing Content's M_Num texture already supplies the inset bezel and left blue KOR/security field.
 	// Do not double-render the old runtime primitive approximation over it.
+	// 봉인 캡은 종류별 판일 때만 PlaceSeal 이 다시 켠다.
 	for (UPrimitiveComponent* Detail : { static_cast<UPrimitiveComponent*>(FrontPlateFrameComp), static_cast<UPrimitiveComponent*>(BackPlateFrameComp),
-		static_cast<UPrimitiveComponent*>(FrontPlateSecurityStripComp), static_cast<UPrimitiveComponent*>(BackPlateSecurityStripComp) })
+		static_cast<UPrimitiveComponent*>(FrontPlateSecurityStripComp), static_cast<UPrimitiveComponent*>(BackPlateSecurityStripComp),
+		static_cast<UPrimitiveComponent*>(BackPlateSealComp) })
 	{
 		if (Detail)
 		{

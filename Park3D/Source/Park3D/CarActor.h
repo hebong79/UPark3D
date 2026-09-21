@@ -17,6 +17,7 @@ class UCarColorComponent;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class UTexture2D;
+struct FPlateKindDef;
 
 /**
  * 번호판 메시에서 읽어 낸 로컬 기준틀. 축을 코드에 박으면 콘텐츠(판 메시)가 바뀌는 순간
@@ -31,6 +32,10 @@ struct FCarPlateFrame
 	FVector Outward = FVector::ZeroVector;
 	/** 판의 긴 축. 글자가 이 방향으로 흐른다. */
 	FVector Wide = FVector::ZeroVector;
+	/** 판의 세로 축(위쪽). 봉인 캡 위치 계산에 쓴다. */
+	FVector Tall = FVector::ZeroVector;
+	/** 메시 축별 스케일(종류별 판 크기 335×170 등을 52×11 메시에서 낼 때). 1 이면 원래 크기. */
+	FVector Scale = FVector::OneVector;
 	/** 원점에서 면까지의 거리(cm). */
 	double HalfThickness = 0.0;
 	/** 판 폭(긴 축 지름, cm). */
@@ -115,6 +120,19 @@ public:
 	FString PlateNumber;
 
 	/**
+	 * 번호판 종류(`PlateKinds::Kinds()` 의 key — normal_film · ev · commercial · old_green_region …). JSON 에는 저장하지 않는다.
+	 * 최초 InitFromPos 에서 id·차종으로 결정적으로 정해지고(PlateKinds::AutoKindFor), 랜덤 배치(RandomizeVisiblePlateNumbers)와
+	 * `car.setPlate` 가 바꾼다. 종류별 바탕·글자색·양각은 머티리얼 인스턴스 `MI_Plate_<key>` 가, 판 크기는 메시 스케일이,
+	 * 글자 배치는 PlateLayout 이 낸다. 인스턴스 에셋이 없으면(옛 패키지) 옛 판(M_PlateFront 한 가지)으로 그린다.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Car|Plate")
+	FString PlateKind;
+
+	/** 뒷판 좌측 볼트 위 봉인 캡(Ø22.6 mm 원판, OmiPark3D carassets.plate_defs 의 Seal). 런타임 Cylinder/MID. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Car|Plate")
+	UStaticMeshComponent* BackPlateSealComp;
+
+	/**
 	 * 메시 시각 정면축 보정. 공통 좌표에서 Unity rotY=0의 논리 전방(+Z)은 UE +X다.
 	 * PIE 시각 검증에서 Unity 전면주차가 UE 후면으로 보인 것을 보정하기 위해 액터에는 +270도를 더한다.
 	 * isFront=false는 이 보정 뒤에 180도를 추가해 항상 정확한 반대 방향을 유지한다.
@@ -190,6 +208,24 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Car|Plate")
 	void SetPlateNumber(const FString& InCanonicalNumber);
 
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Car|Plate")
+	FString GetPlateKind() const { return PlateKind; }
+
+	/** 판에 실제로 그려진 글자(종류 표시 규칙 적용 — 지역명·자릿수·사업용 한글). 예: "서울 12바 3456". */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Car|Plate")
+	FString GetPlateDisplayText() const;
+
+	/**
+	 * 번호·종류를 함께 갈아 끼운다. 빈 값은 그대로 둔다. 종류가 바뀌면 판 머티리얼·크기·글자를 다시 만든다
+	 * (정렬을 한 번 더 돌린다 — 종류 변경은 드물어 로그가 쌓이는 편이 코드 두 벌보다 낫다).
+	 * @return 종류를 실제 종류별 판으로 그렸는가(인스턴스 에셋이 없으면 false — 옛 판으로 그린다).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Car|Plate")
+	bool SetPlate(const FString& InCanonicalNumber, const FString& InKind);
+
+	/** 현재 종류가 종류별 판(MI_Plate_<key>)으로 그려졌는가. false 면 옛 판(normal_film 그림) 폴백. */
+	bool IsPlateKindRendered() const { return bPlateKindRendered; }
+
 private:
 	/** 최초 InitFromPos에서만 PlateNumber와 앞/뒤 텍스트를 설정한다. */
 	void InitializePlateNumberOnce();
@@ -223,6 +259,21 @@ private:
 	 * 판 종횡비를 아직 모르고, 어차피 다음 정렬이 새 번호로 굽는다.
 	 */
 	void RefreshPlateNumberSdf();
+
+	/**
+	 * 현재 번호·종류로 SDF 텍스처를 굽는다. 종류별 판이면 PlateLayout 조판(BuildKindSdf), 옛 판이면 한 줄 합성(BuildNumberSdf).
+	 * 실패하면 nullptr(호출자가 옛 텍스처를 유지한다).
+	 */
+	UTexture2D* BuildPlateSdfTexture();
+
+	/**
+	 * 종류별 판인지 정한다 — 종류 표에 있고 `MI_Plate_<key>` 를 찾을 수 있으면 그 정의를 돌려주고, 아니면 nullptr(옛 판).
+	 * 정렬(AlignPlateAndText)이 매번 부른다 — 결과는 서브시스템이 캐시한다.
+	 */
+	const FPlateKindDef* ResolveRenderedKind() const;
+
+	/** 뒷판 봉인 캡을 판 좌측 볼트 위에 놓는다(종류별 볼트 위치). 옛 판이면 숨긴다. */
+	void PlaceSeal(const FCarPlateFrame& Frame, const FPlateKindDef* Kind);
 
 	/** 글자를 판 표면에서 얼마나 띄울지(cm). z-fighting 만 피하면 되므로 작게. */
 	static constexpr float PlateTextSurfaceGap = 0.3f;
@@ -264,4 +315,7 @@ private:
 
 	/** SDF 를 구울 때 쓴 판 종횡비(가로/세로). 번호만 바꿔 다시 구울 때 판 크기를 다시 재지 않기 위해 남긴다. */
 	double PlateSdfAspect = 0.0;
+
+	/** 마지막 정렬에서 종류별 판(MI_Plate_<key>)을 썼는가. RPC 응답의 `rendered` 가 이 값이다. */
+	bool bPlateKindRendered = false;
 };

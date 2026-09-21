@@ -10,7 +10,13 @@
 #include "../../CarPlacementLibrary.h"
 #include "../../CameraControlLibrary.h"
 #include "../../Park3DDataPaths.h"
+#include "../../ParkingPresetManager.h"
+#include "PlateRpcModule.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/Texture2D.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
+#include "Math/RandomStream.h"
 #include "Misc/Paths.h"
 #include "HAL/FileManager.h"
 
@@ -774,5 +780,261 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetNumberField(TEXT("changed"), Changed);
 		O->SetArrayField(TEXT("cars"), Arr);
 		return RpcDto::MakeObject(O);
+	});
+
+	// ---- OmiPark3D 확장 이식 (car.placeAtSlot · car.purge · car.showAll · car.setPlate · car.plateKinds) ----
+
+	/**
+	 * 바닥 번호(preset.numbers 의 number — 프리셋 면·레벨 BP_ParkingSlot 면 모두)로 차량을 1대씩 놓는다.
+	 * LLM 이 "1, 3, 7번에 배치" 를 좌표 계산 없이 부를 수 있게 한 OmiPark3D 확장(docs/20260916_233000)의 이식.
+	 *  - 면 목록은 preset.numbers 와 같은 CollectSlotNumbers. 번호 중복은 허용되며 앞의 면(프리셋 → 레벨 순)이 이긴다.
+	 *  - 위치·전면 방향은 car.placeAtWorld 와 **같은 창구**(ACarPlacementManager::SnapCarPosToSlot)에 면 중심을 넣어 얻는다 —
+	 *    면 길이축 + 전면이 감시카메라(프리셋 카메라, 레벨 면은 가장 가까운 카메라)를 향하는 쪽.
+	 *  - presetId = 프리셋 idx(레벨 면은 0), slotId = 프리셋 면이면 면 슬롯, 레벨 면이면 바닥 번호(CarPos_13Num.객리단 관례).
+	 *  - replace=true 면 그 면 사각형(OBB) 안에 이미 선 차량을 먼저 지운다. 기본은 random.slotPlace 처럼 겹쳐 쌓인다.
+	 */
+	Dispatcher.Register(TEXT("car.placeAtSlot"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
+		AParkingPresetManager* Presets = GetPresetManager(E); if (!Presets) return nullptr;
+
+		TArray<int32> Wanted;
+		const TArray<TSharedPtr<FJsonValue>>* NumArr = nullptr;
+		if (P.IsValid() && P->TryGetArrayField(TEXT("numbers"), NumArr))
+		{
+			for (const TSharedPtr<FJsonValue>& V : *NumArr)
+			{
+				if (V.IsValid() && V->Type == EJson::Number) { Wanted.Add(FMath::RoundToInt32(V->AsNumber())); }
+			}
+		}
+		if (RpcParam::Has(P, TEXT("number"))) { Wanted.Add(RpcParam::GetInt(P, TEXT("number"))); }
+		if (Wanted.Num() == 0)
+		{
+			E.FailDomain(TEXT("numbers[] 또는 number 가 필요합니다 (바닥 번호 — preset.numbers 로 확인)"));
+			return nullptr;
+		}
+
+		TArray<FParkingSlotNumberInfo> Faces;
+		Presets->CollectSlotNumbers(Presets->ResolvePresets(), Faces);
+		TMap<int32, int32> ByNumber; // 번호 → 첫 면 인덱스(중복은 앞이 이긴다)
+		for (int32 i = 0; i < Faces.Num(); ++i)
+		{
+			if (!ByNumber.Contains(Faces[i].Number)) { ByNumber.Add(Faces[i].Number, i); }
+		}
+
+		int32 PrefabId = RpcParam::GetInt(P, TEXT("prefabId"), 0);
+		const FString PrefabName = RpcParam::GetString(P, TEXT("prefabName"));
+		if (PrefabId <= 0 && !PrefabName.IsEmpty())
+		{
+			PrefabId = PrefabIdFromCatalogName(Catalog, PrefabName);
+			if (PrefabId <= 0)
+			{
+				E.FailDomain(FString::Printf(TEXT("차종 없음: %s (car.catalog 로 확인)"), *PrefabName));
+				return nullptr;
+			}
+		}
+		if (PrefabId <= 0 && Catalog.Num() == 0)
+		{
+			E.FailDomain(TEXT("차량 카탈로그가 비어 있음(DT_CarCatalog 미로드) — 배치 0대"));
+			return nullptr;
+		}
+
+		const int32 Seed = RpcParam::GetInt(P, TEXT("seed"), 0);
+		FRandomStream Stream = PlateRpc::MakeStream(Seed);
+		const bool bRandomColor = RpcParam::GetBool(P, TEXT("randomColor"), false);
+		const bool bReplace = RpcParam::GetBool(P, TEXT("replace"), false);
+		const float U = Mgr->MetersToUU;
+
+		// 면 사각형(OBB) 안 판정 — AParkingPresetManager::FindSlotNumberAtWorld 와 같은 수식을 이 면 하나에만 건다.
+		auto InsideFace = [](const FParkingSlotNumberInfo& F, const FVector& World) -> bool
+		{
+			if (F.LengthCm <= 0.f || F.WidthCm <= 0.f) return false;
+			const FVector D = World - F.Center;
+			const FVector Perp(-F.AxisDir.Y, F.AxisDir.X, 0.f);
+			const float Along  = static_cast<float>(D.X * F.AxisDir.X + D.Y * F.AxisDir.Y);
+			const float Across = static_cast<float>(D.X * Perp.X + D.Y * Perp.Y);
+			return FMath::Abs(Along) <= F.LengthCm * 0.5f && FMath::Abs(Across) <= F.WidthCm * 0.5f;
+		};
+
+		TArray<TSharedPtr<FJsonValue>> Placed, NotFound, Removed;
+		for (const int32 N : Wanted)
+		{
+			const int32* Idx = ByNumber.Find(N);
+			if (!Idx)
+			{
+				NotFound.Add(MakeShared<FJsonValueNumber>(N));
+				continue;
+			}
+			const FParkingSlotNumberInfo& F = Faces[*Idx];
+
+			if (bReplace)
+			{
+				TArray<FString> Victims;
+				for (ACarActor* Car : Mgr->GetCars())
+				{
+					if (Car && InsideFace(F, UCarPlacementLibrary::UnrealMetersToWorld(Car->CarData.pos, U)))
+					{
+						Victims.Add(Car->CarData.id);
+					}
+				}
+				for (const FString& Id : Victims)
+				{
+					if (Mgr->RemoveCarById(Id)) { Removed.Add(MakeShared<FJsonValueString>(Id)); }
+				}
+			}
+
+			const int32 Pid = PrefabId > 0 ? PrefabId : Catalog[Stream.RandRange(0, Catalog.Num() - 1)].Idx;
+			FCarPos C;
+			C.id = UCarPlacementLibrary::MakeCarId(Mgr->GetCarCount());
+			C.prefabId = Pid;
+			C.prefabName = UCarPlacementLibrary::PrefabNameFromId(Catalog, Pid);
+			C.type = static_cast<int32>(ECarType::Small);
+			C.presetId = F.PresetIdx;
+			C.slotId = F.bFromPreset ? F.SlotId : F.Number;
+			C.isFront = true;
+			C.color = -1;
+			C.pos = UCarPlacementLibrary::WorldToUnrealMeters(F.Center, U);
+			C.rotY = UCarPlacementLibrary::AddYawDeg(FMath::RadiansToDegrees(FMath::Atan2(F.AxisDir.Y, F.AxisDir.X)), 0.f);
+			// 면 중심은 그 면 안이므로 스냅은 같은 면을 집고, 전면을 카메라 쪽으로 돌린 rotY 를 준다(placeAtWorld 와 같은 경로).
+			// 레벨 면에서는 presetId/slotId 를 건드리지 않으므로 위에서 넣은 번호가 남는다.
+			const bool bSnapped = Mgr->SnapCarPosToSlot(F.Center, C);
+
+			ACarActor* Car = Mgr->SpawnCarFromPos(C, Catalog);
+			if (!Car) { E.FailDomain(TEXT("차량 생성 실패")); return nullptr; }
+			if (bRandomColor && Car->ColorComp)
+			{
+				const ECarColor Color = static_cast<ECarColor>(Stream.RandRange(0, static_cast<int32>(ECarColor::Purple)));
+				Car->ColorComp->SetColorByEnum(Color);
+				Car->CarData.color = static_cast<int32>(Color); // 재생성 후에도 색 유지(SetRandomColorOfCarList 관례)
+			}
+
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetNumberField(TEXT("number"), N);
+			Row->SetStringField(TEXT("carNameId"), Car->CarData.id);
+			Row->SetStringField(TEXT("faceKey"), F.FaceKey());
+			Row->SetNumberField(TEXT("prefabId"), Pid);
+			Row->SetObjectField(TEXT("pos"), RpcDto::Vec3(Car->CarData.pos.x, Car->CarData.pos.y, Car->CarData.pos.z));
+			Row->SetNumberField(TEXT("rotY"), Car->CarData.rotY);
+			Row->SetBoolField(TEXT("snapped"), bSnapped);
+			Placed.Add(MakeShared<FJsonValueObject>(Row));
+		}
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetArrayField(TEXT("placed"), Placed);
+		O->SetNumberField(TEXT("placedCount"), Placed.Num());
+		O->SetArrayField(TEXT("notFound"), NotFound);
+		O->SetArrayField(TEXT("removed"), Removed);
+		O->SetBoolField(TEXT("seedHonored"), true);
+		return RpcDto::MakeObject(O);
+	});
+
+	/**
+	 * 목록의 차량 + 매니저가 모르는 ACarActor(유령)까지 월드에서 전부 지운다 — OmiPark3D car.purge 의 이식.
+	 * 저쪽은 렌더러 재붓기를 강제하지만 언리얼에서 "화면에 남은 차" 는 매니저 목록 밖의 액터다(레벨 전환·재스폰 등으로
+	 * 목록이 끊긴 경우). car.clear/deleteAll 은 목록만 본다 — 여기서는 TActorIterator 로 월드를 훑는다.
+	 */
+	Dispatcher.Register(TEXT("car.purge"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
+		UWorld* World = GetWorldPtr();
+		if (!World) { E.FailDomain(TEXT("월드 컨텍스트 없음")); return nullptr; }
+
+		TArray<ACarActor*> All;
+		for (TActorIterator<ACarActor> It(World); It; ++It) { All.Add(*It); }
+
+		const int32 Tracked = Mgr->GetCarCount();
+		Mgr->ClearAll();
+
+		// ClearAll 이 지운 액터는 IsValid 가 거짓이 된다 — 남은 것이 유령이다.
+		int32 Ghosts = 0;
+		for (ACarActor* Car : All)
+		{
+			if (IsValid(Car) && !Car->IsActorBeingDestroyed())
+			{
+				Car->Destroy();
+				++Ghosts;
+			}
+		}
+		UE_LOG(LogTemp, Log, TEXT("[Car] purge: 목록 %d대 + 유령 %d대 제거"), Tracked, Ghosts);
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetNumberField(TEXT("deletedCount"), Tracked);     // 목록에 있던 대수(OmiPark3D 와 같은 뜻)
+		O->SetNumberField(TEXT("ghostCount"), Ghosts);        // 목록 밖에서 추가로 지운 대수
+		O->SetNumberField(TEXT("destroyedCount"), All.Num()); // 월드에서 실제로 사라진 ACarActor 수
+		return RpcDto::MakeObject(O);
+	});
+
+	/** 숨긴 차량 전부 다시 표시 — car.hideAll {hidden:false} 와 같지만 파라미터 없이 부르고 켜진 id 를 돌려준다. */
+	Dispatcher.Register(TEXT("car.showAll"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
+		TArray<TSharedPtr<FJsonValue>> Shown;
+		for (ACarActor* Car : Mgr->GetCars())
+		{
+			if (Car && Car->IsHidden()) { Shown.Add(MakeShared<FJsonValueString>(Car->CarData.id)); }
+		}
+		const int32 Changed = Mgr->SetAllCarsHidden(false);
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetNumberField(TEXT("changedCount"), Changed);
+		O->SetNumberField(TEXT("carCount"), Mgr->GetCarCount());
+		O->SetArrayField(TEXT("shownCarNameIds"), Shown);
+		return RpcDto::MakeObject(O);
+	});
+
+	/**
+	 * 번호판 번호·종류 변경(OmiPark3D 확장 이식). plate=[지역2]?숫자2~3+한글+숫자4, kind=car.plateKinds 의 key | auto | random.
+	 * random=true 면 안 준 쪽을 무작위(seed). 언리얼 판은 종류가 하나(normal_film)뿐이라 kind 는 응답에만 실리고
+	 * auto/빈 값은 기본형이 된다. applied 는 SDF 텍스처가 실제로 새로 구워졌는지 — 아틀라스에 없는 글자(지역명·사업용 한글)나
+	 * 아직 판을 굽지 않은 차량(헤드리스)이면 번호 문자열만 바뀌고 화면은 그대로다.
+	 */
+	Dispatcher.Register(TEXT("car.setPlate"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
+		FString Id;
+		if (!RpcParam::RequireString(P, TEXT("carNameId"), Id, E)) return nullptr;
+		ACarActor* Car = Mgr->FindByNameId(Id);
+		if (!Car) { E.FailDomain(FString::Printf(TEXT("차량 없음: %s"), *Id)); return nullptr; }
+
+		FString Number;
+		if (!PlateRpc::PlateParam(P, TEXT("plate"), Number, E)) return nullptr;
+		FString Kind;
+		if (!PlateRpc::KindParam(P, TEXT("kind"), FString(), Kind, E)) return nullptr;
+		const bool bRandom = RpcParam::GetBool(P, TEXT("random"), false);
+		const int32 Seed = RpcParam::GetInt(P, TEXT("seed"), 0);
+		if (bRandom || Kind == PlateRpc::RandomKind())
+		{
+			FRandomStream Stream = PlateRpc::MakeStream(Seed);
+			if (Number.IsEmpty() && bRandom) { Number = ACarActor::MakeRandomPlateNumber(Stream); }
+			if (Kind.IsEmpty() || Kind == PlateRpc::RandomKind()) { Kind = PlateRpc::PickRandomKind(Stream); }
+		}
+		if (Number.IsEmpty() && Kind.IsEmpty())
+		{
+			E.FailDomain(TEXT("plate 또는 kind 가 필요합니다(random=true 면 둘 다 무작위)"));
+			return nullptr;
+		}
+		if (Kind.IsEmpty() || Kind == PlateRpc::AutoKind()) { Kind = PlateRpc::DefaultKind(); }
+
+		UTexture2D* Before = Car->PlateNumberSdf.Get();
+		if (!Number.IsEmpty()) { Car->SetPlateNumber(Number); }
+		const FPlateKindDef* K = PlateRpc::FindKind(Kind);
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetStringField(TEXT("carNameId"), Car->CarData.id);
+		O->SetStringField(TEXT("plate"), Car->GetPlateNumber());
+		O->SetStringField(TEXT("plateKind"), Kind);
+		O->SetStringField(TEXT("plateText"), K ? PlateRpc::DisplayText(*K, Car->GetPlateNumber(), static_cast<uint32>(Seed)) : Car->GetPlateNumber());
+		O->SetBoolField(TEXT("rendered"), Kind == PlateRpc::DefaultKind());
+		O->SetBoolField(TEXT("applied"), Car->PlateNumberSdf != nullptr && Car->PlateNumberSdf.Get() != Before);
+		return RpcDto::MakeObject(O);
+	});
+
+	Dispatcher.Register(TEXT("car.plateKinds"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		return RpcDto::MakeObject(PlateRpc::KindsPayload(GetWorldPtr()));
 	});
 }

@@ -7,8 +7,14 @@
 #include "Modules/CarRpcModule.h"
 #include "Modules/RandomRpcModule.h"
 #include "../CarPlacementManager.h"
+#include "../CarActor.h"
+#include "../PTZCameraActor.h"
+#include "../ParkingPresetManager.h"
 #include "../Config/Park3DAppConfig.h"
 #include "CamStreamSubsystem.h"   // system.health 의 포트 지도(메인 뷰·카메라 대역)를 여기서 읽는다.
+#include "EngineUtils.h"          // system.stats 의 액터 세기(TActorIterator — 매니저를 스폰하지 않는다).
+#include "Kismet/GameplayStatics.h"
+#include "Misc/App.h"
 
 #include "HttpServerModule.h"
 #include "IHttpRouter.h"
@@ -133,6 +139,34 @@ namespace
 	{
 		CompleteJsonWithCode(OnComplete, Body, EHttpServerResponseCodes::Ok);
 	}
+
+	/**
+	 * 언리얼 원래 계약(120 + cam.setSlotNumber·cam.slotNumbers·preset.numbers) 밖에서 OmiPark3D 가 먼저 만들고
+	 * 2026-09-21 에 이쪽으로 이식한 method 이름(53개). OmiPark3D tests/test_modules.py OMIPARK3D_EXTENSIONS 와 같은 목록 —
+	 * system.describe.extensions[] 로 내보내 클라이언트가 "새 method" 를 가려낼 수 있게 한다. 등록 여부와 무관한 정적 목록이다.
+	 */
+	TArray<FString> OmniverseExtensionMethods()
+	{
+		static const TCHAR* Names[] = {
+			TEXT("bay.clear"), TEXT("bay.create"), TEXT("bay.delete"), TEXT("bay.exportPresets"), TEXT("bay.fromPresets"),
+			TEXT("bay.hide"), TEXT("bay.hideAll"), TEXT("bay.list"), TEXT("bay.load"), TEXT("bay.save"), TEXT("bay.showAll"),
+			TEXT("bay.toPresets"), TEXT("bay.update"),
+			TEXT("cam.captureStats"), TEXT("cam.importPosFile"), TEXT("cam.listPosFiles"), TEXT("cam.listPresets"),
+			TEXT("cam.loadPosFile"), TEXT("cam.marks"), TEXT("cam.removePreset"), TEXT("cam.rename"), TEXT("cam.resetCameras"),
+			TEXT("cam.savePosFile"), TEXT("cam.setMarks"), TEXT("cam.setPreset"),
+			TEXT("car.placeAtSlot"), TEXT("car.plateKinds"), TEXT("car.purge"), TEXT("car.setPlate"), TEXT("car.showAll"),
+			TEXT("env.assets"), TEXT("env.clear"), TEXT("env.create"), TEXT("env.delete"), TEXT("env.hideMap"), TEXT("env.load"),
+			TEXT("env.mapState"), TEXT("env.reloadAssets"), TEXT("env.save"), TEXT("env.showMap"), TEXT("env.update"),
+			TEXT("file.list"), TEXT("file.read"),
+			TEXT("plate.bake"), TEXT("plate.kinds"), TEXT("plate.random"),
+			TEXT("preset.importFile"),
+			TEXT("scene.list"), TEXT("scene.load"),
+			TEXT("system.describe"), TEXT("system.stats"),
+		};
+		TArray<FString> Out;
+		for (const TCHAR* N : Names) { Out.Add(N); }
+		return Out;
+	}
 }
 
 void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -231,6 +265,10 @@ void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	LightModule = MakeUnique<FLightRpcModule>(WorldGetter);
 	ScenarioModule = MakeUnique<FScenarioRpcModule>(WorldGetter);
 	EnvModule = MakeUnique<FEnvRpcModule>(WorldGetter);
+	BayModule = MakeUnique<FBayRpcModule>(WorldGetter);
+	SceneModule = MakeUnique<FSceneRpcModule>(WorldGetter);
+	PlateModule = MakeUnique<FPlateRpcModule>(WorldGetter);
+	FileModule = MakeUnique<FFileRpcModule>(WorldGetter);
 
 	// 차량 카탈로그 주입. DT_CarCatalog 가 없으면 CatalogFromTable 이 car_catalog.json 으로 폴백하므로
 	// 로드 실패(nullptr)를 그대로 넘긴다.
@@ -242,6 +280,8 @@ void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		RandomModule->SetCatalog(Catalog);
 		ScenarioModule->SetCatalog(Catalog); // actors 의 prefabName → prefabId 해석에 필요하다.
 		SimModule->SetCatalog(Catalog);      // sim.start 의 prefabName → prefabId 해석에 필요하다.
+		PlateModule->SetCatalog(Catalog);    // plate.* 의 차종별 번호판 자리 해석용(안 써도 무해).
+		BayModule->SetCatalog(Catalog);      // bay.* 의 차량 배치 보조용(안 써도 무해).
 	}
 	else
 	{
@@ -260,6 +300,10 @@ void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	LightModule->Register(*Dispatcher);      // 비영속(light.*)
 	ScenarioModule->Register(*Dispatcher);   // 비영속(scenario.*)
 	EnvModule->Register(*Dispatcher);        // 비영속(env.*) — 레벨 배치 액터 조회/숨김
+	BayModule->Register(*Dispatcher);        // 비영속(bay.*) — OmiPark3D 이식
+	SceneModule->Register(*Dispatcher);      // 비영속(scene.*) — OmiPark3D 이식
+	PlateModule->Register(*Dispatcher);      // 비영속(plate.*) — OmiPark3D 이식
+	FileModule->Register(*Dispatcher);       // 비영속(file.*) — OmiPark3D 이식, Save/3D 폴더 읽기
 
 	StartServer();
 }
@@ -274,6 +318,15 @@ void URpcServerSubsystem::Deinitialize()
 	CamModule.Reset();
 	MeasureModule.Reset();
 	ViewModule.Reset();
+	// Sim/Light/Scenario/Env 는 추가될 때 여기 빠져 있었다(디스패처 핸들러가 이미 사라진 모듈의 this 를 잡는 잠복 결함).
+	SimModule.Reset();
+	LightModule.Reset();
+	ScenarioModule.Reset();
+	EnvModule.Reset();
+	BayModule.Reset();
+	SceneModule.Reset();
+	PlateModule.Reset();
+	FileModule.Reset();
 	Dispatcher = nullptr;
 	Super::Deinitialize();
 }
@@ -328,6 +381,70 @@ void URpcServerSubsystem::RegisterSystemMethods()
 		O->SetArrayField(TEXT("methods"), Methods);
 		return MakeShared<FJsonValueObject>(O);
 	});
+
+	// system.describe — 카탈로그 메타 + extensions[] (OmiPark3D 이식). 본문은 디스패처가 만든다(테스트에서 직접 부른다).
+	Dispatcher->RegisterPersistent(TEXT("system.describe"), [D](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		if (!D) { E.FailDomain(TEXT("디스패처 없음")); return nullptr; }
+		return D->Describe(OmniverseExtensionMethods());
+	});
+
+	// system.stats — 월드·프레임 요약(OmiPark3D 이식). 키 이름은 파이썬과 같게 두고, 언리얼에 없는 것(generation·stream
+	// 채널 상세·붓기 횟수)은 뺀다. 매니저를 스폰하지 않는다 — 조회가 씬을 바꾸면 안 된다.
+	Dispatcher->RegisterPersistent(TEXT("system.stats"), [this, D](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		UWorld* World = GetWorld();
+		int32 CarCount = 0, VisibleCarCount = 0, CameraCount = 0, PresetCount = 0;
+		FString Level;
+		if (World)
+		{
+			for (TActorIterator<ACarActor> It(World); It; ++It)
+			{
+				++CarCount;
+				if (!It->IsHidden()) ++VisibleCarCount;
+			}
+			for (TActorIterator<APTZCameraActor> It(World); It; ++It) { ++CameraCount; }
+			if (const AParkingPresetManager* PresetMgr = Cast<AParkingPresetManager>(
+				UGameplayStatics::GetActorOfClass(World, AParkingPresetManager::StaticClass())))
+			{
+				PresetCount = PresetMgr->GetPresets().Num();
+			}
+			Level = UGameplayStatics::GetCurrentLevelName(World, /*bRemovePrefixString=*/true);
+		}
+
+		const double DeltaSec = FApp::GetDeltaTime();
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetNumberField(TEXT("carCount"), CarCount);
+		O->SetNumberField(TEXT("visibleCarCount"), VisibleCarCount);
+		O->SetNumberField(TEXT("presetCount"), PresetCount);
+		O->SetNumberField(TEXT("cameraCount"), CameraCount);
+		O->SetStringField(TEXT("backend"), TEXT("unreal"));
+		O->SetStringField(TEXT("level"), Level);
+		O->SetNumberField(TEXT("fps"), DeltaSec > 0.0 ? 1.0 / DeltaSec : 0.0);
+		O->SetNumberField(TEXT("stepMs"), DeltaSec * 1000.0);   // 파이썬 렌더 스텝 시간과 같은 자리(언리얼은 프레임 시간)
+		O->SetNumberField(TEXT("frameMs"), DeltaSec * 1000.0);
+		O->SetNumberField(TEXT("uptimeSec"), FPlatformTime::Seconds() - GStartTime);
+		O->SetNumberField(TEXT("methods"), D ? D->NumMethods() : 0);
+
+		// stream — 파이썬 build_status_json 의 main/basePort/maxCameras 만(채널별 상세는 스트림 서브시스템이 내지 않는다).
+		TSharedPtr<FJsonObject> Stream = MakeShared<FJsonObject>();
+		TSharedPtr<FJsonObject> Main = MakeShared<FJsonObject>();
+		const UCamStreamSubsystem* StreamSub = World ? World->GetSubsystem<UCamStreamSubsystem>() : nullptr;
+		Main->SetBoolField(TEXT("enabled"), StreamSub != nullptr);
+		Main->SetNumberField(TEXT("port"), StreamSub ? StreamSub->GetMainPort() : 0);
+		Stream->SetObjectField(TEXT("main"), Main);
+		Stream->SetNumberField(TEXT("basePort"), StreamSub ? StreamSub->GetCamPortMin() - 1 : 0);
+		Stream->SetNumberField(TEXT("maxCameras"), StreamSub ? StreamSub->GetCamPortMax() - StreamSub->GetCamPortMin() + 1 : 0);
+		O->SetObjectField(TEXT("stream"), Stream);
+		return MakeShared<FJsonValueObject>(O);
+	});
+
+	// system.* 자기 설명(system.describe 용). 파이썬 system.py 의 params/doc 과 같다.
+	Dispatcher->SetMethodMeta(TEXT("system.ping"),     { false, false, TEXT("(에코)"), TEXT("params 를 그대로 돌려준다") });
+	Dispatcher->SetMethodMeta(TEXT("system.health"),   { false, false, TEXT(""), TEXT("{ok, port, ports{rpc,mainView,camMin,camMax}}") });
+	Dispatcher->SetMethodMeta(TEXT("system.catalog"),  { false, false, TEXT(""), TEXT("{methods:[name…]}") });
+	Dispatcher->SetMethodMeta(TEXT("system.describe"), { false, false, TEXT(""), TEXT("카탈로그 메타(mutating/destructive/params/doc/unreal) + extensions[] — MCP 도구용 가산 확장") });
+	Dispatcher->SetMethodMeta(TEXT("system.stats"),    { false, false, TEXT(""), TEXT("월드·프레임·스트림 요약 {carCount, visibleCarCount, presetCount, cameraCount, backend, level, fps, stepMs, frameMs, uptimeSec, methods, stream}") });
 }
 
 void URpcServerSubsystem::EnsureListenerBindOverride()

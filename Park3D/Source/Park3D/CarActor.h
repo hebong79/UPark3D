@@ -121,7 +121,8 @@ public:
 
 	/**
 	 * 번호판 종류(`PlateKinds::Kinds()` 의 key — normal_film · ev · commercial · old_green_region …). JSON 에는 저장하지 않는다.
-	 * 최초 InitFromPos 에서 id·차종으로 결정적으로 정해지고(PlateKinds::AutoKindFor), 랜덤 배치(RandomizeVisiblePlateNumbers)와
+	 * 최초 InitFromPos 에서 id·차종으로 결정적으로 정해지고(PlateKinds::AssignedKindFor — 월드 기본 종류 plate.setDefault 가
+	 * 있으면 그것), 랜덤 배치(RandomizeVisiblePlateNumbers)와
 	 * `car.setPlate` 가 바꾼다. 종류별 바탕·글자색·양각은 머티리얼 인스턴스 `MI_Plate_<key>` 가, 판 크기는 메시 스케일이,
 	 * 글자 배치는 PlateLayout 이 낸다. 인스턴스 에셋이 없으면(옛 패키지) 옛 판(M_PlateFront 한 가지)으로 그린다.
 	 */

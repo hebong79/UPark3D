@@ -277,7 +277,8 @@ void ACarActor::InitializePlateNumberOnce()
 	if (PlateKind.IsEmpty())
 	{
 		// 종류도 id 에서 결정적으로 — 같은 파일을 다시 열어도 같은 차가 같은 판을 단다(번호와 같은 계약).
-		PlateKind = PlateKinds::AutoKindFor(CarData.id, CarData.prefabName, CarData.type);
+		// 단 월드 기본 종류(plate.setDefault)가 잡혀 있으면 어느 스폰 경로든 그 종류다.
+		PlateKind = PlateKinds::AssignedKindFor(CarData.id, CarData.prefabName, CarData.type);
 	}
 
 	const FText Text = FText::FromString(GetPlateDisplayText());

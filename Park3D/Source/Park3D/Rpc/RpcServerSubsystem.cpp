@@ -142,7 +142,8 @@ namespace
 
 	/**
 	 * 언리얼 원래 계약(120 + cam.setSlotNumber·cam.slotNumbers·preset.numbers) 밖에서 OmiPark3D 가 먼저 만들고
-	 * 2026-09-21 에 이쪽으로 이식한 method 이름(53개). OmiPark3D tests/test_modules.py OMIPARK3D_EXTENSIONS 와 같은 목록 —
+	 * 2026-09-21 에 이쪽으로 이식한 method 이름(53개) + plate.setDefault/getDefault(#919, 2026-09-22 양쪽 동시 신설).
+	 * OmiPark3D tests/test_modules.py OMIPARK3D_EXTENSIONS 와 같은 목록 —
 	 * system.describe.extensions[] 로 내보내 클라이언트가 "새 method" 를 가려낼 수 있게 한다. 등록 여부와 무관한 정적 목록이다.
 	 */
 	TArray<FString> OmniverseExtensionMethods()
@@ -158,7 +159,7 @@ namespace
 			TEXT("env.assets"), TEXT("env.clear"), TEXT("env.create"), TEXT("env.delete"), TEXT("env.hideMap"), TEXT("env.load"),
 			TEXT("env.mapState"), TEXT("env.reloadAssets"), TEXT("env.save"), TEXT("env.showMap"), TEXT("env.update"),
 			TEXT("file.list"), TEXT("file.read"),
-			TEXT("plate.bake"), TEXT("plate.kinds"), TEXT("plate.random"),
+			TEXT("plate.bake"), TEXT("plate.getDefault"), TEXT("plate.kinds"), TEXT("plate.random"), TEXT("plate.setDefault"),
 			TEXT("preset.importFile"),
 			TEXT("scene.list"), TEXT("scene.load"),
 			TEXT("system.describe"), TEXT("system.stats"),

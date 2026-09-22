@@ -987,7 +987,8 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 
 	/**
 	 * 번호판 번호·종류 변경(OmiPark3D 확장 이식). plate=[지역2]?숫자2~3+한글+숫자4, kind=car.plateKinds 의 key | auto | random.
-	 * random=true 면 안 준 쪽을 무작위(seed). kind 를 안 주면 그 차의 현재 종류를 유지하고, auto 는 id·차종으로 결정적 배정.
+	 * random=true 면 안 준 쪽을 무작위(seed). kind 를 안 주면 그 차의 현재 종류를 유지하고, auto 는 id·차종으로 결정적 배정
+	 * (월드 기본 종류 plate.setDefault 가 잡혀 있으면 그 종류).
 	 * rendered 는 종류별 판(MI_Plate_<key>)으로 실제 그려졌는지(에셋이 없으면 옛 판 폴백), applied 는 SDF 텍스처가
 	 * 새로 구워졌는지 — 아틀라스에 없는 글자나 아직 판을 굽지 않은 차량(헤드리스)이면 문자열만 바뀌고 화면은 그대로다.
 	 */
@@ -1016,7 +1017,7 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 			E.FailDomain(TEXT("plate 또는 kind 가 필요합니다(random=true 면 둘 다 무작위)"));
 			return nullptr;
 		}
-		if (Kind == PlateRpc::AutoKind()) { Kind = PlateKinds::AutoKindFor(Car->CarData.id, Car->CarData.prefabName, Car->CarData.type); }
+		if (Kind == PlateRpc::AutoKind()) { Kind = PlateKinds::AssignedKindFor(Car->CarData.id, Car->CarData.prefabName, Car->CarData.type); }
 
 		UTexture2D* Before = Car->PlateNumberSdf.Get();
 		const bool bRendered = Car->SetPlate(Number, Kind);

@@ -51,6 +51,20 @@ namespace PlateKinds
 	inline const TCHAR* AutoKind() { return TEXT("auto"); }
 	inline const TCHAR* RandomKind() { return TEXT("random"); }
 
+	/**
+	 * 월드 기본 종류(plate.setDefault, 2026-09-22 팀보드 #919) — 비어 있으면 auto(id·차종 결정적 배정). 프로세스 전역이라
+	 * 레벨 전환·매니저 재생성을 넘어 살아남고, 종류를 안 박은 모든 스폰 경로(create/createLine/load/recreate/scenario)와
+	 * 랜덤 배치의 종류 추첨이 이 값을 따른다. 표에 없는 key 는 거부(false).
+	 */
+	bool SetWorldKind(const FString& KeyOrAuto);
+	const FString& WorldKind();
+
+	/** 종류 미지정 차량에 줄 종류 — 월드 기본이 있으면 그것, 없으면 AutoKindFor. */
+	FString AssignedKindFor(const FString& CarId, const FString& PrefabName, int32 CarType);
+
+	/** 랜덤 배치의 종류 — 월드 기본이 있으면 그것("1개 타입으로 통일"이 랜덤 재생성에도 지켜져야 한다), 없으면 RandomKindFor. */
+	FString RandomOrWorldKindFor(FRandomStream& Stream, const FString& PrefabName);
+
 	/** 종류별 머티리얼 인스턴스 경로(`Tools/plate_kinds/build_plate_assets.py` 가 만든다). */
 	FString KindMaterialPath(const FString& Key);
 

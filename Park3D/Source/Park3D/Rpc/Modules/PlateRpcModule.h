@@ -1,5 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
-// PlateRpcModule : plate.* (3) 핸들러 — 번호판 번호·종류 추첨(plate.random)과 텍스처 굽기(plate.bake).
+// PlateRpcModule : plate.* (5) 핸들러 — 번호판 번호·종류 추첨(plate.random)과 텍스처 굽기(plate.bake),
+// 월드 기본 종류(plate.setDefault / plate.getDefault — 팀보드 #919, 2026-09-22).
 // OmiPark3D 확장(rpc/modules/plate.py · world/plates.py)의 언리얼 이식이다. 차량에 붙이는 쪽은 car.setPlate.
 //
 // 종류 표·번호 문법·표시 정규화는 `Plate/PlateKinds` 에 있다(2026-09-21 차량 액터가 종류별 판을 그리게 되면서 RPC 밖으로

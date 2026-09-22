@@ -79,6 +79,23 @@ bool FPlateKindsAssignTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("필름식은 지역을 지운다"), PlateKinds::DisplayNumber(*Film, TEXT("서울123가4567"), 5), FString(TEXT("123가4567")));
 		TestEqual(TEXT("표시 문자열"), PlateKinds::DisplayText(*Film, TEXT("123가4567"), 5), FString(TEXT("123가 4567")));
 	}
+
+	// 월드 기본 종류(#919): 비어 있으면 auto/random 그대로, 잡히면 EV 이름·seed 무관하게 그 종류. 모르는 key 는 거부·불변.
+	{
+		PlateKinds::SetWorldKind(FString());
+		FRandomStream S(3);
+		TestTrue(TEXT("auto 면 AssignedKindFor == AutoKindFor"),
+			PlateKinds::AssignedKindFor(TEXT("k-1"), TEXT("현대_쏘나타"), 2) == PlateKinds::AutoKindFor(TEXT("k-1"), TEXT("현대_쏘나타"), 2));
+		TestFalse(TEXT("모르는 key 거부"), PlateKinds::SetWorldKind(TEXT("nope")));
+		TestTrue(TEXT("거부 뒤 불변"), PlateKinds::WorldKind().IsEmpty());
+		TestTrue(TEXT("key 설정"), PlateKinds::SetWorldKind(TEXT("commercial")));
+		TestEqual(TEXT("WorldKind"), PlateKinds::WorldKind(), FString(TEXT("commercial")));
+		TestEqual(TEXT("EV 이름도 월드 기본"), PlateKinds::AssignedKindFor(TEXT("x"), TEXT("현대_아이오닉5"), 2), FString(TEXT("commercial")));
+		TestEqual(TEXT("랜덤 배치도 월드 기본"), PlateKinds::RandomOrWorldKindFor(S, TEXT("기아_EV6")), FString(TEXT("commercial")));
+		TestTrue(TEXT("auto 복귀"), PlateKinds::SetWorldKind(TEXT("auto")));
+		TestTrue(TEXT("auto 면 비어 있다"), PlateKinds::WorldKind().IsEmpty());
+		TestEqual(TEXT("auto 복귀 뒤 EV 이름 → ev"), PlateKinds::RandomOrWorldKindFor(S, TEXT("기아_EV6")), FString(TEXT("ev")));
+	}
 	return true;
 }
 

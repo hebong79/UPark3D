@@ -5,6 +5,7 @@
 #include "../RpcParamUtil.h"
 #include "../RpcImageUtil.h"
 #include "../../CarActor.h"
+#include "../../CarPlacementManager.h"
 #include "../../Plate/PlateGlyphAtlas.h"
 #include "Engine/World.h"
 #include "Engine/GameInstance.h"
@@ -89,7 +90,10 @@ namespace PlateRpc
 		}
 		UPlateGlyphAtlasSubsystem* Atlas = ResolveAtlas(World);
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
-		O->SetStringField(TEXT("default"), DefaultKind());
+		// default = 종류 미지정 차량이 받는 종류. 월드 기본(plate.setDefault)이 잡히면 그것, auto 면 폴백 표기(normal_film)를 유지하고
+		// worldKind 가 "auto" 임을 따로 알린다(#919: "car.plateKinds.default 를 동기화").
+		O->SetStringField(TEXT("default"), PlateKinds::WorldKind().IsEmpty() ? FString(DefaultKind()) : PlateKinds::WorldKind());
+		O->SetStringField(TEXT("worldKind"), PlateKinds::WorldKind().IsEmpty() ? FString(AutoKind()) : PlateKinds::WorldKind());
 		O->SetBoolField(TEXT("enabled"), Atlas && Atlas->IsReady()); // SDF 아틀라스가 있어야 번호가 그려진다
 		O->SetArrayField(TEXT("kinds"), Arr);
 		return O;
@@ -102,6 +106,61 @@ void FPlateRpcModule::Register(URpcDispatcher& Dispatcher)
 	{
 		return RpcDto::MakeObject(PlateRpc::KindsPayload(GetWorldPtr()));
 	});
+
+	/**
+	 * 월드 기본 종류(팀보드 #919, SettingManager 「번호판 1개 타입으로 통일」 체크박스). kind=key | auto.
+	 * 이후 종류를 안 박고 스폰되는 모든 차량(create/createLine/load/recreate/scenario)과 랜덤 배치의 종류 추첨이 이 값을 따른다.
+	 * applyExisting(기본 true)이면 지금 있는 차량(숨긴 차 포함)도 한 번에 갈아 끼우고 changedCount 를 센다 — auto 로 되돌릴 때는
+	 * 차마다 id·차종 결정적 종류로 돌아간다. 프로세스 전역이라 레벨을 바꿔도 남고, 재기동하면 auto 다.
+	 */
+	Dispatcher.Register(TEXT("plate.setDefault"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		FString Kind;
+		if (!RpcParam::RequireString(P, TEXT("kind"), Kind, E)) return nullptr;
+		Kind.TrimStartAndEndInline();
+		if (Kind != PlateRpc::AutoKind() && !PlateRpc::FindKind(Kind))
+		{
+			FString Keys;
+			for (const FPlateKindDef& K : PlateRpc::Kinds()) { Keys += FString(K.Key) + TEXT(" | "); }
+			E.FailDomain(FString::Printf(TEXT("허용되지 않은 kind: %s (%sauto)"), *Kind, *Keys));
+			return nullptr;
+		}
+		const bool bApplyExisting = RpcParam::GetBool(P, TEXT("applyExisting"), true);
+		PlateKinds::SetWorldKind(Kind);
+
+		int32 Changed = 0;
+		int32 CarCount = 0;
+		if (bApplyExisting)
+		{
+			ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
+			for (const TObjectPtr<ACarActor>& Car : Mgr->GetCars())
+			{
+				if (!Car) { continue; }
+				++CarCount;
+				const FString Before = Car->GetPlateKind();
+				Car->SetPlate(FString(), PlateKinds::AssignedKindFor(Car->CarData.id, Car->CarData.prefabName, Car->CarData.type));
+				if (Car->GetPlateKind() != Before) { ++Changed; }
+			}
+		}
+		UE_LOG(LogTemp, Log, TEXT("[Plate] 월드 기본 종류 → %s (기존 차량 %d대 중 %d대 변경%s)"),
+			*Kind, CarCount, Changed, bApplyExisting ? TEXT("") : TEXT(", 기존 차량 미적용"));
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetStringField(TEXT("kind"), Kind);
+		O->SetNumberField(TEXT("changedCount"), Changed);
+		O->SetNumberField(TEXT("carCount"), CarCount);
+		O->SetBoolField(TEXT("applied"), bApplyExisting);
+		return RpcDto::MakeObject(O);
+	});
+
+	Dispatcher.Register(TEXT("plate.getDefault"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetStringField(TEXT("kind"), PlateKinds::WorldKind().IsEmpty() ? PlateRpc::AutoKind() : *PlateKinds::WorldKind());
+		return RpcDto::MakeObject(O);
+	});
+	Dispatcher.SetMethodMeta(TEXT("plate.getDefault"), { false, false, TEXT(""), TEXT("{kind: key | auto} — plate.setDefault 로 잡은 월드 기본 종류") });
 
 	/**
 	 * 번호·종류 무작위 추첨(차량에 안 붙임). kind=key 면 종류 고정. 결과 plate 는 그대로 car.setPlate 에 넣는다.

@@ -7,6 +7,8 @@
 #include "../../PresetMakerWidget.h"
 #include "../../Park3DDataPaths.h"
 #include "../../Env/BayPropActor.h"
+#include "../../Env/LevelSlotLibrary.h"
+#include "../../Config/Park3DAppConfig.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
@@ -348,6 +350,73 @@ namespace
 		return true;
 	}
 
+	// ===== 레벨 면 편집(bay.update/delete/create 의 level: 항목) =====
+
+	/** 레벨 면 R 이 속한 액터와 ISM_Slot. 인스턴스 번호가 범위 밖이면 nullptr. */
+	UInstancedStaticMeshComponent* BayLevelComp(UWorld* World, const FString& ActorName, int32 Instance, AActor** OutActor = nullptr)
+	{
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			if (!IsValid(*It) || It->GetName() != ActorName) continue;
+			UInstancedStaticMeshComponent* Comp = Park3DLevelSlots::FindSlotComponent(*It);
+			if (!Comp || (Instance >= 0 && Instance >= Comp->GetInstanceCount())) return nullptr;
+			if (OutActor) *OutActor = *It;
+			return Comp;
+		}
+		return nullptr;
+	}
+
+	/**
+	 * bay 규약(중심 m, 폭 방향 yaw, 크기 m 폭×길이) → 인스턴스 월드 변환.
+	 * bXLong: 판의 로컬 X 를 길이로 쓸 것인가 — 그 액터가 이미 쓰는 축 규약을 따른다(LV_Park_03 은 X=길이, LV_Park_01 은 X=폭).
+	 * 판이 Plane(100cm) 이 아닐 수도 있으므로 스케일은 메시 바운즈로 환산한다.
+	 */
+	FTransform BayLevelTransform(const FVector& PosM, float WidthYaw, const FVector2D& SizeM, bool bXLong, float UU, const FVector& MeshExtent)
+	{
+		const float LenX = bXLong ? SizeM.Y : SizeM.X;
+		const float LenY = bXLong ? SizeM.X : SizeM.Y;
+		const FVector Scale(
+			MeshExtent.X > 0.f ? LenX * UU / (2.f * MeshExtent.X) : 1.f,
+			MeshExtent.Y > 0.f ? LenY * UU / (2.f * MeshExtent.Y) : 1.f,
+			1.f);
+		return FTransform(FRotator(0.f, bXLong ? WidthYaw - 90.f : WidthYaw, 0.f), PosM * UU, Scale);
+	}
+
+	bool BayInstanceXLong(const UInstancedStaticMeshComponent* Comp, const FTransform& T)
+	{
+		const FVector Extent = Comp->GetStaticMesh()->GetBounds().BoxExtent;
+		const FVector S = T.GetScale3D();
+		return Extent.X * FMath::Abs(S.X) >= Extent.Y * FMath::Abs(S.Y);
+	}
+
+	/** 바닥 번호 다시 그리기 — 레벨 면이 바뀌면 번호 목록(CollectSlotNumbers)이 달라진다. 매니저가 없으면(테스트) 건너뛴다. */
+	void BayRefreshSlotNumbers(UWorld* World)
+	{
+		if (AParkingPresetManager* Mgr = Cast<AParkingPresetManager>(UGameplayStatics::GetActorOfClass(World, AParkingPresetManager::StaticClass())))
+		{
+			Mgr->RebuildSlotNumbers(Mgr->ResolvePresets());
+		}
+	}
+
+	/** 인스턴스 하나를 지운 뒤 같은 액터의 보관 키(level:<액터>#<n>)를 당겨 쓴다 — ISM 은 지우면 뒤 번호가 한 칸씩 앞으로 온다. */
+	void BayShiftHiddenKeys(TMap<FString, FTransform>& HiddenLevel, const FString& ActorName, int32 Removed)
+	{
+		TMap<FString, FTransform> Next;
+		for (const TPair<FString, FTransform>& Kv : HiddenLevel)
+		{
+			FString Actor; FString Idx;
+			if (!Kv.Key.StartsWith(TEXT("level:")) || !Kv.Key.Mid(6).Split(TEXT("#"), &Actor, &Idx) || Actor != ActorName)
+			{
+				Next.Add(Kv.Key, Kv.Value);
+				continue;
+			}
+			const int32 I = FCString::Atoi(*Idx);
+			if (I == Removed) continue;
+			Next.Add(I > Removed ? BayLevelKey(ActorName, I - 1) : Kv.Key, Kv.Value);
+		}
+		HiddenLevel = MoveTemp(Next);
+	}
+
 	const FBayRec* BayFindByName(const TArray<FBayRec>& Bays, const FString& Name)
 	{
 		return Bays.FindByPredicate([&Name](const FBayRec& R) { return R.Name == Name; });
@@ -494,7 +563,7 @@ namespace
 		O->SetObjectField(TEXT("scale"), RpcDto::Vec3(R.Scale.X, R.Scale.Y, R.Scale.Z));
 		O->SetObjectField(TEXT("size"), RpcDto::Vec3(R.SizeM.X, R.SizeM.Y, 0.0));
 		O->SetBoolField(TEXT("hidden"), R.bHidden);
-		// 이 포트만의 가산 키 — 레벨 면(지우지 못한다)과 프롭 면을 구분한다.
+		// 이 포트만의 가산 키 — 레벨 면(ISM 인스턴스)과 프롭 면(액터)을 구분한다.
 		O->SetStringField(TEXT("source"), R.bLevel ? TEXT("level") : TEXT("prop"));
 		return O;
 	}
@@ -697,6 +766,16 @@ namespace
 		return Park3DDataPaths::GetDataFilePath(TEXT("Bay"), *FileName);
 	}
 
+	/** bay.saveLevel/loadLevel: fullPath > Save/3D/Bay/<fileName 기본 LevelSlots>.json (config slot_file 과 같은 폴더). */
+	FString BayResolveLevelFilePath(const TSharedPtr<FJsonObject>& P)
+	{
+		const FString Full = RpcParam::GetString(P, TEXT("fullPath"));
+		if (!Full.IsEmpty()) return Full;
+		FString FileName = RpcParam::GetString(P, TEXT("fileName"), TEXT("LevelSlots"));
+		if (!FileName.EndsWith(TEXT(".json"))) FileName += TEXT(".json");
+		return Park3DDataPaths::GetDataFilePath(TEXT("Bay"), *FileName);
+	}
+
 	/** bay.exportPresets: fullPath > Save/3D/Preset/<fileName>.json — 하나는 필수(기본 이름으로 조용히 덮어쓰지 않는다). */
 	bool BayResolvePresetWritePath(const TSharedPtr<FJsonObject>& P, FString& Out, FRpcError& E)
 	{
@@ -794,11 +873,25 @@ void FBayRpcModule::Register(URpcDispatcher& Dispatcher)
 	});
 
 	// bay.create {pos{x,z,y?} yaw?=0 type?=normal name? label? group? scale?} → bay DTO
+	// group 이 레벨 BP_ParkingSlot 액터 이름이면 프롭이 아니라 그 액터의 ISM_Slot 에 인스턴스를 넣는다(레벨 면 — 번호·스냅 대상).
 	Dispatcher.Register(TEXT("bay.create"), [this, NeedWorld, Collect](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		UWorld* W = NeedWorld(E); if (!W) return nullptr;
 		FBayRec Spec;
 		if (!BayParseSpec(P, FString(), Spec, E)) return nullptr;
+		if (AActor* LevelActor = nullptr; !Spec.Group.IsEmpty() && BayLevelComp(W, Spec.Group, -1, &LevelActor))
+		{
+			UInstancedStaticMeshComponent* Comp = Park3DLevelSlots::FindSlotComponent(LevelActor);
+			const float UU = BayMetersToUU(W);
+			// 축 규약은 그 액터의 첫 인스턴스를 따른다(없으면 bay 규약대로 X=폭).
+			FTransform First;
+			const bool bXLong = Comp->GetInstanceCount() > 0 && Comp->GetInstanceTransform(0, First, true) && BayInstanceXLong(Comp, First);
+			const FTransform T = BayLevelTransform(Spec.PosM, Spec.Yaw, Spec.SizeM, bXLong, UU, Comp->GetStaticMesh()->GetBounds().BoxExtent);
+			const int32 Idx = Comp->AddInstance(T, /*bWorldSpace=*/true);
+			Comp->MarkRenderStateDirty();
+			BayRefreshSlotNumbers(W);
+			return RpcDto::MakeObject(BayToDto(BayRecFromLevelSlot(LevelActor, Comp, Idx, T, false, UU)));
+		}
 		TArray<FBayRec> Bays; Collect(W, Bays);
 		TSet<FString> Taken;
 		for (const FBayRec& R : Bays) { Taken.Add(R.Name); }
@@ -809,8 +902,9 @@ void FBayRpcModule::Register(URpcDispatcher& Dispatcher)
 		return RpcDto::MakeObject(BayToDto(BayRecFromActor(A)));
 	});
 
-	// bay.update {name pos? | delta? yaw? type? scale? label?} → bay DTO. 레벨 면은 옮길 수 없다.
-	Dispatcher.Register(TEXT("bay.update"), [NeedWorld, Collect](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	// bay.update {name pos? | delta? yaw? type? scale? label? size?} → bay DTO.
+	// 레벨 면(level:…)은 pos/delta/yaw/type/size{x=폭,y=길이 m} 로 인스턴스 변환을 바꾼다(scale·label 은 프롭 면 전용).
+	Dispatcher.Register(TEXT("bay.update"), [this, NeedWorld, Collect](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		UWorld* W = NeedWorld(E); if (!W) return nullptr;
 		FString Name;
@@ -818,9 +912,55 @@ void FBayRpcModule::Register(URpcDispatcher& Dispatcher)
 		TArray<FBayRec> Bays; Collect(W, Bays);
 		const FBayRec* R = BayFindByName(Bays, Name);
 		if (!R) { E.FailDomain(FString::Printf(TEXT("주차면 없음: %s (bay.list 로 확인)"), *Name)); return nullptr; }
-		if (R->bLevel || !R->Actor)
+		if (R->bLevel)
 		{
-			E.FailDomain(FString::Printf(TEXT("레벨 주차면은 수정할 수 없습니다: %s (bay.create 로 놓은 면만 옮길 수 있다)"), *Name));
+			if (HiddenLevelSlots.Contains(R->Name))
+			{
+				E.FailDomain(FString::Printf(TEXT("숨긴 레벨 주차면은 수정할 수 없습니다: %s (bay.hide hidden:false 뒤에)"), *Name));
+				return nullptr;
+			}
+			AActor* LevelActor = nullptr;
+			UInstancedStaticMeshComponent* Comp = BayLevelComp(W, R->LevelActor, R->LevelInstance, &LevelActor);
+			if (!Comp) { E.FailDomain(FString::Printf(TEXT("레벨 주차면 인스턴스를 찾지 못했습니다: %s"), *Name)); return nullptr; }
+			FTransform Cur;
+			Comp->GetInstanceTransform(R->LevelInstance, Cur, /*bWorldSpace=*/true);
+
+			FVector PosM = R->PosM;
+			if (RpcParam::Has(P, TEXT("pos")))   PosM = RpcParam::GetVec3(P, TEXT("pos"), PosM);
+			if (RpcParam::Has(P, TEXT("delta"))) PosM += RpcParam::GetVec3(P, TEXT("delta"));
+			const float Yaw = static_cast<float>(RpcParam::GetFloat(P, TEXT("yaw"), R->Yaw));
+			FVector2D SizeM = R->SizeM;
+			if (RpcParam::Has(P, TEXT("type")))
+			{
+				const FString Type = RpcParam::GetString(P, TEXT("type"));
+				const FBayTypeDef* Ty = BayFindType(Type);
+				if (!Ty)
+				{
+					E.FailDomain(FString::Printf(TEXT("허용되지 않은 type: %s (%s)"), *Type, *FString::Join(BaySortedTypes(), TEXT(" | "))));
+					return nullptr;
+				}
+				SizeM = BayOuterSizeM(*Ty, FVector::OneVector);
+			}
+			if (RpcParam::Has(P, TEXT("size")))
+			{
+				const FVector S = RpcParam::GetVec3(P, TEXT("size"), FVector(SizeM.X, SizeM.Y, 0.f));
+				SizeM = FVector2D(S.X, S.Y);
+			}
+			if (SizeM.X <= 0.f || SizeM.Y <= 0.f) { E.FailDomain(TEXT("size 는 양수여야 합니다")); return nullptr; }
+
+			const float UU = BayMetersToUU(W);
+			const FTransform T = BayLevelTransform(PosM, Yaw, SizeM, BayInstanceXLong(Comp, Cur), UU, Comp->GetStaticMesh()->GetBounds().BoxExtent);
+			if (!Comp->UpdateInstanceTransform(R->LevelInstance, T, /*bWorldSpace=*/true, /*bMarkRenderStateDirty=*/true, /*bTeleport=*/true))
+			{
+				E.FailDomain(FString::Printf(TEXT("레벨 주차면 변환 실패: %s"), *Name));
+				return nullptr;
+			}
+			BayRefreshSlotNumbers(W);
+			return RpcDto::MakeObject(BayToDto(BayRecFromLevelSlot(LevelActor, Comp, R->LevelInstance, T, false, UU)));
+		}
+		if (!R->Actor)
+		{
+			E.FailDomain(FString::Printf(TEXT("주차면 액터 없음: %s"), *Name));
 			return nullptr;
 		}
 		ABayPropActor* A = R->Actor;
@@ -847,7 +987,9 @@ void FBayRpcModule::Register(URpcDispatcher& Dispatcher)
 	});
 
 	// bay.delete {name | names[] | group} → {deleted[], deletedCount, notFound[], levelSkipped[]}
-	Dispatcher.Register(TEXT("bay.delete"), [NeedWorld, Collect](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	// 레벨 면도 지운다(ISM 인스턴스 제거). ⚠ 같은 액터의 뒤 인스턴스 이름이 한 칸씩 앞으로 온다(level:<액터>#<n-1>) — bay.list 로 다시 볼 것.
+	// levelSkipped 는 옛 응답 호환용으로 남겨 두며 항상 비어 있다.
+	Dispatcher.Register(TEXT("bay.delete"), [this, NeedWorld, Collect](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		UWorld* W = NeedWorld(E); if (!W) return nullptr;
 		TArray<FBayRec> Bays; Collect(W, Bays);
@@ -855,12 +997,27 @@ void FBayRpcModule::Register(URpcDispatcher& Dispatcher)
 		if (!BaySelectNames(P, /*bAllowAll=*/false, Bays, Wanted, E)) return nullptr;
 
 		TSet<FString> Deleted, LevelSkipped;
+		TMap<FString, TArray<int32>> LevelRemove; // 액터 → 인스턴스 번호(내림차순으로 지워야 앞 번호가 안 밀린다)
 		for (const FBayRec& R : Bays)
 		{
 			if (!Wanted.Contains(R.Name)) continue;
-			if (R.bLevel) { LevelSkipped.Add(R.Name); continue; } // 레벨 에셋은 지우지 못한다 — bay.hide 로 가린다
+			if (R.bLevel) { LevelRemove.FindOrAdd(R.LevelActor).Add(R.LevelInstance); continue; }
 			if (R.Actor) { R.Actor->Destroy(); Deleted.Add(R.Name); }
 		}
+		for (TPair<FString, TArray<int32>>& Kv : LevelRemove)
+		{
+			Kv.Value.Sort([](int32 A, int32 B) { return A > B; });
+			for (const int32 Idx : Kv.Value)
+			{
+				UInstancedStaticMeshComponent* Comp = BayLevelComp(W, Kv.Key, Idx);
+				if (Comp && Comp->RemoveInstance(Idx))
+				{
+					Deleted.Add(BayLevelKey(Kv.Key, Idx));
+					BayShiftHiddenKeys(HiddenLevelSlots, Kv.Key, Idx);
+				}
+			}
+		}
+		if (LevelRemove.Num() > 0) BayRefreshSlotNumbers(W);
 		TArray<FString> NotFound;
 		for (const FString& N : BaySortedArray(Wanted))
 		{
@@ -1046,6 +1203,63 @@ void FBayRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetNumberField(TEXT("skipped"), Loaded - Incoming.Num());
 		O->SetArrayField(TEXT("missingAssets"), BayStringArray(BaySortedArray(Missing)));
 		O->SetStringField(TEXT("fileName"), FPaths::GetCleanFilename(Path));
+		return RpcDto::MakeObject(O);
+	});
+
+	// bay.saveLevel {fullPath? | fileName?=LevelSlots} → {ok, path, fileName, count, level}.
+	// 레벨 면(BP_ParkingSlot ISM_Slot) 전부를 스냅샷으로 쓴다 — config `slot_file` 에 걸면 기동 때 그대로 복원된다.
+	// 숨긴 면은 접기 전 원래 변환으로 쓴다(숨김은 런타임 상태). 프롭 면은 bay.save 의 몫.
+	Dispatcher.Register(TEXT("bay.saveLevel"), [this, NeedWorld](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		UWorld* W = NeedWorld(E); if (!W) return nullptr;
+		const FString Path = BayResolveLevelFilePath(P);
+		const FString Level = UPark3DAppConfigLibrary::GetCurrentLevelPath(W);
+		TArray<Park3DLevelSlots::FSlotInstance> Slots;
+		Park3DLevelSlots::Snapshot(W, HiddenLevelSlots, Slots);
+		if (!Park3DLevelSlots::SaveFile(Path, Level, Slots))
+		{
+			E.FailDomain(FString::Printf(TEXT("레벨 주차면 저장 실패: %s"), *Path));
+			return nullptr;
+		}
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetStringField(TEXT("path"), Path);
+		O->SetStringField(TEXT("fileName"), FPaths::GetCleanFilename(Path));
+		O->SetNumberField(TEXT("count"), Slots.Num());
+		O->SetStringField(TEXT("level"), Level);
+		return RpcDto::MakeObject(O);
+	});
+
+	// bay.loadLevel {fullPath? | fileName?=LevelSlots} → {ok, count, missingActors[], fileName, level}.
+	// 파일에 나온 액터의 인스턴스를 전부 파일대로 바꿔 끼운다(파일에 없는 액터는 그대로). 그 액터의 숨김 보관은 버린다.
+	Dispatcher.Register(TEXT("bay.loadLevel"), [this, NeedWorld](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		UWorld* W = NeedWorld(E); if (!W) return nullptr;
+		const FString Path = BayResolveLevelFilePath(P);
+		TArray<Park3DLevelSlots::FSlotInstance> Slots;
+		FString FileLevel;
+		if (!Park3DLevelSlots::LoadFile(Path, Slots, FileLevel))
+		{
+			E.FailDomain(FString::Printf(TEXT("레벨 주차면 로드 실패: %s (kind=levelSlots 파일이어야 한다)"), *Path));
+			return nullptr;
+		}
+		TSet<FString> Touched;
+		for (const Park3DLevelSlots::FSlotInstance& S : Slots) { Touched.Add(S.ActorName); }
+		for (auto It = HiddenLevelSlots.CreateIterator(); It; ++It)
+		{
+			FString Actor, Idx;
+			if (It.Key().Mid(6).Split(TEXT("#"), &Actor, &Idx) && Touched.Contains(Actor)) It.RemoveCurrent();
+		}
+		TArray<FString> Missing;
+		const int32 Count = Park3DLevelSlots::Apply(W, Slots, Missing);
+		BayRefreshSlotNumbers(W);
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetNumberField(TEXT("count"), Count);
+		O->SetArrayField(TEXT("missingActors"), BayStringArray(Missing));
+		O->SetStringField(TEXT("fileName"), FPaths::GetCleanFilename(Path));
+		O->SetStringField(TEXT("level"), FileLevel);
 		return RpcDto::MakeObject(O);
 	});
 

@@ -1,9 +1,11 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
-// BayRpcModule : bay.* (13) 핸들러 — 주차면 **한 면 = 프롭 하나**. OmiPark3D rpc/modules/bay.py 포팅.
+// BayRpcModule : bay.* (15) 핸들러 — 주차면 **한 면 = 프롭 하나**. OmiPark3D rpc/modules/bay.py 포팅.
 //
 // 이 포트에서 "주차면"은 둘이다.
 //  (a) 레벨 면 — BP_ParkingSlot 의 ISM_Slot 인스턴스. preset.numbers 와 같은 키 "level:<액터>#<인스턴스>" 로 부른다.
-//      레벨 에셋이라 지우거나 옮기지 못한다 — list/hide/hideAll/showAll/toPresets/exportPresets 만 받는다.
+//      update(pos/delta/yaw/type/size)·delete(인스턴스 제거)·create(group=액터 이름) 로 런타임에 고칠 수 있고,
+//      그 결과는 bay.saveLevel 스냅샷(Save/3D/Bay, kind=levelSlots) → config `slot_file` 로 기동 때 복원한다
+//      (레벨 에셋 자체는 안 바뀐다 — Env/LevelSlotLibrary.h). delete 는 같은 액터의 뒤 인스턴스 이름을 한 칸 당긴다.
 //      숨김은 인스턴스 스케일을 0 에 가깝게 접는 것(원래 변환은 모듈이 보관, 다시 보이면 되돌린다).
 //  (b) 프롭 면 — bay.create/load/fromPresets 가 스폰한 ABayPropActor. 이름은 name 파라미터 또는 bay_<n>.
 // 좌표는 계약 전체와 같은 언리얼 미터 규약. yaw 는 면의 폭 방향 각(도), 길이 방향은 yaw+90 — preset.* 의 faceRot 와

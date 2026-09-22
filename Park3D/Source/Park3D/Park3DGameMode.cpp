@@ -18,6 +18,7 @@
 #include "Light/LightControlLibrary.h"
 #include "Park3DDataPaths.h"   // config 의 light_file 을 Save/3D/Light 기준으로 푼다.
 #include "Env/EnvActorLibrary.h" // config 의 hide_actors 적용(env.hide 와 같은 로직).
+#include "Env/LevelSlotLibrary.h" // config 의 slot_file 적용(bay.loadLevel 과 같은 로직).
 #include "Light/LightControlManager.h"
 #include "Blueprint/UserWidget.h"
 #include "Camera/PlayerCameraManager.h"
@@ -467,8 +468,28 @@ void APark3DGameMode::ApplyStartupConfig()
 	if (const FPark3DLevelOption* Lot = UPark3DAppConfigLibrary::ApplyLevelOverrides(
 			Config, UPark3DAppConfigLibrary::GetCurrentLevelPath(GetWorld())))
 	{
-		UE_LOG(LogTemp, Log, TEXT("[Config] 주차장 '%s' 의 데이터 파일 적용: preset=\"%s\" carpos=\"%s\" camerapos=\"%s\""),
-			*Lot->Name, *Config.PresetFile, *Config.CarPosFile, *Config.CameraPosFile);
+		UE_LOG(LogTemp, Log, TEXT("[Config] 주차장 '%s' 의 데이터 파일 적용: preset=\"%s\" carpos=\"%s\" camerapos=\"%s\" slot=\"%s\""),
+			*Lot->Name, *Config.PresetFile, *Config.CarPosFile, *Config.CameraPosFile, *Config.SlotFile);
+	}
+
+	// 0.5) 레벨 주차면 스냅샷(slot_file) — 레벨 에셋의 BP_ParkingSlot 면을 파일대로 바꿔 끼운다.
+	//      바닥 번호(RebuildSlotNumbers)·차량 스냅이 이 면을 보므로 그보다 앞이어야 한다.
+	if (!Config.SlotFile.IsEmpty())
+	{
+		const FString Path = UPark3DAppConfigLibrary::ResolveDataPath(TEXT("Bay"), Config.SlotFile);
+		TArray<Park3DLevelSlots::FSlotInstance> Slots;
+		FString FileLevel;
+		if (!Park3DLevelSlots::LoadFile(Path, Slots, FileLevel))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Config] 레벨 주차면 slot_file 을 읽지 못해 레벨 면을 그대로 둡니다: %s"), *Path);
+		}
+		else
+		{
+			TArray<FString> Missing;
+			const int32 Applied = Park3DLevelSlots::Apply(GetWorld(), Slots, Missing);
+			UE_LOG(LogTemp, Log, TEXT("[Config] 레벨 주차면 %d면 적용 ← %s%s"), Applied, *Path,
+				Missing.Num() > 0 ? *FString::Printf(TEXT(" — 레벨에 없는 액터: %s"), *FString::Join(Missing, TEXT(", "))) : TEXT(""));
+		}
 	}
 
 	// 1) 카메라 광학 규격(최대 줌 → 기준 화각 순) — 아래 카메라위치 로딩이 카메라를 새로 스폰하므로

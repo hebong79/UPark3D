@@ -112,6 +112,7 @@ bool UPark3DAppConfigLibrary::FromJson(const FString& Json, FPark3DAppConfig& Ou
 	if (Root->TryGetStringField(TEXT("preset_file"), Str))    { Parsed.PresetFile = Str.TrimStartAndEnd(); }
 	if (Root->TryGetStringField(TEXT("carpos_file"), Str))    { Parsed.CarPosFile = Str.TrimStartAndEnd(); }
 	if (Root->TryGetStringField(TEXT("camerapos_file"), Str)) { Parsed.CameraPosFile = Str.TrimStartAndEnd(); }
+	if (Root->TryGetStringField(TEXT("slot_file"), Str))      { Parsed.SlotFile = Str.TrimStartAndEnd(); }
 	if (Root->TryGetStringField(TEXT("level"), Str))          { Parsed.Level = Str.TrimStartAndEnd(); }
 	if (Root->TryGetStringField(TEXT("light_file"), Str))     { Parsed.LightFile = Str.TrimStartAndEnd(); }
 
@@ -140,6 +141,7 @@ bool UPark3DAppConfigLibrary::FromJson(const FString& Json, FPark3DAppConfig& Ou
 			if ((*Obj)->TryGetStringField(TEXT("preset_file"), Str))    { Opt.PresetFile = Str.TrimStartAndEnd(); }
 			if ((*Obj)->TryGetStringField(TEXT("carpos_file"), Str))    { Opt.CarPosFile = Str.TrimStartAndEnd(); }
 			if ((*Obj)->TryGetStringField(TEXT("camerapos_file"), Str)) { Opt.CameraPosFile = Str.TrimStartAndEnd(); }
+			if ((*Obj)->TryGetStringField(TEXT("slot_file"), Str))      { Opt.SlotFile = Str.TrimStartAndEnd(); }
 			Parsed.Levels.Add(MoveTemp(Opt));
 		}
 	}
@@ -267,6 +269,7 @@ const FPark3DLevelOption* UPark3DAppConfigLibrary::ApplyLevelOverrides(FPark3DAp
 		if (Opt.PresetFile.IsSet())    { Config.PresetFile = Opt.PresetFile.GetValue(); }
 		if (Opt.CarPosFile.IsSet())    { Config.CarPosFile = Opt.CarPosFile.GetValue(); }
 		if (Opt.CameraPosFile.IsSet()) { Config.CameraPosFile = Opt.CameraPosFile.GetValue(); }
+		if (Opt.SlotFile.IsSet())      { Config.SlotFile = Opt.SlotFile.GetValue(); }
 		return &Opt; // 같은 레벨이 두 번 적혀 있으면 첫 항목이 이긴다(콤보도 첫 항목을 고른다).
 	}
 	return nullptr;

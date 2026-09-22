@@ -129,7 +129,7 @@ bool FRpcBayModuleCrudTest::RunTest(const FString& Parameters)
 	auto Dispatch = [&](const FString& M, const TSharedPtr<FJsonObject>& P, TSharedPtr<FJsonValue>& R) -> bool
 	{ FRpcError E; return D->Dispatch(M, P, R, E); };
 
-	TestEqual(TEXT("13개 등록"), D->NumMethods(), 13);
+	TestEqual(TEXT("15개 등록"), D->NumMethods(), 15);
 
 	// create: 이름 지정 + 자동 이름(bay_<n>)
 	TSharedPtr<FJsonValue> C1, C2;

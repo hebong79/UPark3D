@@ -472,7 +472,7 @@ bool FPark3DAppConfigLevelsTest::RunTest(const FString& Parameters)
 		"camerapos_file": "CamPos_Seosin.json",
 		"levels": [
 			{"name": "서신지구대", "level": "Levels/LV_Park_01"},
-			{"name": "객리단길", "level": "Levels/LV_Park_03", "preset_file": "", "carpos_file": "CarPos_13Num.객리단.json"},
+			{"name": "객리단길", "level": "Levels/LV_Park_03", "preset_file": "", "carpos_file": "CarPos_13Num.객리단.json", "slot_file": "LevelSlots_13Face.객리단.json"},
 			{"name": "이름만"},
 			{"level": "Levels/LV_Park_09"},
 			"문자열 항목"
@@ -486,7 +486,9 @@ bool FPark3DAppConfigLevelsTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("[1] preset_file 빈 문자열도 '있음'"), C.Levels[1].PresetFile.IsSet() && C.Levels[1].PresetFile.GetValue().IsEmpty());
 		TestTrue(TEXT("[1] carpos_file"), C.Levels[1].CarPosFile.IsSet());
 		TestFalse(TEXT("[1] camerapos_file 없음"), C.Levels[1].CameraPosFile.IsSet());
+		TestTrue(TEXT("[1] slot_file"), C.Levels[1].SlotFile.IsSet());
 	}
+	TestTrue(TEXT("최상위 slot_file 미지정은 빈 문자열"), C.SlotFile.IsEmpty());
 
 	// 3) override — 현재 레벨과 같은 항목의 파일만 덮고, 키가 없는 파일은 최상위 값이 남는다.
 	FPark3DAppConfig Gaek = C;
@@ -495,6 +497,7 @@ bool FPark3DAppConfigLevelsTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("preset_file 은 빈 문자열로 덮임"), Gaek.PresetFile.IsEmpty());
 	TestEqual(TEXT("carpos_file 덮임"), Gaek.CarPosFile, FString(TEXT("CarPos_13Num.객리단.json")));
 	TestEqual(TEXT("camerapos_file 은 최상위 값 유지"), Gaek.CameraPosFile, FString(TEXT("CamPos_Seosin.json")));
+	TestEqual(TEXT("slot_file 덮임"), Gaek.SlotFile, FString(TEXT("LevelSlots_13Face.객리단.json")));
 
 	FPark3DAppConfig Seo = C;
 	TestNotNull(TEXT("서신 항목 적중(파일 키 없음)"), UPark3DAppConfigLibrary::ApplyLevelOverrides(Seo, TEXT("/game/levels/lv_park_01")));

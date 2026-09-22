@@ -142,7 +142,8 @@ namespace
 
 	/**
 	 * 언리얼 원래 계약(120 + cam.setSlotNumber·cam.slotNumbers·preset.numbers) 밖에서 OmiPark3D 가 먼저 만들고
-	 * 2026-09-21 에 이쪽으로 이식한 method 이름(53개) + plate.setDefault/getDefault(#919, 2026-09-22 양쪽 동시 신설).
+	 * 2026-09-21 에 이쪽으로 이식한 method 이름(53개) + plate.setDefault/getDefault(#919, 2026-09-22 양쪽 동시 신설)
+	 * + bay.saveLevel/loadLevel(2026-09-22, 언리얼 쪽만 — 레벨 면 스냅샷).
 	 * OmiPark3D tests/test_modules.py OMIPARK3D_EXTENSIONS 와 같은 목록 —
 	 * system.describe.extensions[] 로 내보내 클라이언트가 "새 method" 를 가려낼 수 있게 한다. 등록 여부와 무관한 정적 목록이다.
 	 */
@@ -150,8 +151,8 @@ namespace
 	{
 		static const TCHAR* Names[] = {
 			TEXT("bay.clear"), TEXT("bay.create"), TEXT("bay.delete"), TEXT("bay.exportPresets"), TEXT("bay.fromPresets"),
-			TEXT("bay.hide"), TEXT("bay.hideAll"), TEXT("bay.list"), TEXT("bay.load"), TEXT("bay.save"), TEXT("bay.showAll"),
-			TEXT("bay.toPresets"), TEXT("bay.update"),
+			TEXT("bay.hide"), TEXT("bay.hideAll"), TEXT("bay.list"), TEXT("bay.load"), TEXT("bay.loadLevel"), TEXT("bay.save"),
+			TEXT("bay.saveLevel"), TEXT("bay.showAll"), TEXT("bay.toPresets"), TEXT("bay.update"),
 			TEXT("cam.captureStats"), TEXT("cam.importPosFile"), TEXT("cam.listPosFiles"), TEXT("cam.listPresets"),
 			TEXT("cam.loadPosFile"), TEXT("cam.marks"), TEXT("cam.removePreset"), TEXT("cam.rename"), TEXT("cam.resetCameras"),
 			TEXT("cam.savePosFile"), TEXT("cam.setMarks"), TEXT("cam.setPreset"),

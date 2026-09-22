@@ -437,5 +437,8 @@
 				}
 			]
 		}
+	],
+	"slot_numbers": [
+		{ "face": "level:BP_ParkingSlot_C_2#0", "slot": 7, "count": 0, "auto_renumber": true }
 	]
 }

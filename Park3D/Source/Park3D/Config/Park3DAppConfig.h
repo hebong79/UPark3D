@@ -33,6 +33,7 @@ struct FPark3DLevelOption
 	TOptional<FString> PresetFile;
 	TOptional<FString> CarPosFile;
 	TOptional<FString> CameraPosFile;
+	TOptional<FString> SlotFile;
 };
 
 /** config_pmaker.json 한 벌. 값이 없는 항목은 "미지정"(0/빈 문자열)으로 남겨 호출부가 건너뛴다. */
@@ -56,6 +57,14 @@ struct FPark3DAppConfig
 	/** Save/3D/CameraPos 기준 카메라위치 파일명(또는 경로). */
 	UPROPERTY(BlueprintReadWrite, Category = "Config")
 	FString CameraPosFile;
+
+	/**
+	 * Save/3D/Bay 기준 레벨 주차면 스냅샷 파일명(bay.saveLevel 이 쓴 것). 빈 문자열 = 미지정(레벨 에셋 그대로).
+	 * 레벨의 BP_ParkingSlot 면은 .umap 에 박혀 있어 에디터 없이는 못 고치므로, 런타임에 고친 결과를
+	 * 기동 때 다시 덮는 길이다(hide_actors 와 같은 규약). levels[] 의 slot_file 이 이것을 덮는다.
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = "Config")
+	FString SlotFile;
 
 	/**
 	 * 기동할 레벨. 빈 문자열 = 부팅맵(ini GameDefaultMap) 그대로.

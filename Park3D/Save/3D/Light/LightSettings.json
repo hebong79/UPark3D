@@ -7,6 +7,6 @@
 	"SunAltitudeDeg": 75,
 	"SunAzimuthDeg": 150,
 	"SkyIntensity": 20,
-	"ShadowFillIntensity": 2,
+	"ShadowFillIntensity": 5,
 	"CarFillIntensity": 6
 }

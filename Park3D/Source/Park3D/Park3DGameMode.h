@@ -133,10 +133,9 @@ protected:
 	void ApplyConfigHiddenActors();
 
 	/**
-	 * 레벨의 프리셋 주차면(BP_ParkingSlot)이 화면에 띄우는 아이콘 위젯을 끈다.
-	 * 아이콘은 블루프린트의 WidgetComponent(WBP_ActorIcon, Screen 스페이스)라 액터를 통째로 숨기면
-	 * 주차면 지오메트리까지 사라진다 → 액터는 두고 위젯 컴포넌트만 끈다.
-	 * 카메라 아이콘(BP_Camera 의 WBP_CameraIcon)은 대상이 아니다.
+	 * 레벨의 프리셋 주차면(BP_ParkingSlot)·카메라(BP_Camera)가 화면에 띄우는 아이콘 위젯을 끈다.
+	 * 아이콘은 블루프린트의 WidgetComponent(WBP_ActorIcon/WBP_CameraIcon, Screen 스페이스)라 액터를 통째로
+	 * 숨기면 주차면 지오메트리·카메라 본체까지 사라진다 → 액터는 두고 위젯 컴포넌트만 끈다.
 	 */
 	void HideParkingSlotIcons();
 

@@ -548,6 +548,140 @@ bool FRpcPlateModuleTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// ===== plate.setDefault / plate.getDefault (#919): 월드 기본 종류 — 기존 차량 일괄 적용 + 이후 스폰·auto·랜덤 배치 전부 그 종류 =====
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRpcPlateSetDefaultTest,
+	"Park3D.Rpc.PlateModule.SetDefault",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FRpcPlateSetDefaultTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = CpEditorWorld();
+	if (!World) { AddWarning(TEXT("에디터 월드 없음 — 건너뜀.")); return true; }
+	CpCleanupCarManager(World);
+	PlateKinds::SetWorldKind(FString());   // 다른 테스트가 남긴 값 제거
+
+	URpcDispatcher* D = NewObject<URpcDispatcher>();
+	FCarRpcModule Car([World]() -> UWorld* { return World; });
+	Car.SetCatalog(CpTestCatalog());
+	Car.Register(*D);
+	FPlateRpcModule Plate([World]() -> UWorld* { return World; });
+	Plate.Register(*D);
+
+	// 시작은 auto.
+	{
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestTrue(TEXT("plate.getDefault 성공"), D->Dispatch(TEXT("plate.getDefault"), nullptr, R, E));
+		TestEqual(TEXT("초기 auto"), CpStrField(R, TEXT("kind")), FString(TEXT("auto")));
+	}
+
+	// 차 2대를 만들고 한 대는 다른 종류로 바꿔 둔다(auto 배정이 우연히 old_business 일 수는 있으나 둘 다일 확률은 무시).
+	const FString IdA = CpCreateCar(D, 1, 1);
+	const FString IdB = CpCreateCar(D, 2, 2);
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+		P->SetStringField(TEXT("carNameId"), IdA);
+		P->SetStringField(TEXT("kind"), TEXT("old_green_region"));
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestTrue(TEXT("사전 종류 지정"), D->Dispatch(TEXT("car.setPlate"), P, R, E));
+	}
+
+	ACarPlacementManager* Mgr = Cast<ACarPlacementManager>(UGameplayStatics::GetActorOfClass(World, ACarPlacementManager::StaticClass()));
+	if (!Mgr) { AddError(TEXT("차량 매니저 없음")); return false; }
+	auto KindOf = [&](const FString& Id) -> FString { ACarActor* C = Mgr->FindByNameId(Id); return C ? C->GetPlateKind() : FString(); };
+
+	// 모르는 kind → -32000, 상태 불변.
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>(); P->SetStringField(TEXT("kind"), TEXT("nope"));
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestFalse(TEXT("모르는 kind 거부"), D->Dispatch(TEXT("plate.setDefault"), P, R, E));
+		TestEqual(TEXT("모르는 kind -32000"), E.Code, Park3DRpc::Domain);
+		TestTrue(TEXT("오류 문구 car.setPlate 와 동일 접두"), E.Message.StartsWith(TEXT("허용되지 않은 kind: nope")));
+		TestTrue(TEXT("거부 뒤에도 auto"), PlateKinds::WorldKind().IsEmpty());
+	}
+
+	// applyExisting 기본 true: 기존 2대 전부 old_business, changedCount 는 실제로 바뀐 대수.
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>(); P->SetStringField(TEXT("kind"), TEXT("old_business"));
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestTrue(TEXT("plate.setDefault 성공"), D->Dispatch(TEXT("plate.setDefault"), P, R, E));
+		TestEqual(TEXT("응답 kind"), CpStrField(R, TEXT("kind")), FString(TEXT("old_business")));
+		TestEqual(TEXT("carCount 2"), CpNumField(R, TEXT("carCount")), 2);
+		TestTrue(TEXT("changedCount >= 1(사전 지정한 A 는 반드시 바뀐다)"), CpNumField(R, TEXT("changedCount")) >= 1);
+		TestEqual(TEXT("A 적용"), KindOf(IdA), FString(TEXT("old_business")));
+		TestEqual(TEXT("B 적용"), KindOf(IdB), FString(TEXT("old_business")));
+
+		TSharedPtr<FJsonValue> G; FRpcError GE;
+		D->Dispatch(TEXT("plate.getDefault"), nullptr, G, GE);
+		TestEqual(TEXT("getDefault 동기"), CpStrField(G, TEXT("kind")), FString(TEXT("old_business")));
+		TSharedPtr<FJsonValue> K; FRpcError KE;
+		D->Dispatch(TEXT("car.plateKinds"), nullptr, K, KE);
+		TestEqual(TEXT("car.plateKinds.default 동기"), CpStrField(K, TEXT("default")), FString(TEXT("old_business")));
+		TestEqual(TEXT("car.plateKinds.worldKind"), CpStrField(K, TEXT("worldKind")), FString(TEXT("old_business")));
+	}
+
+	// 이후 스폰(car.create)·auto 재배정·랜덤 배치까지 전부 월드 기본 종류.
+	const FString IdC = CpCreateCar(D, 3, 3);
+	TestEqual(TEXT("새 차량도 old_business"), KindOf(IdC), FString(TEXT("old_business")));
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+		P->SetStringField(TEXT("carNameId"), IdA);
+		P->SetStringField(TEXT("kind"), TEXT("auto"));
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestTrue(TEXT("car.setPlate auto"), D->Dispatch(TEXT("car.setPlate"), P, R, E));
+		TestEqual(TEXT("auto 도 월드 기본"), CpStrField(R, TEXT("plateKind")), FString(TEXT("old_business")));
+	}
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>(); P->SetNumberField(TEXT("seed"), 77);
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestTrue(TEXT("car.randomizePlates"), D->Dispatch(TEXT("car.randomizePlates"), P, R, E));
+		for (const FString& Id : { IdA, IdB, IdC }) { TestEqual(TEXT("랜덤 배치 뒤에도 월드 기본"), KindOf(Id), FString(TEXT("old_business"))); }
+	}
+	// 명시 kind 는 월드 기본을 이긴다.
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+		P->SetStringField(TEXT("carNameId"), IdB);
+		P->SetStringField(TEXT("kind"), TEXT("ev"));
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		D->Dispatch(TEXT("car.setPlate"), P, R, E);
+		TestEqual(TEXT("명시 kind 우선"), KindOf(IdB), FString(TEXT("ev")));
+	}
+
+	// applyExisting=false: 기본만 바꾸고 기존 차량은 그대로.
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+		P->SetStringField(TEXT("kind"), TEXT("normal_paint7"));
+		P->SetBoolField(TEXT("applyExisting"), false);
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestTrue(TEXT("applyExisting=false 성공"), D->Dispatch(TEXT("plate.setDefault"), P, R, E));
+		TestEqual(TEXT("changedCount 0"), CpNumField(R, TEXT("changedCount")), 0);
+		bool bApplied = true; CpObj(R)->TryGetBoolField(TEXT("applied"), bApplied);
+		TestFalse(TEXT("applied false"), bApplied);
+		TestEqual(TEXT("기존 차량 불변"), KindOf(IdA), FString(TEXT("old_business")));
+		TestEqual(TEXT("새 차량은 새 기본"), KindOf(CpCreateCar(D, 4, 4)), FString(TEXT("normal_paint7")));
+	}
+
+	// auto 복귀: 차마다 id·차종 결정적 종류로 돌아간다.
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>(); P->SetStringField(TEXT("kind"), TEXT("auto"));
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestTrue(TEXT("auto 복귀"), D->Dispatch(TEXT("plate.setDefault"), P, R, E));
+		TestTrue(TEXT("WorldKind 비움"), PlateKinds::WorldKind().IsEmpty());
+		for (const FString& Id : { IdA, IdB, IdC })
+		{
+			ACarActor* C = Mgr->FindByNameId(Id);
+			if (C) { TestEqual(TEXT("auto 복귀 = 결정적 배정"), C->GetPlateKind(), PlateKinds::AutoKindFor(C->CarData.id, C->CarData.prefabName, C->CarData.type)); }
+		}
+		TSharedPtr<FJsonValue> K; FRpcError KE;
+		D->Dispatch(TEXT("plate.kinds"), nullptr, K, KE);
+		TestEqual(TEXT("auto 면 default 폴백 표기"), CpStrField(K, TEXT("default")), FString(TEXT("normal_film")));
+		TestEqual(TEXT("auto 면 worldKind auto"), CpStrField(K, TEXT("worldKind")), FString(TEXT("auto")));
+	}
+
+	PlateKinds::SetWorldKind(FString());
+	CpCleanupCarManager(World);
+	return true;
+}
+
 // plate.bake: 아틀라스(Save/Config)가 있으면 PNG base64, 없으면 -32000 — 어느 쪽이든 크래시 없이 사실을 말한다.
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRpcPlateBakeTest,
 	"Park3D.Rpc.PlateModule.Bake",

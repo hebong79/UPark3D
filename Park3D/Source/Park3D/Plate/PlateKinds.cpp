@@ -68,6 +68,35 @@ namespace PlateKinds
 		return DefaultKind();
 	}
 
+	static FString GWorldKind;   // "" = auto
+
+	bool SetWorldKind(const FString& KeyOrAuto)
+	{
+		if (KeyOrAuto.IsEmpty() || KeyOrAuto == AutoKind())
+		{
+			GWorldKind.Empty();
+			return true;
+		}
+		if (FindKind(KeyOrAuto) == nullptr) { return false; }
+		GWorldKind = KeyOrAuto;
+		return true;
+	}
+
+	const FString& WorldKind()
+	{
+		return GWorldKind;
+	}
+
+	FString AssignedKindFor(const FString& CarId, const FString& PrefabName, int32 CarType)
+	{
+		return GWorldKind.IsEmpty() ? AutoKindFor(CarId, PrefabName, CarType) : GWorldKind;
+	}
+
+	FString RandomOrWorldKindFor(FRandomStream& Stream, const FString& PrefabName)
+	{
+		return GWorldKind.IsEmpty() ? RandomKindFor(Stream, PrefabName) : GWorldKind;
+	}
+
 	const FPlateKindDef* FindKind(const FString& Key)
 	{
 		for (const FPlateKindDef& K : Kinds())

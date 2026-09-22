@@ -22,7 +22,7 @@
 #include "Blueprint/UserWidget.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/InputComponent.h"
-#include "Components/WidgetComponent.h" // 주차면 아이콘(BP_ParkingSlot 의 Widget 컴포넌트)을 끈다.
+#include "Components/WidgetComponent.h" // 주차면·카메라 아이콘(BP_ParkingSlot/BP_Camera 의 Widget 컴포넌트)을 끈다.
 #include "EngineUtils.h"                // TActorIterator
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
@@ -390,9 +390,10 @@ void APark3DGameMode::HideParkingSlotIcons()
 	int32 Hidden = 0;
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
-		// 클래스 이름으로 고른다 — 주차면은 C++ 타입이 없는 레벨 블루프린트 액터라 Cast 로 못 잡고,
+		// 클래스 이름으로 고른다 — 주차면·카메라는 C++ 타입이 없는 레벨 블루프린트 액터라 Cast 로 못 잡고,
 		// 위젯 클래스(WBP_ActorIcon)로 고르면 같은 아이콘을 쓰는 다른 액터까지 함께 꺼진다.
-		if (!It->GetClass()->GetName().StartsWith(TEXT("BP_ParkingSlot")))
+		const FString ClassName = It->GetClass()->GetName();
+		if (!ClassName.StartsWith(TEXT("BP_ParkingSlot")) && !ClassName.StartsWith(TEXT("BP_Camera")))
 		{
 			continue;
 		}
@@ -405,7 +406,7 @@ void APark3DGameMode::HideParkingSlotIcons()
 		}
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("[Env] 주차면 표시 아이콘 %d개를 껐습니다."), Hidden);
+	UE_LOG(LogTemp, Log, TEXT("[Env] 주차면·카메라 표시 아이콘 %d개를 껐습니다."), Hidden);
 }
 
 void APark3DGameMode::ApplyStartupLighting()

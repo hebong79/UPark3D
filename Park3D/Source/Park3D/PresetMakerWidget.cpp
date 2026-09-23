@@ -255,6 +255,12 @@ void UPresetMakerWidget::NativeConstruct()
 	if (Txt_OffsetPick)
 	{
 		OffsetPickOriginalColor = Txt_OffsetPick->GetColorAndOpacity().GetSpecifiedColor();
+		// 차량 패널 "배치 시작" 과 같은 역할이라 이름을 맞춘다(WBP 글자 "Offset Pick" 을 덮는다).
+		Txt_OffsetPick->SetText(FText::FromString(TEXT("작업모드 시작")));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[PresetMaker] Txt_OffsetPick 이 WBP 에 없어 '작업모드 시작/종료' 글자를 바꿀 수 없습니다."));
 	}
 
 	// 모든 입력 에디트박스의 글자색을 검정에 가까운 진회색으로 통일(가독성).
@@ -682,10 +688,11 @@ void UPresetMakerWidget::SetOffsetPickControl(bool bEnable)
 {
 	bOffsetPickControl = bEnable;
 
-	// 제어 상태 표시: 켜짐=빨강, 꺼짐=원래 색.
+	// 제어 상태 표시: 켜짐=빨강 "작업모드 종료", 꺼짐=원래 색 "작업모드 시작".
 	if (Txt_OffsetPick)
 	{
 		Txt_OffsetPick->SetColorAndOpacity(bEnable ? FSlateColor(GTextDanger) : FSlateColor(OffsetPickOriginalColor));
+		Txt_OffsetPick->SetText(FText::FromString(bEnable ? TEXT("작업모드 종료") : TEXT("작업모드 시작")));
 	}
 
 	if (bEnable)
@@ -698,11 +705,11 @@ void UPresetMakerWidget::SetOffsetPickControl(bool bEnable)
 		// 키 입력(WASD/방향키)이 이 위젯으로 들어오도록 포커스를 가져온다.
 		SetKeyboardFocus();
 		OnOffsetPick();  // 기존 BP 확장 훅 보존.
-		Notify(TEXT("키보드 제어 ON (이동: WASD/방향키 · 회전: 좌우키 · 속도: Ctrl+M↑ Ctrl+N↓)"));
+		Notify(TEXT("작업모드 시작 (이동: WASD/방향키 · 회전: 좌우키 · 속도: Ctrl+M↑ Ctrl+N↓)"));
 	}
 	else
 	{
-		Notify(TEXT("키보드 제어 OFF"));
+		Notify(TEXT("작업모드 종료"));
 	}
 }
 

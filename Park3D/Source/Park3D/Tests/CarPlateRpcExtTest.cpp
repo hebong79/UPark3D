@@ -8,7 +8,11 @@
 #include "../Rpc/Modules/PlateRpcModule.h"
 #include "../CarPlacementManager.h"
 #include "../CarActor.h"
+#include "../CarPlacementWidget.h"
 #include "../ParkingPresetManager.h"
+#include "Blueprint/UserWidget.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/CheckBox.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Engine/World.h"
@@ -244,6 +248,14 @@ bool FRpcCarSelectionMarkTest::RunTest(const FString& Parameters)
 		return b;
 	};
 
+	auto GetUi = [&]() -> bool
+	{
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		D->Dispatch(TEXT("car.getSelectionMark"), nullptr, R, E);
+		bool b = true; if (CpObj(R).IsValid()) { CpObj(R)->TryGetBoolField(TEXT("ui"), b); }
+		return b;
+	};
+
 	// visible 누락 → 거부.
 	{
 		TSharedPtr<FJsonValue> R; FRpcError E;
@@ -253,11 +265,52 @@ bool FRpcCarSelectionMarkTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("초기 표시"), GetMark());
 	Select(IdA);
 
+	// 패널 UI 가 없으면 거부하고 아무것도 바꾸지 않는다.
+	if (UCarPlacementWidget::FindWithSelectionMarkUI(World))
+	{
+		AddWarning(TEXT("에디터 월드에 이미 차량 배치 패널이 있어 'UI 없음 거부' 검사를 건너뜀."));
+	}
+	else
+	{
+		TestFalse(TEXT("UI 없음 → ui false"), GetUi());
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>(); P->SetBoolField(TEXT("visible"), false);
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestFalse(TEXT("UI 없음 거부"), D->Dispatch(TEXT("car.setSelectionMark"), P, R, E));
+		TestEqual(TEXT("UI 없음 -32000"), E.Code, Park3DRpc::Domain);
+		TestTrue(TEXT("거부 뒤 상태 불변"), GetMark());
+		TestTrue(TEXT("거부 뒤 A 표시 유지"), A->IsSelectionMarkVisible());
+	}
+
+	// 실제 WBP 패널을 만들어 체크박스가 RPC 를 따라가는지 본다.
+	UClass* PanelClass = LoadClass<UCarPlacementWidget>(nullptr, TEXT("/Game/UI/WBP_CarPlacement.WBP_CarPlacement_C"));
+	UCarPlacementWidget* Panel = PanelClass ? CreateWidget<UCarPlacementWidget>(World, PanelClass) : nullptr;
+	if (!Panel || !Panel->HasSelectionMarkUI())
+	{
+		// 에디터 월드엔 로컬 플레이어가 없어 UUserWidget::Initialize 가 NativeOnInitialized(체크박스 주입)를 부르지 않는다.
+		// 그 상태 = "패널은 있으나 체크박스가 없음" 이므로 역시 UI 없음으로 거부되는지만 본다. 실제 연동은 -game 실기로 검증.
+		if (Panel)
+		{
+			TestFalse(TEXT("체크박스 없는 패널 → ui false"), GetUi());
+			TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>(); P->SetBoolField(TEXT("visible"), false);
+			TSharedPtr<FJsonValue> R; FRpcError E;
+			TestFalse(TEXT("체크박스 없는 패널 거부"), D->Dispatch(TEXT("car.setSelectionMark"), P, R, E));
+			TestTrue(TEXT("체크박스 없는 패널 거부 뒤 상태 불변"), GetMark());
+			Panel->MarkAsGarbage();
+		}
+		AddInfo(TEXT("선택 표시 체크박스가 주입된 패널을 만들 수 없어(플레이어 컨텍스트 없음) UI 연동 검사는 실기에서 한다."));
+		CpCleanupCarManager(World);
+		return true;
+	}
+	UCheckBox* Check = Panel->WidgetTree ? Panel->WidgetTree->FindWidget<UCheckBox>(TEXT("Check_SelMark")) : nullptr;
+	if (!TestNotNull(TEXT("Check_SelMark"), Check)) { Panel->MarkAsGarbage(); CpCleanupCarManager(World); return false; }
+	TestTrue(TEXT("패널 있음 → ui true"), GetUi());
+
 	// 끄면 선택돼 있던 A 한 대만 화면이 바뀐다. 선택 상태는 유지.
 	TestEqual(TEXT("끄기 changedCount 1"), CpNumField(SetMark(false), TEXT("changedCount")), 1);
 	TestFalse(TEXT("getSelectionMark false"), GetMark());
 	TestTrue(TEXT("A 선택 유지"), A->IsSelected());
 	TestFalse(TEXT("A 표시 꺼짐"), A->IsSelectionMarkVisible());
+	TestFalse(TEXT("체크박스 해제"), Check->IsChecked());
 	TestEqual(TEXT("재호출 changedCount 0"), CpNumField(SetMark(false), TEXT("changedCount")), 0);
 
 	// 꺼진 채 다른 차를 선택해도 표시가 안 나온다.
@@ -269,7 +322,9 @@ bool FRpcCarSelectionMarkTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("켜기 changedCount 1"), CpNumField(SetMark(true), TEXT("changedCount")), 1);
 	TestTrue(TEXT("getSelectionMark true"), GetMark());
 	TestTrue(TEXT("B 표시 켜짐"), B->IsSelectionMarkVisible());
+	TestTrue(TEXT("체크박스 체크"), Check->IsChecked());
 
+	Panel->MarkAsGarbage();   // 뒤 테스트가 이 패널을 'UI 있음'으로 보지 않게(IsValid 거짓)
 	CpCleanupCarManager(World);
 	return true;
 }

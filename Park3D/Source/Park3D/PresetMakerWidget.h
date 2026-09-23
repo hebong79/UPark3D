@@ -217,7 +217,7 @@ protected:
 
 	// 주차면 번호 콤보("출력"/"숨김") → 매니저 bShowSlotNumbers 반영 후 RefreshView. 코드 선택(Direct)은 무시.
 	UFUNCTION() void HandleSlotNumberChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
-	/** 콤보 항목/본문 위젯 — 흰 드롭다운 위에 검은 글자(주차장 선택 콤보와 같은 규약). */
+	/** 콤보 항목/본문 위젯(주차면 번호·방향 콤보 공용) — 어두운 드롭다운 위에 흰 글자. */
 	UFUNCTION() UWidget* HandleSlotNumberItem(FString Item);
 
 	// 리스트 엔트리 클릭(호버 기준으로 클릭된 엔트리 판별)
@@ -247,8 +247,6 @@ private:
 	TWeakObjectPtr<AParkingPresetManager> ViewManager;
 	AParkingPresetManager* GetViewManager();
 
-	// Offset Pick 글씨의 원래 색(제어 해제 시 복원용). NativeConstruct 에서 캡처.
-	FLinearColor OffsetPickOriginalColor = FLinearColor::White;
 
 	// 키보드 이동/회전 속도 배율(Ctrl+M 증가 / Ctrl+N 감소). 기본 스텝에 곱해진다.
 	float OffsetPickSpeedScale = 1.0f;

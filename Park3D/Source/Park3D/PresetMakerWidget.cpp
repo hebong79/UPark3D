@@ -37,12 +37,6 @@
 
 namespace
 {
-	// UI 밝은 테마 팔레트 (설계서 §2.2). 디자이너에서 손댈 수 없는 코드 생성 UI 전용.
-	static const FLinearColor GRowNormal(1.000f, 1.000f, 1.000f, 1.f);   // 리스트 행(비선택)
-	static const FLinearColor GRowSelected(0.392f, 0.604f, 0.871f, 1.f); // 리스트 행(선택)
-	static const FLinearColor GTextPrimary(0.010f, 0.010f, 0.010f, 1.f); // 행 글씨(검은색)
-	static const FLinearColor GTextDanger(0.356f, 0.006f, 0.006f, 1.f);  // 경고 글씨(피킹 중)
-
 	int32 ToInt(const UEditableTextBox* Box, int32 Default)
 	{
 		if (!Box) return Default;
@@ -72,34 +66,6 @@ namespace
 	const TCHAR* const GSlotNumberShow = TEXT("출력");
 	const TCHAR* const GSlotNumberHide = TEXT("숨김");
 	constexpr float GSlotNumberFontSize = 14.f;
-
-	/**
-	 * 콤보 드롭다운·항목 배경을 흰색으로(LevelSelectWidget 의 같은 이름 함수와 같은 값).
-	 * 이름에 접두사를 붙인 이유 — 익명 네임스페이스라도 **유니티 빌드가 두 .cpp 를 한 TU 로 합치면
-	 * 같은 이름이 재정의 에러(C2084)가 된다**. LevelSelectWidget.cpp 에 이미 `ApplyWhiteDropdown` 이 있고,
-	 * 어떤 파일이 유니티에 묶이는지는 Adaptive Unity 가 수정 이력에 따라 바꾸므로 언제 터질지 모른다.
-	 */
-	void ApplyPresetWhiteDropdown(UComboBoxString* Combo)
-	{
-		FSlateBrush WhiteBrush;
-		WhiteBrush.DrawAs = ESlateBrushDrawType::RoundedBox;
-		WhiteBrush.TintColor = FSlateColor(FLinearColor::White);
-		WhiteBrush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
-		WhiteBrush.OutlineSettings.CornerRadii = FVector4(0.0, 0.0, 0.0, 0.0);
-		FSlateBrush HoverBrush = WhiteBrush;
-		HoverBrush.TintColor = FSlateColor(FLinearColor(0.85f, 0.85f, 0.85f));
-
-		FComboBoxStyle ComboStyle = Combo->GetWidgetStyle();
-		ComboStyle.ComboButtonStyle.MenuBorderBrush = WhiteBrush;
-		Combo->SetWidgetStyle(ComboStyle);
-
-		FTableRowStyle RowStyle = Combo->GetItemStyle();
-		RowStyle.EvenRowBackgroundBrush        = WhiteBrush;
-		RowStyle.OddRowBackgroundBrush         = WhiteBrush;
-		RowStyle.EvenRowBackgroundHoveredBrush = HoverBrush;
-		RowStyle.OddRowBackgroundHoveredBrush  = HoverBrush;
-		Combo->SetItemStyle(RowStyle);
-	}
 }
 
 
@@ -135,7 +101,6 @@ void UPresetMakerWidget::NativeConstruct()
 			Combo_SlotNumber = WidgetTree->ConstructWidget<UComboBoxString>(UComboBoxString::StaticClass(), TEXT("Combo_SlotNumber"));
 			Combo_SlotNumber->AddOption(GSlotNumberShow);
 			Combo_SlotNumber->AddOption(GSlotNumberHide);
-			ApplyPresetWhiteDropdown(Combo_SlotNumber);
 
 			UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
 			if (UHorizontalBoxSlot* S = Cast<UHorizontalBoxSlot>(Row->AddChild(Label)))
@@ -231,19 +196,14 @@ void UPresetMakerWidget::NativeConstruct()
 	// Dir Type 은 Unity EFaceDirType 과 동일하게 Default / Dir 두 가지만 사용한다.
 	if (Combo_DirType)
 	{
+		// 기본 항목 글자는 WBP 의 글자색(생성 시점에만 정해짐)을 따라 어두운 콤보에 묻힌다 →
+		// 주차면 번호 콤보와 같은 생성 함수로 흰 글자를 준다. **선택보다 먼저** 묶어야 닫힌 본문에도 먹는다.
+		// 모양은 맨 끝의 ApplyTheme.
+		Combo_DirType->OnGenerateWidgetEvent.BindUFunction(this, FName("HandleSlotNumberItem"));
 		Combo_DirType->ClearOptions();
 		Combo_DirType->AddOption(TEXT("Default"));
 		Combo_DirType->AddOption(TEXT("Dir"));
 		Combo_DirType->SetSelectedOption(TEXT("Default"));
-
-		// 드롭다운 메뉴 배경색을 흰색계열의 밝은 회색으로 변경(가독성).
-		// 메뉴 배경은 WidgetStyle.ComboButtonStyle.MenuBorderBrush 가 결정한다.
-		FComboBoxStyle ComboStyle = Combo_DirType->GetWidgetStyle();
-		FSlateBrush MenuBrush;
-		MenuBrush.DrawAs = ESlateBrushDrawType::Box;
-		MenuBrush.TintColor = FSlateColor(FLinearColor(0.85f, 0.85f, 0.85f, 1.0f));
-		ComboStyle.ComboButtonStyle.MenuBorderBrush = MenuBrush;
-		Combo_DirType->SetWidgetStyle(ComboStyle);
 	}
 
 	// 초기 라디오 상태 동기화 (이동 모드 기본)
@@ -251,34 +211,22 @@ void UPresetMakerWidget::NativeConstruct()
 	if (Radio_Move)   Radio_Move->SetIsChecked(true);
 	if (Radio_Rotate) Radio_Rotate->SetIsChecked(false);
 
-	// Offset Pick 글씨의 원래 색을 저장(제어 해제 시 복원용).
 	if (Txt_OffsetPick)
 	{
-		OffsetPickOriginalColor = Txt_OffsetPick->GetColorAndOpacity().GetSpecifiedColor();
 		// 차량 패널 "배치 시작" 과 같은 역할이라 이름을 맞춘다(WBP 글자 "Offset Pick" 을 덮는다).
-		Txt_OffsetPick->SetText(FText::FromString(TEXT("작업모드 시작")));
+		Txt_OffsetPick->SetText(FText::FromString(bOffsetPickControl ? TEXT("작업모드 종료") : TEXT("작업모드 시작")));
 	}
 	else
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[PresetMaker] Txt_OffsetPick 이 WBP 에 없어 '작업모드 시작/종료' 글자를 바꿀 수 없습니다."));
 	}
 
-	// 모든 입력 에디트박스의 글자색을 검정에 가까운 진회색으로 통일(가독성).
-	{
-		const FLinearColor FieldTextColor(0.1f, 0.1f, 0.1f, 1.0f);
-		UEditableTextBox* Fields[] = {
-			Field_PresetIdx, Field_FaceCount, Field_OffsetX, Field_OffsetY, Field_OffsetZ,
-			Field_GroupFaceRotate, Field_FaceRotate, Field_BoxSizeX, Field_BoxSizeZ,
-			Field_CameraIdx, Field_PresetName
-		};
-		for (UEditableTextBox* Box : Fields)
-		{
-			if (Box) Box->SetForegroundColor(FieldTextColor);
-		}
-	}
-
 	// 키 입력(WASD/방향키)을 위젯에서 수신할 수 있도록 포커스 허용.
 	SetIsFocusable(true);
+
+	// 시안 테마 — 끼운 줄(주차면 번호)까지. 작업모드 중이면 켜짐 표시를 되살린다.
+	Park3DPanelStyle::ApplyTheme(WidgetTree, RootBorder);
+	Park3DPanelStyle::SetButtonActive(Btn_OffsetPick, bOffsetPickControl);
 }
 
 void UPresetMakerWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
@@ -461,21 +409,10 @@ void UPresetMakerWidget::RebuildPresetList()
 		EntryFont.Size = 12.75f;
 		Label->SetFont(EntryFont);
 
-		// 엔진 기본 버튼 스타일의 tint(회색)는 BackgroundColor 와 곱해져 색을 어둡게 만든다.
-		// tint 를 흰색(중립 승수)으로 두어 아래 BackgroundColor 가 1:1 그대로 렌더되게 한다(설계서 §3.2).
-		FButtonStyle EntryStyle = Entry->GetStyle();
-		EntryStyle.Normal.TintColor = FSlateColor(FLinearColor::White);
-		EntryStyle.Hovered.TintColor = FSlateColor(FLinearColor::White);
-		EntryStyle.Pressed.TintColor = FSlateColor(FLinearColor::White);
-		Entry->SetStyle(EntryStyle);
-
-		// 선택 항목 강조
-		const bool bSelected = (i == SelectedIndex);
-		FLinearColor Tint = bSelected ? GRowSelected : GRowNormal;
-		Entry->SetBackgroundColor(Tint);
-		Label->SetColorAndOpacity(FSlateColor(GTextPrimary));
-
+		// 선택 항목 강조(시안 테마의 목록 행).
 		Entry->AddChild(Label);
+		Park3DPanelStyle::StyleListRow(Entry, Label, i == SelectedIndex);
+
 		Entry->OnClicked.AddUniqueDynamic(this, &UPresetMakerWidget::HandleEntryClicked);
 
 		PresetList_Scroll->AddChild(Entry);
@@ -688,12 +625,13 @@ void UPresetMakerWidget::SetOffsetPickControl(bool bEnable)
 {
 	bOffsetPickControl = bEnable;
 
-	// 제어 상태 표시: 켜짐=빨강 "작업모드 종료", 꺼짐=원래 색 "작업모드 시작".
+	// 제어 상태 표시: 켜짐 = 빨간 테두리·글자 "작업모드 종료", 꺼짐 = 강조색 "작업모드 시작".
+	// 글자를 먼저 바꿔야 SetButtonActive(false) 가 라벨로 평상 종류(강조)를 고른다.
 	if (Txt_OffsetPick)
 	{
-		Txt_OffsetPick->SetColorAndOpacity(bEnable ? FSlateColor(GTextDanger) : FSlateColor(OffsetPickOriginalColor));
 		Txt_OffsetPick->SetText(FText::FromString(bEnable ? TEXT("작업모드 종료") : TEXT("작업모드 시작")));
 	}
+	Park3DPanelStyle::SetButtonActive(Btn_OffsetPick, bEnable);
 
 	if (bEnable)
 	{
@@ -867,7 +805,7 @@ UWidget* UPresetMakerWidget::HandleSlotNumberItem(FString Item)
 {
 	UTextBlock* Text = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 	Text->SetText(FText::FromString(Item));
-	Text->SetColorAndOpacity(FSlateColor(GTextPrimary));
+	Park3DPanelStyle::StyleComboItemText(Text);
 	Text->SetFontSize(GSlotNumberFontSize);
 
 	USizeBox* Row = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());

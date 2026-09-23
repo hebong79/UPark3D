@@ -8,6 +8,7 @@
 #include "Components/EditableTextBox.h"
 #include "Engine/World.h"
 #include "InputCoreTypes.h"
+#include "../Park3DPanelStyle.h"
 
 void UMapSizeWidget::NativeConstruct()
 {
@@ -21,6 +22,8 @@ void UMapSizeWidget::NativeConstruct()
 
 	// 패널을 열 때마다 바닥의 실제 크기(SSOT)를 필드에 반영한다.
 	RefreshFields();
+
+	Park3DPanelStyle::ApplyTheme(WidgetTree);
 }
 
 void UMapSizeWidget::ApplySize()

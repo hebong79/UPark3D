@@ -48,6 +48,7 @@ void URenderPanelWidget::NativeConstruct()
 
 	if (Combo_Mode)
 	{
+		Combo_Mode->OnGenerateWidgetEvent.BindUFunction(this, FName("HandleGenerateComboItem"));
 		Combo_Mode->ClearOptions();
 		for (const TCHAR* L : ModeLabels)
 		{
@@ -73,6 +74,17 @@ void URenderPanelWidget::NativeConstruct()
 	}
 
 	Say(TEXT("대기"));
+
+	Park3DPanelStyle::ApplyTheme(WidgetTree, RootBorder);
+}
+
+UWidget* URenderPanelWidget::HandleGenerateComboItem(FString Item)
+{
+	UTextBlock* Text = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+	Text->SetText(FText::FromString(Item));
+	Text->SetFontSize(12.f);
+	Park3DPanelStyle::StyleComboItemText(Text);
+	return Text;
 }
 
 ACarPlacementManager* URenderPanelWidget::GetCarManager() const

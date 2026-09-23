@@ -5,6 +5,7 @@
 #include "../RpcDispatcher.h"
 #include "../RpcParamUtil.h"
 #include "../../CarPlacementManager.h"
+#include "../../CarPlacementWidget.h"
 #include "../../CarActor.h"
 #include "../../CarColorComponent.h"
 #include "../../CarPlacementLibrary.h"
@@ -558,7 +559,9 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		return RpcDto::MakeObject(O);
 	});
 
-	// 선택 표시(반투명 하늘색 오버레이) 표시/숨김. UI 의 "선택 표시" 체크박스와 같은 백엔드(SetSelectionMarkVisible)를 쓴다.
+	// 선택 표시(반투명 하늘색 오버레이) 표시/숨김. 차량 배치 패널의 "선택 표시" 체크박스를 거쳐 바꾼다 —
+	// 위젯의 SetSelectionMarkVisible 이 체크박스와 매니저를 함께 맞추므로 RPC 로 바꿔도 패널이 어긋나지 않는다.
+	// 그 체크박스(패널 인스턴스)가 없으면 아무것도 바꾸지 않고 거부한다(UI 없이 상태만 바뀌는 경로를 두지 않는다).
 	// 선택 상태 자체(car.select)는 건드리지 않는다 — 다시 켜면 선택돼 있던 차에 표시가 돌아온다.
 	// 매니저 멤버라 레벨 전환(scene.load)으로 매니저가 새로 만들어지면 기본값(표시)으로 돌아간다.
 	Dispatcher.Register(TEXT("car.setSelectionMark"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
@@ -567,24 +570,33 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		bool bVisible = true;
 		if (!RpcParam::RequireBool(P, TEXT("visible"), bVisible, E)) return nullptr;
 
-		const int32 Changed = Mgr->SetSelectionMarkVisible(bVisible);
+		UCarPlacementWidget* Panel = UCarPlacementWidget::FindWithSelectionMarkUI(Mgr->GetWorld());
+		if (!Panel)
+		{
+			E.FailDomain(TEXT("선택 표시 UI(차량 배치 패널의 '선택 표시' 체크박스)가 없어 실행하지 않았습니다"));
+			return nullptr;
+		}
+
+		const int32 Changed = Panel->SetSelectionMarkVisible(bVisible);
 
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetBoolField(TEXT("ok"), true);
-		O->SetBoolField(TEXT("visible"), bVisible);
+		O->SetBoolField(TEXT("visible"), Mgr->IsSelectionMarkVisible());
 		O->SetNumberField(TEXT("changedCount"), Changed);   // 화면이 실제로 바뀐(선택돼 있던) 대수
 		return RpcDto::MakeObject(O);
 	});
-	Dispatcher.SetMethodMeta(TEXT("car.setSelectionMark"), { true, false, TEXT("{visible: bool}"), TEXT("차량 선택 표시(반투명 하늘색) 표시/숨김 — 선택 상태는 유지") });
+	Dispatcher.SetMethodMeta(TEXT("car.setSelectionMark"), { true, false, TEXT("{visible: bool}"), TEXT("차량 선택 표시(반투명 하늘색) 표시/숨김 — 패널 '선택 표시' 체크박스도 함께 바뀐다. 패널 UI 가 없으면 -32000 으로 거부. 선택 상태는 유지") });
 
 	Dispatcher.Register(TEXT("car.getSelectionMark"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetBoolField(TEXT("visible"), Mgr->IsSelectionMarkVisible());
+		// 거짓이면 car.setSelectionMark 가 거부된다 — 웹 체크박스를 비활성화하는 근거로 쓴다.
+		O->SetBoolField(TEXT("ui"), UCarPlacementWidget::FindWithSelectionMarkUI(Mgr->GetWorld()) != nullptr);
 		return RpcDto::MakeObject(O);
 	});
-	Dispatcher.SetMethodMeta(TEXT("car.getSelectionMark"), { false, false, TEXT(""), TEXT("{visible} — car.setSelectionMark 로 잡은 선택 표시 상태") });
+	Dispatcher.SetMethodMeta(TEXT("car.getSelectionMark"), { false, false, TEXT(""), TEXT("{visible, ui} — 선택 표시 상태, ui=패널 체크박스 존재(거짓이면 setSelectionMark 거부)") });
 
 	Dispatcher.Register(TEXT("car.hideRandom"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{

@@ -132,6 +132,16 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Car") int32 SetSelectionMarkVisible(bool bVisible);
 
+	/** "선택 표시" 체크박스가 실제로 만들어졌는가(주입 실패·WBP 구조 변경이면 거짓). */
+	bool HasSelectionMarkUI() const { return Check_SelMark.IsValid(); }
+
+	/**
+	 * 이 월드에서 "선택 표시" 체크박스를 가진 차량 배치 패널을 찾는다(없으면 nullptr).
+	 * 패널은 닫혀 있어도(뷰포트 밖) 인스턴스가 살아 있으면 찾는다 — 다시 열 때 NativeConstruct 가 체크를 월드에서 읽는다.
+	 * car.setSelectionMark 가 UI 와 함께 바꾸려고 쓴다. UFUNCTION 이 아니다(쿠킹된 WBP 베이스 규약).
+	 */
+	static UCarPlacementWidget* FindWithSelectionMarkUI(const UWorld* World);
+
 	UFUNCTION(BlueprintCallable, Category = "Car") FString GetDefaultCarFilePath() const;
 	UFUNCTION(BlueprintCallable, Category = "Car") bool SaveToJsonFile(const FString& FilePath);
 	UFUNCTION(BlueprintCallable, Category = "Car") bool LoadFromJsonFile(const FString& FilePath);

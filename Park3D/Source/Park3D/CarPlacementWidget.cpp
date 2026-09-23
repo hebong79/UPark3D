@@ -26,6 +26,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/PlayerController.h"
 #include "Framework/Application/SlateApplication.h"
+#include "UObject/UObjectIterator.h"
 
 #if PARK3D_USE_FILE_DIALOG
 #include "DesktopPlatformModule.h"
@@ -1003,6 +1004,24 @@ int32 UCarPlacementWidget::SetSelectionMarkVisible(bool bVisible)
 	Notify(FString::Printf(TEXT("선택 표시 %s — %d대 갱신"),
 		bVisible ? TEXT("켜기") : TEXT("끄기"), Changed));
 	return Changed;
+}
+
+UCarPlacementWidget* UCarPlacementWidget::FindWithSelectionMarkUI(const UWorld* World)
+{
+	if (!World)
+	{
+		return nullptr;
+	}
+	for (TObjectIterator<UCarPlacementWidget> It; It; ++It)
+	{
+		UCarPlacementWidget* W = *It;
+		if (W && !W->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject) && IsValid(W)
+			&& W->GetWorld() == World && W->HasSelectionMarkUI())
+		{
+			return W;
+		}
+	}
+	return nullptr;
 }
 
 void UCarPlacementWidget::AddCarAtWorld(const FVector& WorldLoc)

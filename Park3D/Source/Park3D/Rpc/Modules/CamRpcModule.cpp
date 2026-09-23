@@ -1170,11 +1170,13 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 
 	// ---- 위치 표식 ----
 	// PTZ 카메라마다 눈 아래(dropM) 구를 세운다(카메라 액터에 붙여 두므로 이동을 따라간다). 상태는 재기동 전까지.
+	// 구 아래 바닥 기둥(APTZCameraActor::PoleMesh)도 같은 스위치로 켜고 끈다.
 	Dispatcher.Register(TEXT("cam.setMarks"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		ACameraControlManager* Mgr = GetCameraManager(E); if (!Mgr) return nullptr;
 		bMarksEnabled = RpcParam::GetBool(P, TEXT("enabled"), true);
 		RebuildMarks(Mgr);
+		Mgr->ShowAllPoles(bMarksEnabled);
 		return MarksState(Mgr);
 	});
 

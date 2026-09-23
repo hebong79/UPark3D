@@ -199,6 +199,81 @@ bool FRpcCarExtShowAllTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// ===== car.setSelectionMark / car.getSelectionMark: 선택 상태는 두고 표시만 끈다 =====
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRpcCarSelectionMarkTest,
+	"Park3D.Rpc.CarModuleExt.SelectionMark",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FRpcCarSelectionMarkTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = CpEditorWorld();
+	if (!World) { AddWarning(TEXT("에디터 월드 없음 — 건너뜀.")); return true; }
+	CpCleanupCarManager(World);
+
+	URpcDispatcher* D = NewObject<URpcDispatcher>();
+	FCarRpcModule Car([World]() -> UWorld* { return World; });
+	Car.SetCatalog(CpTestCatalog());
+	Car.Register(*D);
+
+	const FString IdA = CpCreateCar(D, 1, 1);
+	const FString IdB = CpCreateCar(D, 2, 2);
+	ACarPlacementManager* Mgr = Cast<ACarPlacementManager>(UGameplayStatics::GetActorOfClass(World, ACarPlacementManager::StaticClass()));
+	if (!TestNotNull(TEXT("차량 매니저"), Mgr)) return false;
+	ACarActor* A = Mgr->FindByNameId(IdA);
+	ACarActor* B = Mgr->FindByNameId(IdB);
+	if (!TestNotNull(TEXT("차량 A"), A) || !TestNotNull(TEXT("차량 B"), B)) return false;
+
+	auto Select = [&](const FString& Id)
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>(); P->SetStringField(TEXT("carNameId"), Id);
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestTrue(TEXT("car.select 성공"), D->Dispatch(TEXT("car.select"), P, R, E));
+	};
+	auto SetMark = [&](bool bVisible) -> TSharedPtr<FJsonValue>
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>(); P->SetBoolField(TEXT("visible"), bVisible);
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestTrue(TEXT("car.setSelectionMark 성공"), D->Dispatch(TEXT("car.setSelectionMark"), P, R, E));
+		return R;
+	};
+	auto GetMark = [&]() -> bool
+	{
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestTrue(TEXT("car.getSelectionMark 성공"), D->Dispatch(TEXT("car.getSelectionMark"), nullptr, R, E));
+		bool b = false; if (CpObj(R).IsValid()) { CpObj(R)->TryGetBoolField(TEXT("visible"), b); }
+		return b;
+	};
+
+	// visible 누락 → 거부.
+	{
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestFalse(TEXT("visible 누락 거부"), D->Dispatch(TEXT("car.setSelectionMark"), MakeShared<FJsonObject>(), R, E));
+	}
+
+	TestTrue(TEXT("초기 표시"), GetMark());
+	Select(IdA);
+
+	// 끄면 선택돼 있던 A 한 대만 화면이 바뀐다. 선택 상태는 유지.
+	TestEqual(TEXT("끄기 changedCount 1"), CpNumField(SetMark(false), TEXT("changedCount")), 1);
+	TestFalse(TEXT("getSelectionMark false"), GetMark());
+	TestTrue(TEXT("A 선택 유지"), A->IsSelected());
+	TestFalse(TEXT("A 표시 꺼짐"), A->IsSelectionMarkVisible());
+	TestEqual(TEXT("재호출 changedCount 0"), CpNumField(SetMark(false), TEXT("changedCount")), 0);
+
+	// 꺼진 채 다른 차를 선택해도 표시가 안 나온다.
+	Select(IdB);
+	TestTrue(TEXT("B 선택"), B->IsSelected());
+	TestFalse(TEXT("B 표시 꺼짐"), B->IsSelectionMarkVisible());
+
+	// 다시 켜면 선택된 B 에 표시가 돌아온다.
+	TestEqual(TEXT("켜기 changedCount 1"), CpNumField(SetMark(true), TEXT("changedCount")), 1);
+	TestTrue(TEXT("getSelectionMark true"), GetMark());
+	TestTrue(TEXT("B 표시 켜짐"), B->IsSelectionMarkVisible());
+
+	CpCleanupCarManager(World);
+	return true;
+}
+
 // ===== car.setPlate / car.plateKinds =====
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRpcCarExtSetPlateTest,
 	"Park3D.Rpc.CarModuleExt.SetPlate",

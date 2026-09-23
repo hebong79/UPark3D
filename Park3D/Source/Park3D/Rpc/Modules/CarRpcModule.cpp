@@ -558,6 +558,34 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		return RpcDto::MakeObject(O);
 	});
 
+	// 선택 표시(반투명 하늘색 오버레이) 표시/숨김. UI 의 "선택 표시" 체크박스와 같은 백엔드(SetSelectionMarkVisible)를 쓴다.
+	// 선택 상태 자체(car.select)는 건드리지 않는다 — 다시 켜면 선택돼 있던 차에 표시가 돌아온다.
+	// 매니저 멤버라 레벨 전환(scene.load)으로 매니저가 새로 만들어지면 기본값(표시)으로 돌아간다.
+	Dispatcher.Register(TEXT("car.setSelectionMark"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
+		bool bVisible = true;
+		if (!RpcParam::RequireBool(P, TEXT("visible"), bVisible, E)) return nullptr;
+
+		const int32 Changed = Mgr->SetSelectionMarkVisible(bVisible);
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetBoolField(TEXT("visible"), bVisible);
+		O->SetNumberField(TEXT("changedCount"), Changed);   // 화면이 실제로 바뀐(선택돼 있던) 대수
+		return RpcDto::MakeObject(O);
+	});
+	Dispatcher.SetMethodMeta(TEXT("car.setSelectionMark"), { true, false, TEXT("{visible: bool}"), TEXT("차량 선택 표시(반투명 하늘색) 표시/숨김 — 선택 상태는 유지") });
+
+	Dispatcher.Register(TEXT("car.getSelectionMark"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("visible"), Mgr->IsSelectionMarkVisible());
+		return RpcDto::MakeObject(O);
+	});
+	Dispatcher.SetMethodMeta(TEXT("car.getSelectionMark"), { false, false, TEXT(""), TEXT("{visible} — car.setSelectionMark 로 잡은 선택 표시 상태") });
+
 	Dispatcher.Register(TEXT("car.hideRandom"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;

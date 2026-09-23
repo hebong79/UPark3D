@@ -20,6 +20,7 @@
 #include "DrawDebugHelpers.h"
 #include "GameFramework/PlayerController.h"
 #include "InputCoreTypes.h"
+#include "Park3DPanelStyle.h"
 
 void UCameraDistanceWidget::SetCameraManager(ACameraControlManager* InManager) { CameraManager = InManager; }
 void UCameraDistanceWidget::SetParentDialogRect(const FVector2D& P,const FVector2D& S)
@@ -130,6 +131,8 @@ void UCameraDistanceWidget::BuildDialog()
 	Btn_Line->OnClicked.AddUniqueDynamic(this, &UCameraDistanceWidget::HandleTargetLine);
 	Btn_Point->OnClicked.AddUniqueDynamic(this, &UCameraDistanceWidget::HandleTargetPoint);
 	Close->OnClicked.AddUniqueDynamic(this, &UCameraDistanceWidget::HandleClose);
+	// 시안 테마 — 밝은 회색 창·검은 글자를 다른 패널과 같은 어두운 카드로.
+	Park3DPanelStyle::ApplyTheme(WidgetTree, Border);
 	ApplyDialogPosition();
 }
 

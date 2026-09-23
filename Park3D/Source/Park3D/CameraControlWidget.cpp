@@ -45,10 +45,6 @@
 
 namespace
 {
-	// UI 밝은 테마 팔레트 Danger (설계서 §2.2). 피킹 On 상태의 버튼 배경색.
-	// 기존 순빨강 FLinearColor::Red 는 검은 글씨 대비 4.35:1 로 WCAG AA 미달이었다 → 6.6:1.
-	static const FLinearColor GPickOnColor(0.776f, 0.144f, 0.144f, 1.f);
-
 	// 6 컨트롤 기본 min/max/cur (설계 §4.4, Unity CPCamControlDlg.Initiaize).
 	struct FCtrlDefault { ECamCtrl Kind; float Min; float Max; float Cur; };
 	static const FCtrlDefault GCtrlDefaults[] =
@@ -100,15 +96,7 @@ void UCameraControlWidget::NativeConstruct()
 	Controls.Add({ Field_Tilt_Min, Field_Tilt_Cur, Field_Tilt_Max, Slider_Tilt, ECamCtrl::Tilt });
 	Controls.Add({ Field_Zoom_Min, Field_Zoom_Cur, Field_Zoom_Max, Slider_Zoom, ECamCtrl::Zoom });
 
-	// 1-b) 모든 입력 EditBox의 입력 텍스트 색상을 검정으로 설정한다(요구사항).
-	const FLinearColor InputTextColor = FLinearColor::Black;
-	for (const FSliderCtrl& C : Controls)
-	{
-		if (C.Min) C.Min->SetForegroundColor(InputTextColor);
-		if (C.Cur) C.Cur->SetForegroundColor(InputTextColor);
-		if (C.Max) C.Max->SetForegroundColor(InputTextColor);
-	}
-	if (Field_PresetId) Field_PresetId->SetForegroundColor(InputTextColor);
+	// 1-b) 입력칸 색(어두운 칸·흰 글자)은 맨 끝의 ApplyTheme 이 정한다.
 
 	// 2) 기본값 세팅(비어 있을 때만 — 디자이너 프리셋 존중) + 델리게이트 바인딩.
 	for (const FCtrlDefault& D : GCtrlDefaults)
@@ -173,37 +161,7 @@ void UCameraControlWidget::NativeConstruct()
 		Combo_Preset->OnSelectionChanged.AddUniqueDynamic(this, &UCameraControlWidget::HandlePresetChanged);
 	}
 
-	// 3-b) 콤보 드롭다운 배경을 흰색으로 (요구사항). 항목 텍스트는 검정(HandleGenerateComboItem).
-	auto ApplyWhiteDropdown = [](UComboBoxString* Combo)
-	{
-		if (!Combo)
-		{
-			return;
-		}
-		FSlateBrush WhiteBrush;
-		WhiteBrush.DrawAs = ESlateBrushDrawType::RoundedBox;
-		WhiteBrush.TintColor = FSlateColor(FLinearColor::White);
-		// 라운드 제거: RoundedBox 기본 라운딩(HalfHeightRadius)을 직각(고정 반지름 0)으로.
-		WhiteBrush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
-		WhiteBrush.OutlineSettings.CornerRadii = FVector4(0.0, 0.0, 0.0, 0.0);
-		FSlateBrush HoverBrush = WhiteBrush;
-		HoverBrush.TintColor = FSlateColor(FLinearColor(0.85f, 0.85f, 0.85f)); // 호버 연회색(가독)
-
-		// 드롭다운 메뉴 배경.
-		FComboBoxStyle ComboStyle = Combo->GetWidgetStyle();
-		ComboStyle.ComboButtonStyle.MenuBorderBrush = WhiteBrush;
-		Combo->SetWidgetStyle(ComboStyle);
-
-		// 항목 행 배경.
-		FTableRowStyle RowStyle = Combo->GetItemStyle();
-		RowStyle.EvenRowBackgroundBrush        = WhiteBrush;
-		RowStyle.OddRowBackgroundBrush         = WhiteBrush;
-		RowStyle.EvenRowBackgroundHoveredBrush = HoverBrush;
-		RowStyle.OddRowBackgroundHoveredBrush  = HoverBrush;
-		Combo->SetItemStyle(RowStyle);
-	};
-	ApplyWhiteDropdown(Combo_Camera);
-	ApplyWhiteDropdown(Combo_Preset);
+	// 3-b) 콤보 모양은 맨 끝의 ApplyTheme 이 입힌다(어두운 드롭다운). 항목 글자는 HandleGenerateComboItem.
 
 	// 4) 버튼 핸들러.
 	if (Btn_CamAdd)       Btn_CamAdd->OnClicked.AddUniqueDynamic(this, &UCameraControlWidget::HandleCamAdd);
@@ -216,15 +174,6 @@ void UCameraControlWidget::NativeConstruct()
 	if (Btn_Init)         Btn_Init->OnClicked.AddUniqueDynamic(this, &UCameraControlWidget::HandleInit);
 	if (Btn_Picking)      Btn_Picking->OnClicked.AddUniqueDynamic(this, &UCameraControlWidget::HandlePicking);
 
-	// 피킹 버튼 원색을 기본상태에서 1회 캡처하고, 현재 피킹 상태에 맞춰 색을 적용한다(On=붉은색).
-	if (Btn_Picking)
-	{
-		if (!bPicking)
-		{
-			PickBtnDefaultColor = Btn_Picking->GetBackgroundColor();
-		}
-		Btn_Picking->SetBackgroundColor(bPicking ? GPickOnColor : PickBtnDefaultColor);
-	}
 	if (Btn_ShowPole)     Btn_ShowPole->OnClicked.AddUniqueDynamic(this, &UCameraControlWidget::HandleShowPole);
 
 	// 5) 매니저 캐시 + 카메라 최소 1대 보장.
@@ -267,6 +216,10 @@ void UCameraControlWidget::NativeConstruct()
 	RefreshDistanceButtonLabel();
 
 	SetFileName(CurFileName.IsEmpty() ? TEXT("CameraPos_SNum.json") : CurFileName);
+
+	// 시안 테마 — 위에서 끼운 줄(PTZ 패드·시작 슬롯 등)까지 한꺼번에. 피킹 중이면 켜짐 표시를 되살린다.
+	Park3DPanelStyle::ApplyTheme(WidgetTree, RootBorder);
+	Park3DPanelStyle::SetButtonActive(Btn_Picking, bPicking);
 }
 
 void UCameraControlWidget::NativeDestruct()
@@ -1146,7 +1099,7 @@ void UCameraControlWidget::HandlePicking()
 		{
 			bPicking = true;
 			SetButtonLabel(Btn_Picking, TEXT("위치 피킹 중..."));
-			if (Btn_Picking) Btn_Picking->SetBackgroundColor(GPickOnColor); // On = 붉은색
+			Park3DPanelStyle::SetButtonActive(Btn_Picking, true); // On = 빨간 테두리·글자
 			Notify(TEXT("카메라 위치 피킹 시작 — Ctrl+좌클릭"));
 		}
 		else
@@ -1162,7 +1115,7 @@ void UCameraControlWidget::HandlePicking()
 			Mgr->ReleasePick();
 		}
 		SetButtonLabel(Btn_Picking, TEXT("카메라 피킹 시작"));
-		if (Btn_Picking) Btn_Picking->SetBackgroundColor(PickBtnDefaultColor); // Off = 처음색 복원
+		Park3DPanelStyle::SetButtonActive(Btn_Picking, false); // Off = 평상 모양
 		Notify(TEXT("카메라 위치 피킹 종료"));
 	}
 }
@@ -2444,7 +2397,7 @@ UWidget* UCameraControlWidget::HandleGenerateComboItem(FString Item)
 	UTextBlock* Text = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 	Text->SetText(FText::FromString(Item));
 	Text->SetJustification(ETextJustify::Center);
-	Text->SetColorAndOpacity(FSlateColor(FLinearColor::Black));
+	Park3DPanelStyle::StyleComboItemText(Text);
 	FSlateFontInfo F = Text->GetFont();
 	F.TypefaceFontName = TEXT("Regular");
 	F.Size = 13;

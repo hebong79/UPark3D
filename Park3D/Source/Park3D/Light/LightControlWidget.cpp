@@ -19,6 +19,7 @@
 #include "LightControlLibrary.h"
 #include "LightControlManager.h"
 #include "Misc/Paths.h"
+#include "../Park3DPanelStyle.h"
 
 #if PARK3D_USE_FILE_DIALOG
 #include "DesktopPlatformModule.h"
@@ -48,7 +49,7 @@ namespace
 
 	/**
 	 * UEditableTextBox 는 SetFont 가 없어 스타일을 통째로 바꿔야 폰트가 적용된다.
-	 * 색도 함께 지정한다 — 엔진 기본 글자색이 UseForeground(=흰색)라 밝은 기본 입력창 배경 위에서 보이지 않는다.
+	 * 색은 NativeConstruct 끝의 Park3DPanelStyle::ApplyTheme 이 정한다(어두운 칸·흰 글자).
 	 */
 	void StyleField(UEditableTextBox* Box, float Size)
 	{
@@ -58,10 +59,6 @@ namespace
 		}
 		FEditableTextBoxStyle St = Box->GetWidgetStyle();
 		St.TextStyle.Font.Size = Size;
-		St.TextStyle.ColorAndOpacity = FSlateColor(FLinearColor::Black);
-		St.ForegroundColor = FSlateColor(FLinearColor::Black);
-		St.FocusedForegroundColor = FSlateColor(FLinearColor::Black);
-		St.ReadOnlyForegroundColor = FSlateColor(FLinearColor::Black);
 		Box->SetWidgetStyle(St);
 	}
 
@@ -87,9 +84,7 @@ namespace
 		T->SetText(Label);
 		T->SetJustification(ETextJustify::Center);
 		T->SetFontSize(LabelFontSize);
-		// 엔진 기본 버튼 배경이 밝은 회색이라 기본 흰색 라벨은 보이지 않는다(다른 패널과 동일한 규약).
-		T->SetColorAndOpacity(FSlateColor(FLinearColor::Black));
-		B->AddChild(T);
+		B->AddChild(T); // 버튼 모양·글자색은 ApplyTheme(StyleButton)이 라벨로 종류를 골라 정한다.
 		return B;
 	}
 }
@@ -287,6 +282,8 @@ void ULightControlWidget::NativeConstruct()
 		}
 	}
 	SetFields(Cur);
+
+	Park3DPanelStyle::ApplyTheme(WidgetTree, RootBorder);
 }
 
 ALightControlManager* ULightControlWidget::GetManager() const

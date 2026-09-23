@@ -14,6 +14,7 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "Light/LightControlWidget.h"
 #include "Park3DGameMode.h"
+#include "Park3DPanelStyle.h"
 #include "Kismet/GameplayStatics.h"
 #include "InputCoreTypes.h"
 
@@ -44,6 +45,9 @@ void UMainMenuWidget::NativeConstruct()
 	// 앱 실행 시 기본으로 PresetMaker 패널을 연다(요구사항: 시작 시 PresetMaker 출력).
 	// 구성 시점엔 열린 패널이 없어 배타 토글이 정확히 PresetMaker만 표시한다.
 	TogglePanel(PresetMakerWidgetClass);
+
+	// 아이콘 독도 같은 카드·버튼 모양(아이콘 버튼은 투명 바탕에 마우스 올림만 밝게).
+	Park3DPanelStyle::ApplyTheme(WidgetTree, RootBorder);
 }
 
 UButton* UMainMenuWidget::InsertMenuButtonBeforeExit(const TCHAR* WidgetName, const FText& Label,

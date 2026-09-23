@@ -70,6 +70,9 @@ private:
 	UFUNCTION() void HandleShowAll();
 	UFUNCTION() void HandleHideAllChanged(bool bIsChecked);
 
+	/** 모드 콤보 항목 — 어두운 드롭다운 위 흰 글자(기본 항목은 WBP 글자색을 따라 묻힌다). */
+	UFUNCTION() UWidget* HandleGenerateComboItem(FString Item);
+
 	ACarPlacementManager* GetCarManager() const;
 
 	/** 필드에서 정수를 읽는다. 비었거나 숫자가 아니면 Fallback. */

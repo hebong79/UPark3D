@@ -33,14 +33,6 @@
 #include "IDesktopPlatform.h"
 #endif
 
-namespace
-{
-	// UI 밝은 테마 팔레트 (설계서 §2.2). Btn_PlaceStart 토글 배경색.
-	// widgetStyle tint 가 흰색(중립)이라 이 값이 1:1 그대로 렌더된다(설계서 §3.2).
-	static const FLinearColor GPlaceOnColor(0.776f, 0.144f, 0.144f, 1.f);  // Danger — 배치 중
-	static const FLinearColor GPlaceOffColor(0.776f, 0.776f, 0.776f, 1.f); // BtnNormal — 평상시(연회색)
-}
-
 // ===== 초기화 =====
 void UCarPlacementWidget::NativeOnInitialized()
 {
@@ -159,6 +151,10 @@ void UCarPlacementWidget::NativeConstruct()
 	}
 
 	RebuildCarList();
+
+	// 시안 테마 — 주입한 줄(랜덤 모드·숨기기·선택 표시)까지. 배치 중이면 켜짐 표시를 되살린다.
+	Park3DPanelStyle::ApplyTheme(WidgetTree, RootBorder);
+	Park3DPanelStyle::SetButtonActive(Btn_PlaceStart, bPlacing);
 }
 
 void UCarPlacementWidget::InjectRandomModeRow()
@@ -1190,11 +1186,8 @@ void UCarPlacementWidget::HandleResetRandom(){ ResetRandomPlacement(); }
 void UCarPlacementWidget::HandlePlaceStart()
 {
 	bPlacing = !bPlacing;
-	if (Btn_PlaceStart)
-	{
-		// 배치 상태면 붉은색, 다시 누르면 원래색(연회색 = 일반 버튼 배경)으로 복원.
-		Btn_PlaceStart->SetBackgroundColor(bPlacing ? GPlaceOnColor : GPlaceOffColor);
-	}
+	// 배치 중이면 빨간 테두리·글자, 다시 누르면 평상 모양.
+	Park3DPanelStyle::SetButtonActive(Btn_PlaceStart, bPlacing);
 	Notify(bPlacing ? TEXT("배치 시작 — 바닥 클릭으로 추가(런타임)") : TEXT("배치 종료"));
 }
 
@@ -1262,7 +1255,7 @@ UWidget* UCarPlacementWidget::HandleGenerateComboItem(FString Item)
 	UTextBlock* Text = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 	Text->SetText(FText::FromString(Item));
 	Text->SetJustification(ETextJustify::Center);           // 가로 중앙 정렬
-	Text->SetColorAndOpacity(FSlateColor(FLinearColor::Black));
+	Park3DPanelStyle::StyleComboItemText(Text);
 	FSlateFontInfo F = Text->GetFont();
 	F.TypefaceFontName = TEXT("Regular");                    // Bold → Normal
 	F.Size = 14;

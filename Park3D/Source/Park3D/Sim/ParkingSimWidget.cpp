@@ -13,21 +13,18 @@
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
+#include "../Park3DPanelStyle.h"
 
 namespace
 {
 	constexpr float SimTitleFontSize = 16.f;
 	constexpr float SimBodyFontSize = 13.f;
 
-	/**
-	 * 패널 배경. 기존 패널(프리셋 메이커 등)과 같은 "밝은 회녹색 반투명" 계열로 맞춘 값이다.
-	 * 화면 캡처에서 프리셋 메이커 패널이 바닥 위에 sRGB(139,142,127)로 합성되는 것을 재서,
-	 * 알파 0.85 기준으로 역산했다. 배경이 밝아지므로 글자색은 검정으로 둔다.
-	 */
-	const FLinearColor SimPanelColor(0.27f, 0.29f, 0.23f, 0.85f);
-	const FSlateColor SimTextColor(FLinearColor::Black);
+	/** 패널 글자는 시안 테마(어두운 카드 위 흰 글자·보조 회색). 카드·버튼 모양은 NativeConstruct 의 ApplyTheme. */
+	FSlateColor SimTextColor()  { return FSlateColor(Park3DPanelStyle::Theme::Text()); }
+	FSlateColor SimMutedColor() { return FSlateColor(Park3DPanelStyle::Theme::Muted()); }
 
-	/** 버튼 + 가운데 검은 라벨(다른 패널과 같은 규약 — 기본 흰 라벨은 밝은 버튼 위에서 안 보인다). */
+	/** 버튼 + 가운데 라벨. 글자색은 ApplyTheme(StyleButton)이 라벨로 종류를 골라 정한다. */
 	UButton* MakeSimButton(UWidgetTree* Tree, const TCHAR* Name, const FText& Label)
 	{
 		UButton* B = Tree->ConstructWidget<UButton>(UButton::StaticClass(), Name);
@@ -35,7 +32,6 @@ namespace
 		T->SetText(Label);
 		T->SetJustification(ETextJustify::Center);
 		T->SetFontSize(SimBodyFontSize);
-		T->SetColorAndOpacity(FSlateColor(FLinearColor::Black));
 		B->AddChild(T);
 		return B;
 	}
@@ -61,8 +57,7 @@ void UParkingSimWidget::BuildUI()
 
 	RootBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("SimPanel"));
 	UBorder* Panel = RootBorder;
-	Panel->SetBrushColor(SimPanelColor);
-	Panel->SetPadding(FMargin(10));
+	Panel->SetPadding(FMargin(12));
 
 	// 좌하단이 기본 자리(카메라 뷰어·메인 메뉴와 겹치지 않는다). 드래그로 옮길 수 있다.
 	if (UCanvasPanelSlot* CS = Cast<UCanvasPanelSlot>(Canvas->AddChild(Panel)))
@@ -80,12 +75,12 @@ void UParkingSimWidget::BuildUI()
 	UTextBlock* Title = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 	Title->SetText(FText::FromString(TEXT("주차 시뮬레이션")));
 	Title->SetFontSize(SimTitleFontSize);
-	Title->SetColorAndOpacity(SimTextColor);
+	Title->SetColorAndOpacity(SimTextColor());
 	Box->AddChild(Title);
 
 	StatusText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("SimStatusText"));
 	StatusText->SetFontSize(SimBodyFontSize);
-	StatusText->SetColorAndOpacity(SimTextColor);
+	StatusText->SetColorAndOpacity(SimMutedColor());
 	StatusText->SetText(FText::FromString(TEXT("상태: 대기")));
 	if (UVerticalBoxSlot* S = Cast<UVerticalBoxSlot>(Box->AddChild(StatusText)))
 	{
@@ -115,7 +110,7 @@ void UParkingSimWidget::BuildUI()
 
 	MessageText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("SimMessageText"));
 	MessageText->SetFontSize(SimBodyFontSize - 1.f);
-	MessageText->SetColorAndOpacity(SimTextColor);
+	MessageText->SetColorAndOpacity(SimMutedColor());
 	MessageText->SetAutoWrapText(true);
 	MessageText->SetText(FText::FromString(TEXT("입차: 입구→랜덤 주차면 / 출차: 랜덤 주차면→출구(도착 시 차량 제거). 여러 번 눌러 동시 주행.")));
 	Box->AddChild(MessageText);
@@ -129,6 +124,8 @@ void UParkingSimWidget::NativeConstruct()
 	if (Btn_Exit)   { Btn_Exit->OnClicked.AddUniqueDynamic(this, &UParkingSimWidget::HandleExit); }
 	if (Btn_Stop)   { Btn_Stop->OnClicked.AddUniqueDynamic(this, &UParkingSimWidget::HandleStop); }
 	if (Btn_Replay) { Btn_Replay->OnClicked.AddUniqueDynamic(this, &UParkingSimWidget::HandleReplay); }
+
+	Park3DPanelStyle::ApplyTheme(WidgetTree, RootBorder);
 }
 
 AParkingSimManager* UParkingSimWidget::SpawnRun()

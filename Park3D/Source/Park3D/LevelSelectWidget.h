@@ -38,7 +38,7 @@ protected:
 	/** 콤보 선택 변경. 사용자가 고른 것(OnMouseClick/OnKeyPress)만 이동이고, 코드 선택(Direct)은 무시한다. */
 	UFUNCTION() void HandleSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
 
-	/** 콤보 항목/본문 위젯 — 흰 드롭다운 위에 검은 글자(카메라 패널 콤보와 같은 규약). */
+	/** 콤보 항목/본문 위젯 — 어두운 입력칸·목록 위에 흰 굵은 글자(시안 "주차장 선택 카드"). */
 	UFUNCTION() UWidget* HandleGenerateItem(FString Item);
 
 private:

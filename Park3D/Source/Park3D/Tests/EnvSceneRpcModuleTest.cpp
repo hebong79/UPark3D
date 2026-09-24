@@ -32,7 +32,7 @@ namespace
 		return (GEngine && GEngine->GetWorldContexts().Num() > 0) ? GWorld : nullptr;
 	}
 
-	TSharedPtr<FJsonObject> Vec3Param(double X, double Y, double Z)
+	TSharedPtr<FJsonObject> EnvVec3Param(double X, double Y, double Z)
 	{
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetNumberField(TEXT("x"), X);
@@ -94,7 +94,7 @@ namespace
 		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
 		P->SetStringField(TEXT("asset"), TestCubePath);
 		P->SetStringField(TEXT("name"), Name);
-		P->SetObjectField(TEXT("pos"), Vec3Param(X, Y, Z));
+		P->SetObjectField(TEXT("pos"), EnvVec3Param(X, Y, Z));
 		return P;
 	}
 
@@ -162,7 +162,7 @@ bool FRpcEnvModulePropRoundTripTest::RunTest(const FString& Parameters)
 	TSharedPtr<FJsonObject> CP = CreateParam(TEXT("_AutomationTest_EnvProp"), 1.0, 0.5, 2.0);
 	TSharedPtr<FJsonObject> Rot = MakeShared<FJsonObject>(); Rot->SetNumberField(TEXT("yaw"), 90.0);
 	CP->SetObjectField(TEXT("rot"), Rot);
-	CP->SetObjectField(TEXT("scale"), Vec3Param(2, 2, 2));
+	CP->SetObjectField(TEXT("scale"), EnvVec3Param(2, 2, 2));
 	CP->SetStringField(TEXT("label"), TEXT("테스트 큐브"));
 	TSharedPtr<FJsonValue> CR;
 	TestTrue(TEXT("env.create 성공"), Dispatch(TEXT("env.create"), CP, CR));
@@ -309,7 +309,7 @@ bool FRpcEnvModuleSaveLoadTest::RunTest(const FString& Parameters)
 	TSharedPtr<FJsonObject> P1 = CreateParam(TEXT("_AutomationTest_Save_A"), 1, 0, 2);
 	TSharedPtr<FJsonObject> R1 = MakeShared<FJsonObject>(); R1->SetNumberField(TEXT("yaw"), 45.0);
 	P1->SetObjectField(TEXT("rot"), R1);
-	P1->SetObjectField(TEXT("scale"), Vec3Param(1, 1, 3));
+	P1->SetObjectField(TEXT("scale"), EnvVec3Param(1, 1, 3));
 	TestTrue(TEXT("create A"), Dispatch(TEXT("env.create"), P1, C1));
 	TestTrue(TEXT("create B"), Dispatch(TEXT("env.create"), CreateParam(TEXT("_AutomationTest_Save_B"), -3, 1, 4), C2));
 

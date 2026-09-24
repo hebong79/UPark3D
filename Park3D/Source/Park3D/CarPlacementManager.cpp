@@ -3,6 +3,7 @@
 #include "CarPlacementManager.h"
 #include "CarActor.h"
 #include "CarColorComponent.h"
+#include "CarColorPalette.h"
 #include "CarPlacementLibrary.h"
 #include "CameraControlManager.h"
 #include "PTZCameraActor.h"
@@ -728,20 +729,27 @@ bool ACarPlacementManager::AreAllCarsHidden() const
 
 void ACarPlacementManager::SetRandomColorOfCarList(int32 Seed)
 {
+	SetRandomColorOfCarListFromPalette(Seed, {});
+}
+
+TArray<ACarActor*> ACarPlacementManager::SetRandomColorOfCarListFromPalette(int32 Seed, const TArray<ECarColor>& Palette)
+{
 	FRandomStream Stream = MakeStream(Seed);
-	// ECarColor 는 White(0)~Purple(9) 10종.
-	constexpr int32 ColorMax = static_cast<int32>(ECarColor::Purple);
+	TArray<ACarActor*> Painted;
 	for (ACarActor* Car : Cars)
 	{
 		if (Car && !Car->IsHidden() && Car->ColorComp)
 		{
-			const ECarColor Color = static_cast<ECarColor>(Stream.RandRange(0, ColorMax));
+			// 빈 팔레트면 ECarColor 10종(White(0)~Purple(9)) 전부 — 기존 동작.
+			const ECarColor Color = CarColorPalette::Pick(Stream, Palette);
 			Car->ColorComp->SetColorByEnum(Color);
 			// 머티리얼에만 칠하면 ToCarPosDatas → RebuildAll 왕복에서 색이 -1(원본색)로 되돌아간다.
 			// 데이터에도 남겨 저장/재생성 후에도 같은 색이 나오게 한다.
 			Car->CarData.color = static_cast<int32>(Color);
+			Painted.Add(Car);
 		}
 	}
+	return Painted;
 }
 
 int32 ACarPlacementManager::RandomizeVisiblePlateNumbers(int32 Seed)
@@ -792,9 +800,15 @@ int32 ACarPlacementManager::RandomizeVisiblePlateNumbers(int32 Seed)
 int32 ACarPlacementManager::ResetRandomPlacement(
 	ERandomResetMode Mode, const TArray<FCarPresetEntry>& Catalog, int32 RequestedCount, int32 Seed)
 {
+	return ResetRandomPlacementWithPalette(Mode, Catalog, RequestedCount, Seed, {});
+}
+
+int32 ACarPlacementManager::ResetRandomPlacementWithPalette(ERandomResetMode Mode,
+	const TArray<FCarPresetEntry>& Catalog, int32 RequestedCount, int32 Seed, const TArray<ECarColor>& Palette)
+{
 	if (Mode == ERandomResetMode::ColorOnly)
 	{
-		SetRandomColorOfCarList(Seed);
+		SetRandomColorOfCarListFromPalette(Seed, Palette);
 	}
 	else
 	{
@@ -822,7 +836,7 @@ int32 ACarPlacementManager::ResetRandomPlacement(
 			}
 		}
 
-		SetRandomColorOfCarList(Seed);
+		SetRandomColorOfCarListFromPalette(Seed, Palette);
 
 		// 이번에 보이는 대수만큼 번호판 번호도 새로 뽑는다. 재생성만으로는 절대 안 바뀐다 —
 		// 번호는 FCarPos.id 에서 결정적으로 나오고 RebuildAllRandomMesh 는 id 를 그대로 옮긴다.

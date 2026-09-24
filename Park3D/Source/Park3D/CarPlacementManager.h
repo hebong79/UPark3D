@@ -124,6 +124,12 @@ public:
 	void SetRandomColorOfCarList(int32 Seed = 0);
 
 	/**
+	 * SetRandomColorOfCarList 의 팔레트판(C++ 전용 — UFUNCTION 은 오버로드가 안 된다).
+	 * Palette 가 비면 10종 전부(기존 동작). @return 도색한 가시 차량.
+	 */
+	TArray<ACarActor*> SetRandomColorOfCarListFromPalette(int32 Seed, const TArray<ECarColor>& Palette);
+
+	/**
 	 * 지금 보이는 차량의 번호판 번호만 새로 뽑는다.
 	 * 번호는 FCarPos.id 에서 결정적으로 나오고(ACarActor::MakeDeterministicPlateNumber) 재생성이 id 를
 	 * 그대로 옮기므로, 이 창구를 거치지 않으면 몇 번을 랜덤 배치해도 번호는 한 번도 바뀌지 않는다.
@@ -154,6 +160,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Car|Random")
 	int32 ResetRandomPlacement(ERandomResetMode Mode, const TArray<FCarPresetEntry>& Catalog,
 		int32 RequestedCount = 0, int32 Seed = 0);
+
+	/** ResetRandomPlacement 의 팔레트판 — 색 단계가 Palette 에서만 뽑는다(빈 배열 = 10종, 기존 동작). */
+	int32 ResetRandomPlacementWithPalette(ERandomResetMode Mode, const TArray<FCarPresetEntry>& Catalog,
+		int32 RequestedCount, int32 Seed, const TArray<ECarColor>& Palette);
 
 	/**
 	 * 카탈로그의 모든 메시를 미리 로드해 캐시(메모리 풀)에 상주시킨다(하드 참조 → GC 언로드 방지).

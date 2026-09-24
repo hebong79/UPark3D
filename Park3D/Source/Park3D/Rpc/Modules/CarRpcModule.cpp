@@ -8,6 +8,7 @@
 #include "../../CarPlacementWidget.h"
 #include "../../CarActor.h"
 #include "../../CarColorComponent.h"
+#include "../../CarColorPalette.h"
 #include "../../CarPlacementLibrary.h"
 #include "../../CameraControlLibrary.h"
 #include "../../Park3DDataPaths.h"
@@ -98,9 +99,36 @@ namespace
 		return FPaths::Combine(Dir, FileName);
 	}
 
-	ECarColor RandomCarColor()
+	/**
+	 * `colors` 파라미터(ECarColor 정수 또는 이름 배열) → 랜덤 도색 팔레트. 없거나 빈 배열 = 10종 전부(기존 동작).
+	 * car.setRandomColor · car.resetRandom · car.placeAtSlot 이 같이 쓴다.
+	 */
+	bool ReadColorsParam(const TSharedPtr<FJsonObject>& P, TArray<ECarColor>& Out, FRpcError& E)
 	{
-		return static_cast<ECarColor>(FMath::RandRange(0, static_cast<int32>(ECarColor::Purple)));
+		Out.Reset();
+		if (!RpcParam::Has(P, TEXT("colors"))) { return true; }
+		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+		if (!P->TryGetArrayField(TEXT("colors"), Arr))
+		{
+			E.FailDomain(TEXT("colors 는 배열이어야 합니다 (ECarColor 정수 또는 이름: white/black/silver/gray/red/...)"));
+			return false;
+		}
+		FString Bad;
+		if (!CarColorPalette::ParseColorArray(*Arr, Out, Bad))
+		{
+			E.FailDomain(FString::Printf(TEXT("알 수 없는 색: %s (0~9 또는 white/black/silver/gray/red/blue/green/yellow/orange/purple)"), *Bad));
+			return false;
+		}
+		return true;
+	}
+
+	/** 도색 결과 1행 {carNameId, color}. */
+	TSharedPtr<FJsonValue> AppliedColorRow(const ACarActor* Car)
+	{
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("carNameId"), Car->CarData.id);
+		Row->SetNumberField(TEXT("color"), Car->CarData.color);
+		return MakeShared<FJsonValueObject>(Row);
 	}
 
 	/** 카탈로그에서 prefabName → prefabId. 못 찾으면 0. */
@@ -476,21 +504,54 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		return RpcDto::OkTrue();
 	});
 
+	// colors 로 팔레트를 좁힌다(없으면 10종). carNameId/carNameIds 가 없으면 가시 차량 전부.
+	// 고른 색은 CarData.color 에도 남긴다 — car.save·재생성 후에도 유지(SetRandomColorOfCarList 관례).
+	// colorsHonored 는 호출자가 이 빌드를 알아보는 표식이다(없으면 car.setColor r,g,b 폴백).
 	Dispatcher.Register(TEXT("car.setRandomColor"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
-		if (RpcParam::Has(P, TEXT("carNameId")))
+		TArray<ECarColor> Palette;
+		if (!ReadColorsParam(P, Palette, E)) return nullptr;
+
+		TArray<FString> Ids;
+		if (RpcParam::Has(P, TEXT("carNameId"))) { Ids.Add(RpcParam::GetString(P, TEXT("carNameId"))); }
+		const TArray<TSharedPtr<FJsonValue>>* IdArr = nullptr;
+		if (P.IsValid() && P->TryGetArrayField(TEXT("carNameIds"), IdArr))
 		{
-			const FString Id = RpcParam::GetString(P, TEXT("carNameId"));
-			ACarActor* Car = Mgr->FindByNameId(Id);
-			if (Car && Car->ColorComp) { Car->ColorComp->SetColorByEnum(RandomCarColor()); }
+			for (const TSharedPtr<FJsonValue>& V : *IdArr)
+			{
+				if (V.IsValid() && V->Type == EJson::String) { Ids.Add(V->AsString()); }
+			}
+		}
+
+		TArray<TSharedPtr<FJsonValue>> Applied, NotFound;
+		if (Ids.Num() == 0)
+		{
+			for (ACarActor* Car : Mgr->SetRandomColorOfCarListFromPalette(0, Palette)) { Applied.Add(AppliedColorRow(Car)); }
 		}
 		else
 		{
-			Mgr->SetRandomColorOfCarList(0);
+			// 없는 차는 기존처럼 조용히 건너뛰되 notFound 로 알린다.
+			FRandomStream Stream = PlateRpc::MakeStream(0);
+			for (const FString& Id : Ids)
+			{
+				ACarActor* Car = Mgr->FindByNameId(Id);
+				if (!Car || !Car->ColorComp) { NotFound.Add(MakeShared<FJsonValueString>(Id)); continue; }
+				const ECarColor Color = CarColorPalette::Pick(Stream, Palette);
+				Car->ColorComp->SetColorByEnum(Color);
+				Car->CarData.color = static_cast<int32>(Color);
+				Applied.Add(AppliedColorRow(Car));
+			}
 		}
-		return RpcDto::OkTrue();
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetBoolField(TEXT("colorsHonored"), true);
+		O->SetArrayField(TEXT("applied"), Applied);
+		O->SetArrayField(TEXT("notFound"), NotFound);
+		return RpcDto::MakeObject(O);
 	});
+	Dispatcher.SetMethodMeta(TEXT("car.setRandomColor"), { true, false, TEXT("{carNameId?, carNameIds?: string[], colors?: (int|string)[]}"), TEXT("랜덤 도색(CarData.color 기록). colors=팔레트(ECarColor 정수·이름, 빈값=10종), id 없으면 가시 차량 전부. {ok, colorsHonored, applied:[{carNameId,color}], notFound}") });
 
 	Dispatcher.Register(TEXT("car.setMetallic"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
@@ -626,15 +687,19 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 			E.FailDomain(FString::Printf(TEXT("허용되지 않은 mode: %s"), *Mode));
 			return nullptr;
 		}
+		TArray<ECarColor> Palette;
+		if (!ReadColorsParam(P, Palette, E)) return nullptr;
 		// count 는 요청을 되비추지 않는다 — 실제로 배치(가시)된 대수를 돌려줘야 화면이 사실을 말한다.
-		const int32 PlacedCount = Mgr->ResetRandomPlacement(ResetMode, Catalog, Count, 0);
+		const int32 PlacedCount = Mgr->ResetRandomPlacementWithPalette(ResetMode, Catalog, Count, 0, Palette);
 
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetBoolField(TEXT("ok"), true);
 		O->SetStringField(TEXT("mode"), Mode);
 		O->SetNumberField(TEXT("count"), PlacedCount);
+		O->SetBoolField(TEXT("colorsHonored"), true);
 		return RpcDto::MakeObject(O);
 	});
+	Dispatcher.SetMethodMeta(TEXT("car.resetRandom"), { true, false, TEXT("{mode?, count?, colors?: (int|string)[]}"), TEXT("랜덤 리셋(color/objectAndColor/countObjectAndColor). colors=색 단계 팔레트(빈값=10종). {ok, mode, count, colorsHonored}") });
 
 	/**
 	 * 지금 보이는 차량의 번호판 번호만 새로 뽑는다. car.resetRandom 이 마지막에 하는 일과 같은 백엔드지만,
@@ -882,6 +947,8 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		const int32 Seed = RpcParam::GetInt(P, TEXT("seed"), 0);
 		FRandomStream Stream = PlateRpc::MakeStream(Seed);
 		const bool bRandomColor = RpcParam::GetBool(P, TEXT("randomColor"), false);
+		TArray<ECarColor> Palette;   // randomColor=true 일 때만 쓴다
+		if (!ReadColorsParam(P, Palette, E)) return nullptr;
 		const bool bReplace = RpcParam::GetBool(P, TEXT("replace"), false);
 		const float U = Mgr->MetersToUU;
 
@@ -943,7 +1010,7 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 			if (!Car) { E.FailDomain(TEXT("차량 생성 실패")); return nullptr; }
 			if (bRandomColor && Car->ColorComp)
 			{
-				const ECarColor Color = static_cast<ECarColor>(Stream.RandRange(0, static_cast<int32>(ECarColor::Purple)));
+				const ECarColor Color = CarColorPalette::Pick(Stream, Palette);
 				Car->ColorComp->SetColorByEnum(Color);
 				Car->CarData.color = static_cast<int32>(Color); // 재생성 후에도 색 유지(SetRandomColorOfCarList 관례)
 			}
@@ -966,6 +1033,7 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetArrayField(TEXT("notFound"), NotFound);
 		O->SetArrayField(TEXT("removed"), Removed);
 		O->SetBoolField(TEXT("seedHonored"), true);
+		O->SetBoolField(TEXT("colorsHonored"), true);
 		return RpcDto::MakeObject(O);
 	});
 

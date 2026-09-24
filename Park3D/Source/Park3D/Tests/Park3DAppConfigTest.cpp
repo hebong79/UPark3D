@@ -515,4 +515,34 @@ bool FPark3DAppConfigLevelsTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// levels[] 의 주차 시뮬 키 — 게이트는 {x, y, yaw} 셋이 다 있어야 받고, 없으면 미지정(자동 계산).
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPark3DAppConfigSimGatesTest,
+	"Park3D.AppConfig.SimGates",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FPark3DAppConfigSimGatesTest::RunTest(const FString& Parameters)
+{
+	const FString Json = TEXT(R"({
+		"levels": [
+			{"name": "A", "level": "Levels/LV_A", "sim_entrance": {"x": 11.04, "y": 36.0, "yaw": -107.91}, "sim_exit": {"x": -24.45, "y": -73.8, "yaw": -107.91},
+			 "sim_aisle_m": 5.0, "lot_type": "Angled"},
+			{"name": "B", "level": "Levels/LV_B", "sim_entrance": {"x": 1.0, "y": 2.0}},
+			{"name": "C", "level": "Levels/LV_C"}
+		]
+	})");
+	FPark3DAppConfig C;
+	if (!TestTrue(TEXT("파싱"), UPark3DAppConfigLibrary::FromJson(Json, C)) || !TestEqual(TEXT("항목 3개"), C.Levels.Num(), 3))
+	{
+		return true;
+	}
+	const FPark3DLevelOption& A = C.Levels[0];
+	TestTrue(TEXT("A 입구"), A.SimEntrance.IsSet() && FVector::Dist(A.SimEntrance.GetValue(), FVector(11.04, 36.0, -107.91)) < 1e-6);
+	TestTrue(TEXT("A 출구"), A.SimExit.IsSet() && FVector::Dist(A.SimExit.GetValue(), FVector(-24.45, -73.8, -107.91)) < 1e-6);
+	TestTrue(TEXT("A 통로 폭"), A.SimAisleM.IsSet() && FMath::IsNearlyEqual(A.SimAisleM.GetValue(), 5.0f));
+	TestTrue(TEXT("A 유형은 소문자로"), A.LotType.IsSet() && A.LotType.GetValue() == TEXT("angled"));
+	TestFalse(TEXT("B: yaw 없는 게이트는 받지 않는다"), C.Levels[1].SimEntrance.IsSet());
+	TestFalse(TEXT("C: 키가 없으면 미지정"), C.Levels[2].SimEntrance.IsSet() || C.Levels[2].SimExit.IsSet() || C.Levels[2].SimAisleM.IsSet() || C.Levels[2].LotType.IsSet());
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

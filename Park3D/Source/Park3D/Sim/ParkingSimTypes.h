@@ -23,7 +23,7 @@ enum class EParkSimState : uint8
  * 주행 방향.
  *  - Enter : 입구 → 주차면 (입차). 끝나면 차량이 면에 남는다.
  *  - Exit  : 주차면 → 출구 (출차). 출구에 닿으면 차량을 제거한다.
- * 입구와 출구는 같은 지점(주차면 전체의 가장 우측 바깥 중앙)이다.
+ * 입구·출구는 sim.setGates > config levels[].sim_entrance/sim_exit > 자동 계산 순으로 정한다(ParkSimLot).
  */
 UENUM(BlueprintType)
 enum class EParkSimDir : uint8
@@ -89,7 +89,19 @@ struct FParkSimRecord
 	UPROPERTY() float entranceY = 0.f;
 	UPROPERTY() float durationSec = 0.f;
 	UPROPERTY() float distanceM = 0.f;
-	UPROPERTY() FString result;                    // 주차완료 / 출차완료 / 중단 / 시간초과
+	UPROPERTY() FString result;                    // 주차완료 / 출차완료 / 중단 / 시간초과 / 정체중단
+	UPROPERTY() FString faceKey;                   // 면 키("preset:<idx>#<slot>" / "level:<액터>#<인스턴스>")
+	UPROPERTY() int32 slotNumber = 0;              // 바닥에 찍힌 번호
+	UPROPERTY() FString lotType;                   // parallel / perpendicular / angled
+	UPROPERTY() FString maneuver;                  // 기동 가족 요약(예: "후진 셋업 62° + 전진")
+	UPROPERTY() float clearanceM = 0.f;            // 계획한 기동 구간의 최소 간격(m)
+	UPROPERTY() int32 gearChanges = 0;
+	UPROPERTY() float pathLengthM = 0.f;           // 계획 경로 전체 길이(m)
+	UPROPERTY() FString note;                      // 방식 대체 등 메모
+	UPROPERTY() float entranceYaw = 0.f;
+	UPROPERTY() float exitX = 0.f;
+	UPROPERTY() float exitY = 0.f;
+	UPROPERTY() float exitYaw = 0.f;
 	UPROPERTY() TArray<FParkSimWaypoint> waypoints;
 	UPROPERTY() TArray<FString> events;            // 사람이 읽는 이벤트 로그 줄
 	UPROPERTY() TArray<FParkSimFrame> frames;

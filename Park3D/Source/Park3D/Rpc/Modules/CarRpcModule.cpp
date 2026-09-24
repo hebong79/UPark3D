@@ -6,6 +6,7 @@
 #include "../RpcParamUtil.h"
 #include "../../CarPlacementManager.h"
 #include "../../CarPlacementWidget.h"
+#include "../../Sim/CarDriveManager.h"
 #include "../../CarActor.h"
 #include "../../CarColorComponent.h"
 #include "../../CarColorPalette.h"
@@ -445,6 +446,111 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		Car->ApplyTransformFromData(Mgr->MetersToUU);
 		return RpcDto::OkTrue();
 	});
+
+	// 연속 주행 — 차량을 현재 위치에서 path 의 점들을 차례로 지나 끝점까지 매 프레임 움직인다(보드 #805).
+	// car.setPosition 을 여러 번 부르는 방식은 스트림에서 순간이동으로 보인다. 면·회피는 모른다(지나가는 차 전용).
+	// 끝나도 차량은 그 자리에 남는다 — 지우는 것은 호출자(car.delete). 주행 중 car.delete 는 주행을 cancelled 로 끝낸다.
+	Dispatcher.Register(TEXT("car.drive"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
+		FString Id;
+		if (!RpcParam::RequireString(P, TEXT("carNameId"), Id, E)) return nullptr;
+		ACarActor* Car = Mgr->FindByNameId(Id);
+		if (!Car) { E.FailDomain(FString::Printf(TEXT("차량 없음: %s"), *Id)); return nullptr; }
+
+		const TArray<TSharedPtr<FJsonValue>>* PathArr = nullptr;
+		if (!P->TryGetArrayField(TEXT("path"), PathArr) || PathArr->Num() == 0)
+		{
+			E.FailDomain(TEXT("필수 파라미터 누락: path ([{x,y},...] UE 미터, 지면)"));
+			return nullptr;
+		}
+		TArray<FVector2D> Path;
+		for (int32 i = 0; i < PathArr->Num(); ++i)
+		{
+			const TSharedPtr<FJsonObject>* Pt = nullptr;
+			double X = 0.0, Y = 0.0;
+			if (!(*PathArr)[i]->TryGetObject(Pt) || !(*Pt)->TryGetNumberField(TEXT("x"), X) || !(*Pt)->TryGetNumberField(TEXT("y"), Y))
+			{
+				E.FailDomain(FString::Printf(TEXT("path[%d] 는 {x,y} 가 필수입니다"), i));
+				return nullptr;
+			}
+			Path.Add(FVector2D(X, Y));
+		}
+
+		double Speed = 4.0;
+		P->TryGetNumberField(TEXT("speedMps"), Speed);
+		if (!(Speed > 0.0 && Speed <= 40.0))
+		{
+			E.FailDomain(FString::Printf(TEXT("speedMps 는 0 초과 40 이하여야 합니다: %g"), Speed));
+			return nullptr;
+		}
+
+		// rotY: 생략 또는 "follow" = 진행 방향, 숫자 = 그 방향으로 고정(옆으로 미끄러지듯 이동).
+		bool bFollow = true;
+		double FixedRotY = 0.0;
+		if (P->HasField(TEXT("rotY")))
+		{
+			FString RotStr;
+			if (P->TryGetNumberField(TEXT("rotY"), FixedRotY)) { bFollow = false; }
+			else if (!(P->TryGetStringField(TEXT("rotY"), RotStr) && RotStr == TEXT("follow")))
+			{
+				E.FailDomain(TEXT("rotY 는 \"follow\" 또는 숫자(도)입니다"));
+				return nullptr;
+			}
+		}
+
+		ACarDriveManager* Drive = ACarDriveManager::GetOrSpawn(Mgr->GetWorld());
+		if (!Drive) { E.FailDomain(TEXT("주행 매니저를 만들 수 없습니다")); return nullptr; }
+		const int32 RunId = Drive->StartDrive(Car, Path, Speed, bFollow, static_cast<float>(FixedRotY));
+		const FCarDriveRun* Run = Drive->FindRun(RunId);
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetNumberField(TEXT("runId"), RunId);
+		O->SetStringField(TEXT("carNameId"), Id);
+		O->SetNumberField(TEXT("totalM"), Run ? Run->TotalM() : 0.0);
+		O->SetNumberField(TEXT("speedMps"), Speed);
+		O->SetNumberField(TEXT("etaSec"), Run ? Run->TotalM() / Speed : 0.0);
+		O->SetStringField(TEXT("state"), Run ? ACarDriveManager::StateName(Run->State) : TEXT("unknown"));
+		return RpcDto::MakeObject(O);
+	});
+	Dispatcher.SetMethodMeta(TEXT("car.drive"), { true, false, TEXT("{carNameId, path:[{x,y},...], speedMps?=4, rotY?:\"follow\"|deg}"),
+		TEXT("차량을 현재 위치에서 path 를 따라 매 프레임 연속 이동 → {runId, totalM, etaSec}. 끝나도 차량은 남는다(car.delete 가 취소 겸 제거)") });
+
+	Dispatcher.Register(TEXT("car.driveStatus"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
+		int32 RunId = 0;
+		if (!RpcParam::RequireInt(P, TEXT("runId"), RunId, E)) return nullptr;
+		// 조회가 씬을 바꾸지 않도록 매니저를 스폰하지 않는다.
+		ACarDriveManager* Drive = ACarDriveManager::Find(Mgr->GetWorld());
+		const FCarDriveRun* Run = Drive ? Drive->FindRun(RunId) : nullptr;
+		if (!Run) { E.FailDomain(FString::Printf(TEXT("주행 없음: runId %d (레벨 전환 뒤이거나 오래돼 버려짐)"), RunId)); return nullptr; }
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetNumberField(TEXT("runId"), Run->RunId);
+		O->SetStringField(TEXT("carNameId"), Run->CarNameId);
+		O->SetStringField(TEXT("state"), ACarDriveManager::StateName(Run->State));
+		if (!Run->EndReason.IsEmpty()) { O->SetStringField(TEXT("endReason"), Run->EndReason); }
+		O->SetNumberField(TEXT("distM"), Run->DistM);
+		O->SetNumberField(TEXT("totalM"), Run->TotalM());
+		O->SetNumberField(TEXT("progress"), Run->TotalM() > 0.0 ? Run->DistM / Run->TotalM() : 1.0);
+		O->SetNumberField(TEXT("speedMps"), Run->SpeedMps);
+		O->SetNumberField(TEXT("elapsedSec"), Run->ElapsedSec);
+		if (const ACarActor* Car = Run->Car.Get())
+		{
+			TSharedPtr<FJsonObject> Pos = MakeShared<FJsonObject>();
+			Pos->SetNumberField(TEXT("x"), Car->CarData.pos.x);
+			Pos->SetNumberField(TEXT("y"), Car->CarData.pos.y);
+			Pos->SetNumberField(TEXT("z"), Car->CarData.pos.z);
+			O->SetObjectField(TEXT("pos"), Pos);
+			O->SetNumberField(TEXT("rotY"), Car->CarData.rotY);
+		}
+		return RpcDto::MakeObject(O);
+	});
+	Dispatcher.SetMethodMeta(TEXT("car.driveStatus"), { false, false, TEXT("{runId}"),
+		TEXT("{state: driving|arrived|cancelled, endReason?: arrived|zeroLength|replaced|carRemoved, distM, totalM, elapsedSec, speedMps, progress, pos, rotY}") });
 
 	Dispatcher.Register(TEXT("car.groupMove"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{

@@ -9,6 +9,7 @@
 #include "../CarPlacementManager.h"
 #include "../CarActor.h"
 #include "../CarPlacementWidget.h"
+#include "../Sim/CarDriveManager.h"
 #include "../ParkingPresetManager.h"
 #include "Blueprint/UserWidget.h"
 #include "Blueprint/WidgetTree.h"
@@ -325,6 +326,159 @@ bool FRpcCarSelectionMarkTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("체크박스 체크"), Check->IsChecked());
 
 	Panel->MarkAsGarbage();   // 뒤 테스트가 이 패널을 'UI 있음'으로 보지 않게(IsValid 거짓)
+	CpCleanupCarManager(World);
+	return true;
+}
+
+// ===== car.drive / car.driveStatus: 폴리라인 연속 주행 (보드 #805) =====
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRpcCarDriveTest,
+	"Park3D.Rpc.CarModuleExt.Drive",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FRpcCarDriveTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = CpEditorWorld();
+	if (!World) { AddWarning(TEXT("에디터 월드 없음 — 건너뜀.")); return true; }
+	CpCleanupCarManager(World);
+
+	URpcDispatcher* D = NewObject<URpcDispatcher>();
+	FCarRpcModule Car([World]() -> UWorld* { return World; });
+	Car.SetCatalog(CpTestCatalog());
+	Car.Register(*D);
+
+	const FString Id = CpCreateCar(D, 1, 1);
+	ACarPlacementManager* Mgr = Cast<ACarPlacementManager>(UGameplayStatics::GetActorOfClass(World, ACarPlacementManager::StaticClass()));
+	ACarActor* A = Mgr ? Mgr->FindByNameId(Id) : nullptr;
+	if (!TestNotNull(TEXT("차량"), A)) return false;
+	const double X0 = A->CarData.pos.x, Y0 = A->CarData.pos.y;
+
+	auto Pt = [](double X, double Y) { TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>(); O->SetNumberField(TEXT("x"), X); O->SetNumberField(TEXT("y"), Y); return MakeShared<FJsonValueObject>(O); };
+	auto Drive = [&](const TArray<TSharedPtr<FJsonValue>>& Path, double Speed, bool& bOk) -> TSharedPtr<FJsonValue>
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+		P->SetStringField(TEXT("carNameId"), Id);
+		P->SetArrayField(TEXT("path"), Path);
+		P->SetNumberField(TEXT("speedMps"), Speed);
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		bOk = D->Dispatch(TEXT("car.drive"), P, R, E);
+		return R;
+	};
+	auto Status = [&](int32 RunId) -> TSharedPtr<FJsonValue>
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>(); P->SetNumberField(TEXT("runId"), RunId);
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestTrue(TEXT("car.driveStatus 성공"), D->Dispatch(TEXT("car.driveStatus"), P, R, E));
+		return R;
+	};
+	auto PosXY = [&](const TSharedPtr<FJsonValue>& R, double& X, double& Y)
+	{
+		const TSharedPtr<FJsonObject>* Pos = nullptr;
+		X = Y = 1e9;
+		if (CpObj(R).IsValid() && CpObj(R)->TryGetObjectField(TEXT("pos"), Pos)) { (*Pos)->TryGetNumberField(TEXT("x"), X); (*Pos)->TryGetNumberField(TEXT("y"), Y); }
+	};
+	auto RotY = [&](const TSharedPtr<FJsonValue>& R) { double V = -1e9; if (CpObj(R).IsValid()) { CpObj(R)->TryGetNumberField(TEXT("rotY"), V); } return V; };
+
+	// 잘못된 입력 → 거부.
+	bool bOk = true;
+	Drive({}, 4, bOk);                                    TestFalse(TEXT("빈 path 거부"), bOk);
+	Drive({ Pt(X0 + 1, Y0) }, 0, bOk);                    TestFalse(TEXT("speed 0 거부"), bOk);
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+		P->SetStringField(TEXT("carNameId"), Id);
+		P->SetArrayField(TEXT("path"), { Pt(X0 + 1, Y0) });
+		P->SetStringField(TEXT("rotY"), TEXT("sideways"));
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestFalse(TEXT("rotY 문자열 거부"), D->Dispatch(TEXT("car.drive"), P, R, E));
+	}
+
+	// ㄱ 자 경로 10m + 10m, 5 m/s.
+	const TSharedPtr<FJsonValue> R0 = Drive({ Pt(X0 + 10, Y0), Pt(X0 + 10, Y0 + 10) }, 5, bOk);
+	TestTrue(TEXT("car.drive 성공"), bOk);
+	const int32 Run1 = CpNumField(R0, TEXT("runId"));
+	TestTrue(TEXT("runId > 0"), Run1 > 0);
+	TestEqual(TEXT("totalM 20"), CpNumField(R0, TEXT("totalM")), 20);
+	TestEqual(TEXT("etaSec 4"), CpNumField(R0, TEXT("etaSec")), 4);
+
+	ACarDriveManager* DM = ACarDriveManager::GetOrSpawn(World);
+	if (!TestNotNull(TEXT("주행 매니저"), DM)) return false;
+
+	DM->Advance(1.f);   // 5m — 첫 구간 중간, +X 방향.
+	double X = 0, Y = 0; TSharedPtr<FJsonValue> S = Status(Run1); PosXY(S, X, Y);
+	TestEqual(TEXT("1초 뒤 state driving"), CpStrField(S, TEXT("state")), FString(TEXT("driving")));
+	TestTrue(TEXT("1초 뒤 x = x0+5"), FMath::IsNearlyEqual(X, X0 + 5, 0.01));
+	TestTrue(TEXT("1초 뒤 y = y0"), FMath::IsNearlyEqual(Y, Y0, 0.01));
+	TestTrue(TEXT("첫 구간 rotY 0"), FMath::IsNearlyEqual(RotY(S), 0.0, 0.1));
+
+	DM->Advance(2.5f);  // 17.5m — 둘째 구간 7.5m, +Y 방향.
+	S = Status(Run1); PosXY(S, X, Y);
+	TestTrue(TEXT("3.5초 뒤 x = x0+10"), FMath::IsNearlyEqual(X, X0 + 10, 0.01));
+	TestTrue(TEXT("3.5초 뒤 y = y0+7.5"), FMath::IsNearlyEqual(Y, Y0 + 7.5, 0.01));
+	TestTrue(TEXT("둘째 구간 rotY 90"), FMath::IsNearlyEqual(RotY(S), 90.0, 0.1));
+
+	DM->Advance(1.f);   // 끝.
+	S = Status(Run1); PosXY(S, X, Y);
+	TestEqual(TEXT("도착"), CpStrField(S, TEXT("state")), FString(TEXT("arrived")));
+	TestTrue(TEXT("끝점 y"), FMath::IsNearlyEqual(Y, Y0 + 10, 0.01));
+	TestNotNull(TEXT("도착 뒤 차량은 남는다"), Mgr->FindByNameId(Id));
+
+	// 길이 0 경로(현재 위치 한 점) → 즉시 arrived / zeroLength.
+	{
+		const TSharedPtr<FJsonValue> RZ = Drive({ Pt(A->CarData.pos.x, A->CarData.pos.y) }, 5, bOk);
+		TestTrue(TEXT("길이 0 경로 성공"), bOk);
+		TestEqual(TEXT("길이 0 totalM"), CpNumField(RZ, TEXT("totalM")), 0);
+		const TSharedPtr<FJsonValue> SZ = Status(CpNumField(RZ, TEXT("runId")));
+		TestEqual(TEXT("길이 0 → arrived"), CpStrField(SZ, TEXT("state")), FString(TEXT("arrived")));
+		TestEqual(TEXT("길이 0 사유"), CpStrField(SZ, TEXT("endReason")), FString(TEXT("zeroLength")));
+	}
+
+	// 실제 시험 차선(객리단길 9번 옆 통로, 요청 #805): 97.61m 를 5.56 m/s(20km/h) → 17.56초, 7.5fps 스텝으로 진행.
+	{
+		Drive({ Pt(-21.67, -65.36) }, 40, bOk);
+		DM->Advance(30.f);   // 차선 시작점으로 옮겨 둔다.
+		const TSharedPtr<FJsonValue> RL = Drive({ Pt(8.35, 27.52) }, 5.56, bOk);
+		const int32 Lane = CpNumField(RL, TEXT("runId"));
+		double TotalM = 0, Eta = 0;
+		CpObj(RL)->TryGetNumberField(TEXT("totalM"), TotalM);
+		CpObj(RL)->TryGetNumberField(TEXT("etaSec"), Eta);
+		TestTrue(FString::Printf(TEXT("차선 totalM 97.61 (%.3f)"), TotalM), FMath::IsNearlyEqual(TotalM, 97.61, 0.02));
+		TestTrue(FString::Printf(TEXT("차선 etaSec 17.56 (%.3f)"), Eta), FMath::IsNearlyEqual(Eta, 17.556, 0.01));
+		int32 Frames = 0;
+		while (Frames < 1000 && CpStrField(Status(Lane), TEXT("state")) == TEXT("driving"))
+		{
+			DM->Advance(1.f / 7.5f);
+			++Frames;
+		}
+		const TSharedPtr<FJsonValue> SL = Status(Lane);
+		double Elapsed = 0; CpObj(SL)->TryGetNumberField(TEXT("elapsedSec"), Elapsed);
+		TestEqual(TEXT("차선 도착"), CpStrField(SL, TEXT("state")), FString(TEXT("arrived")));
+		TestTrue(FString::Printf(TEXT("차선 소요 17.6초 안팎 (%.3f)"), Elapsed), Elapsed >= 17.5 && Elapsed <= 17.7);
+		TestTrue(FString::Printf(TEXT("차선 진행 방향 72.1도 (%.2f)"), RotY(SL)), FMath::IsNearlyEqual(RotY(SL), 72.09, 0.05));
+	}
+
+	// 같은 차에 새 주행 → 옛 주행 replaced.
+	const int32 Run2 = CpNumField(Drive({ Pt(X0, Y0 + 10) }, 5, bOk), TEXT("runId"));
+	const int32 Run3 = CpNumField(Drive({ Pt(X0, Y0) }, 5, bOk), TEXT("runId"));
+	TestEqual(TEXT("교체된 주행 cancelled"), CpStrField(Status(Run2), TEXT("state")), FString(TEXT("cancelled")));
+	TestEqual(TEXT("교체 사유"), CpStrField(Status(Run2), TEXT("endReason")), FString(TEXT("replaced")));
+
+	// 주행 중 car.delete → cancelled(carRemoved).
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>(); P->SetStringField(TEXT("carNameId"), Id);
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestTrue(TEXT("car.delete"), D->Dispatch(TEXT("car.delete"), P, R, E));
+	}
+	DM->Advance(0.1f);
+	TestEqual(TEXT("삭제 뒤 cancelled"), CpStrField(Status(Run3), TEXT("state")), FString(TEXT("cancelled")));
+	TestEqual(TEXT("삭제 사유"), CpStrField(Status(Run3), TEXT("endReason")), FString(TEXT("carRemoved")));
+
+	// 모르는 runId → -32000.
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>(); P->SetNumberField(TEXT("runId"), 999999);
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestFalse(TEXT("모르는 runId 거부"), D->Dispatch(TEXT("car.driveStatus"), P, R, E));
+	}
+
+	DM->Destroy();
 	CpCleanupCarManager(World);
 	return true;
 }

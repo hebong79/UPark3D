@@ -142,6 +142,21 @@ bool UPark3DAppConfigLibrary::FromJson(const FString& Json, FPark3DAppConfig& Ou
 			if ((*Obj)->TryGetStringField(TEXT("carpos_file"), Str))    { Opt.CarPosFile = Str.TrimStartAndEnd(); }
 			if ((*Obj)->TryGetStringField(TEXT("camerapos_file"), Str)) { Opt.CameraPosFile = Str.TrimStartAndEnd(); }
 			if ((*Obj)->TryGetStringField(TEXT("slot_file"), Str))      { Opt.SlotFile = Str.TrimStartAndEnd(); }
+			// 주차 시뮬 게이트: {x, y, yaw} 셋이 다 있어야 받는다(한 값만 빠져도 엉뚱한 곳이 입구가 된다).
+			for (const TPair<const TCHAR*, TOptional<FVector>*> Gate : { TPair<const TCHAR*, TOptional<FVector>*>(TEXT("sim_entrance"), &Opt.SimEntrance),
+				TPair<const TCHAR*, TOptional<FVector>*>(TEXT("sim_exit"), &Opt.SimExit) })
+			{
+				const TSharedPtr<FJsonObject>* G = nullptr;
+				double Gx = 0, Gy = 0, Gyaw = 0;
+				if ((*Obj)->TryGetObjectField(Gate.Key, G) && G && G->IsValid()
+					&& (*G)->TryGetNumberField(TEXT("x"), Gx) && (*G)->TryGetNumberField(TEXT("y"), Gy) && (*G)->TryGetNumberField(TEXT("yaw"), Gyaw))
+				{
+					*Gate.Value = FVector(Gx, Gy, Gyaw);
+				}
+			}
+			double Aisle = 0.0;
+			if ((*Obj)->TryGetNumberField(TEXT("sim_aisle_m"), Aisle) && Aisle > 0.0) { Opt.SimAisleM = static_cast<float>(Aisle); }
+			if ((*Obj)->TryGetStringField(TEXT("lot_type"), Str) && !Str.TrimStartAndEnd().IsEmpty()) { Opt.LotType = Str.TrimStartAndEnd().ToLower(); }
 			Parsed.Levels.Add(MoveTemp(Opt));
 		}
 	}

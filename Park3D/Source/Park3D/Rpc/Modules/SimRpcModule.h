@@ -1,5 +1,5 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
-// SimRpcModule : sim.* (7) 핸들러. 입·출차 시뮬레이션의 시작/시나리오/중단/조회/목록/리플레이/입구조회.
+// SimRpcModule : sim.* (11) 핸들러. 입·출차 시뮬레이션의 시작/시나리오/출차/계획/면목록/게이트조회·지정/중단/조회/목록/리플레이/입구조회.
 // 실동작은 전부 AParkingSimManager 가 한다(HUD 버튼·단축키와 같은 진입점을 공유).
 //
 // 주행은 여러 건이 동시에 돌 수 있다(액터 1개 = 주행 1건). 시작 계열은 새 주행을 만들고 runId 를 돌려주며,

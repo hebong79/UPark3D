@@ -34,6 +34,17 @@ struct FPark3DLevelOption
 	TOptional<FString> CarPosFile;
 	TOptional<FString> CameraPosFile;
 	TOptional<FString> SlotFile;
+
+	/**
+	 * 주차 시뮬 입구·출구(UE 월드 미터, Z 자리에 진행 yaw 도). JSON `sim_entrance`/`sim_exit` = {x, y, yaw}.
+	 * 없으면 시뮬이 면 배치로 자동 계산한다. 비-UPROPERTY — 쿠킹 에셋이 이 구조체를 참조하지 않지만 JSON 파서 전용 값이라 둘 필요가 없다.
+	 */
+	TOptional<FVector> SimEntrance;
+	TOptional<FVector> SimExit;
+	/** 통로 폭(m). 없으면 유형 기본값(정형 6.0, 사선 5.5). JSON `sim_aisle_m`. */
+	TOptional<float> SimAisleM;
+	/** 면 유형 강제("parallel"/"perpendicular"/"angled"). 없으면 면 배치로 자동 판정. JSON `lot_type`. */
+	TOptional<FString> LotType;
 };
 
 /** config_pmaker.json 한 벌. 값이 없는 항목은 "미지정"(0/빈 문자열)으로 남겨 호출부가 건너뛴다. */

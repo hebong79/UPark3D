@@ -1,42 +1,58 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
-// ParkingSimManager : 차량 1대의 입차(입구 → 무작위 주차면)와 출차(무작위 주차면 → 출구)를 시뮬레이션한다.
-// 두 방향은 같은 경로 골격을 뒤집어 쓴다. 출차는 출구에 닿는 순간 차량을 제거한다.
+// ParkingSimManager : 차량 1대의 입차(입구 → 빈 주차면)와 출차(주차면 → 출구)를 실제 차처럼 시뮬레이션한다.
 //
 // 액터 1개 = 주행 1건이다. 주행 상태(경로·위치·기록·리플레이)가 전부 이 액터의 멤버이고 Tick 이 그 상태를
 // 돌리므로, 동시에 여러 대를 굴리려면 액터를 그만큼 스폰한다(SpawnRun). 각 주행은 RunId 로 식별하고
 // 완료 뒤에도 기록 조회를 위해 액터가 남는다(KeepFinishedRuns 를 넘으면 오래된 것부터 정리).
-// 주의: 차량 간 충돌 회피는 없다 — 경로가 겹치면 두 차가 서로 통과한다.
 //
-// 기하 권위는 AParkingPresetManager::ComputeSlotCorners 다(라인/데칼/차량배치와 같은 사각형 위에서 움직인다).
-// 경로는 탐색 없이 "입구 → 통로 → 진입점 → 주차면 중심" 4점으로 만든다. 통로는 대상 면의 열린 쪽
-// (맞은편 열이 없는 쪽) 앞을 지나는 직선이며, 입구가 주차장 바깥에 있으므로 첫 구간은 항상 외곽을 지난다.
-// 주행은 웨이포인트 추종(각속도 제한 + 가감속)이고, 조향각이 크면 속도를 0으로 떨어뜨려 제자리 선회한다
-// — 이때가 사용자 요구의 "정지" 상태다.
+// 면·경로는 ParkSimLot 이 정한다: 면 출처는 바닥 번호 목록(프리셋 면 + 레벨 BP_ParkingSlot 면), 유형(도로변·정형·사선)은
+// 면 배치로 판정하고, 경로는 곡률 ≤ 1/최소회전반경 인 호·직선뿐이다(ParkManeuverPlanner) — 제자리 선회가 없다.
+//  - 도로변: 항상 후진주차(앞차 옆에 섰다가 후진). 출차는 살짝 틀어 바로 나가고, 앞 여유가 모자라면 그때만 조금 후진.
+//  - 정형·사선: 전진·후진 모두. 요청한 방식으로 안전 간격을 못 지키면 다른 방식으로 바꾸고 이유를 기록한다.
+// 주행은 계획 경로를 속도 프로파일(통로 3.0 / 기동 1.1 / 후진 0.7 m/s, 기어 전환마다 정지)로 따라간다.
+// 경로 밖으로 피하지는 않는다 — 다른 주행 차량이 앞을 막으면 속도만 줄여 선다(종방향 회피).
 
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "ParkingSimTypes.h"
+#include "ParkSimLot.h"
 #include "../ParkingCarTypes.h"
-#include "../ParkingPresetTypes.h"
 #include "ParkingSimManager.generated.h"
 
 class ACarActor;
 class ACarPlacementManager;
-class AParkingPresetManager;
 
-/** 주차면 1개의 주행용 기하(전부 미터, UE XY). */
-struct FParkSimSlot
+/** 주행 요청. 면 지정은 faceKey > 바닥 번호 > (presetId, slotIndex) 순으로 본다. 아무것도 없으면 무작위. */
+struct FParkSimRequest
 {
+	EParkSimDir Dir = EParkSimDir::Enter;
 	int32 PresetId = 0;
-	int32 SlotIndex = 0;                 // 1-based
-	FVector2D Center = FVector2D::ZeroVector;
-	FVector2D RowDir = FVector2D(0, 1);  // 면이 늘어서는 방향(단위)
-	FVector2D DepthDir = FVector2D(1, 0);// 차량이 드나드는 방향(단위)
-	float DepthM = 5.f;                  // 진입 축 길이
-	float WidthM = 2.5f;                 // 폭
-	FVector2D Corners[4] = { FVector2D::ZeroVector, FVector2D::ZeroVector, FVector2D::ZeroVector, FVector2D::ZeroVector };
+	int32 SlotIndex = 0;
+	int32 SlotNumber = 0;
+	FString FaceKey;
+	int32 Seed = 0;
+	EParkSimParkMode Mode = EParkSimParkMode::Random;
+	/** 참이면 요청한 방식만 시도한다(안 되면 다른 방식으로 바꾸지 않고 실패). 도로변 전면 요청은 그래도 후진이다. */
+	bool bStrictMode = false;
+	int32 PrefabId = 0;
+};
+
+/** 면 선택 + 계획 결과(주행 전). sim.plan 이 이것만 돌려준다. */
+struct FParkSimChoice
+{
+	FParkSimLotSlot Slot;
+	FParkSimWorldPlan Plan;
+	FParkSimGate Entrance;
+	FParkSimGate Exit;
+	/** 출차에서 인수할 차량(없으면 새로 세운다). */
+	TWeakObjectPtr<ACarActor> ExistingCar;
+	/** 실제로 쓴 주차 방식(입차=넣는 방식, 출차=출발 자세). */
+	EParkSimParkMode Resolved = EParkSimParkMode::Rear;
+	int32 PrefabId = 0;
+	/** 계획을 시도한 면 수(실패로 건너뛴 면 포함). */
+	int32 Tried = 0;
 };
 
 UCLASS()
@@ -51,6 +67,8 @@ public:
 	static constexpr int32 MaxConcurrentRuns = 16;
 	/** 끝난 주행 액터를 몇 건까지 남겨 둘지(기록 조회용). 넘으면 오래된 것부터 파괴한다. */
 	static constexpr int32 KeepFinishedRuns = 20;
+	/** 무작위 면 선택에서 계획을 시도할 최대 면 수(면마다 수십~수백 ms 가 걸린다). */
+	static constexpr int32 MaxPlanTries = 8;
 
 	/**
 	 * 새 주행용 매니저를 스폰한다(RunId 자동 부여). 기존 주행은 건드리지 않으므로 동시에 여러 건이 돈다.
@@ -70,6 +88,14 @@ public:
 	/** 지금 움직이고 있는(주행 또는 리플레이) 주행 수. */
 	static int32 CountBusyRuns(UWorld* World);
 
+	/**
+	 * 면을 고르고 경로를 계획한다(차량을 만들거나 움직이지 않는다). 주행 시작과 sim.plan 이 같이 쓴다.
+	 * @param Self 이 계획으로 달릴 주행(자기 자신은 "다른 주행이 쓰는 면"에서 뺀다). sim.plan 은 nullptr.
+	 * 실패하면 false 지만 Out.Slot/Out.Plan 에는 마지막으로 시도한 면의 가장 나은 후보(bOk=false)가 남는다.
+	 */
+	static bool ChooseAndPlan(UWorld* World, const FParkSimRequest& Req, const AParkingSimManager* Self,
+		FParkSimChoice& Out, FString& OutError);
+
 	virtual void Tick(float DeltaSeconds) override;
 
 	/** 이 주행의 식별자(1부터). 완료 후에도 유지된다. */
@@ -82,17 +108,14 @@ public:
 	bool IsBusy() const { return IsDriving() || State == EParkSimState::Replay; }
 
 	/**
-	 * 시뮬레이션 시작. 진행 중이면 기존 주행을 버리고 새로 시작한다.
-	 * @param Dir         Enter=입구→주차면(차량은 면에 남는다), Exit=주차면→출구(도착하면 차량을 제거한다).
-	 * @param InPresetId  0 이하면 무작위. 지정하면 그 프리셋 안에서만 면을 고른다.
-	 * @param InSlotIndex 0 이하면 무작위(1-based).
-	 * @param Seed        0 이하면 비결정.
-	 * @param Mode        전면/후면/랜덤 주차. 랜덤은 같은 Seed 스트림에서 50:50 으로 뽑는다.
-	 *                    출차에서는 "출발 시점의 주차 자세"이며, 전면주차면 슬롯에서 후진으로 빠져나온다.
-	 * @param InPrefabId  0 이하면 카탈로그에서 무작위. 지정하면 그 차종으로 스폰한다(가림 연출은 가리개 크기가 중요하다).
+	 * 시뮬레이션 시작(기존 진입점 — HUD·단축키). 면 지정이 (presetId, slotIndex) 뿐인 요청으로 바꿔 StartRequest 에 넘긴다.
+	 * @param Mode 전면/후면/랜덤. 도로변 면은 항상 후면(후진)주차다. 출차에서는 새로 세우는 차의 자세.
 	 */
 	bool StartSim(EParkSimDir Dir, int32 InPresetId, int32 InSlotIndex, int32 Seed, EParkSimParkMode Mode,
 		FString& OutError, int32 InPrefabId = 0);
+
+	/** 요청 구조체로 시작한다(RPC). 진행 중이면 기존 주행을 버리고 새로 시작한다. */
+	bool StartRequest(const FParkSimRequest& Req, FString& OutError);
 
 	/** 주행 중단. bRemoveCar 면 차량도 제거한다. */
 	void StopSim(bool bRemoveCar);
@@ -103,11 +126,11 @@ public:
 	/**
 	 * 시나리오 1회분: 주행 시작 → 완료 감지 → DelaySec 뒤 리플레이 자동 재생까지 한 번에 예약한다.
 	 * 호출은 즉시 반환하고(핸들러가 게임 스레드라 기다리면 시뮬이 멈춘다), 진행은 GetPhaseLabel/sim.status 로 본다.
-	 * 입차는 끝나도 차량이 주차면에 남고, 출차는 출구 도착 시 제거된다(리플레이 재생 중에만 다시 나타난다).
-	 * @param bReplay false 면 StartSim 과 동일(주행까지만).
+	 * @param bReplay false 면 StartRequest 와 동일(주행까지만).
 	 */
 	bool StartScenario(EParkSimDir Dir, int32 InPresetId, int32 InSlotIndex, int32 Seed, EParkSimParkMode Mode,
 		bool bReplay, float ReplayDelaySec, float ReplaySpeedScale, FString& OutError, int32 InPrefabId = 0);
+	bool StartScenarioRequest(const FParkSimRequest& Req, bool bReplay, float ReplayDelaySec, float ReplaySpeedScale, FString& OutError);
 
 	/** "front"/"rear"/"random"(및 "전면"/"후면") 문자열 → 모드. 빈 문자열/미인식은 Random. */
 	static EParkSimParkMode ParseParkMode(const FString& Text);
@@ -128,6 +151,11 @@ public:
 	float GetDistance() const { return TraveledM; }
 	const FString& GetLastLogPath() const { return LastLogPath; }
 	const FString& GetLastJsonPath() const { return LastJsonPath; }
+	/** 이번 주행의 계획(월드). 리플레이만 한 주행이면 비어 있다. */
+	const FParkSimWorldPlan& GetPlan() const { return Plan; }
+	/** 지금 달리는 구간(없으면 INDEX_NONE)과 기어(+1/-1). */
+	int32 GetCurrentSegment() const { return CurSeg; }
+	int32 GetCurrentGear() const { return CurGear; }
 
 	/** 상태 한글 라벨(HUD·로그 공용). */
 	static FString StateLabel(EParkSimState S);
@@ -144,31 +172,26 @@ public:
 	/** 모든 주차면을 감싸는 사각형(m). 면이 하나도 없으면 false. */
 	bool ComputeLotBounds(FBox2D& OutBounds);
 
-	/** 입구 겸 출구 = 주차면 전체의 가장 우측(+Y) 바깥, 나머지 축은 중앙. */
+	/** 입구 위치(m). 면이 없으면 false. 방향·출구까지 필요하면 ParkSimLot::ResolveGates. */
 	bool ComputeEntrance(FVector2D& OutEntrance);
 
-	// ---- 주행 파라미터(미터/초/도) ----
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Layout") float EntranceMarginM = 8.f;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Layout") float ApproachMarginM = 3.5f;
+	// ---- 주행 파라미터(미터/초) ----
+	/** 통로 주행 속도 상한. 기동 구간 속도는 계획기가 정한다(기동 1.1, 후진 0.7, 면 안 0.5). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Drive") float CruiseSpeedMps = 3.f;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Drive") float FinalSpeedMps = 1.f;
-	/** 후면주차의 후진 속도. 전진보다 느려야 후진처럼 보인다. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Drive") float ReverseSpeedMps = 0.6f;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Drive") float AccelMps2 = 2.f;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Drive") float DecelMps2 = 3.f;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Drive") float MaxYawRateDeg = 70.f;
-	/** 이 각도보다 크게 틀어야 하면 속도를 0 으로 두고 제자리에서 돌린다(= 정지 상태). */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Drive") float PivotYawErrDeg = 30.f;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Drive") float ArriveRadiusM = 1.f;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Drive") float ParkToleranceM = 0.12f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Drive") float AccelMps2 = 0.8f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Drive") float DecelMps2 = 1.2f;
+	/** 기어를 바꿀 때(전진↔후진) 완전히 서 있는 시간. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Drive") float GearPauseSec = 0.7f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Drive") float SampleIntervalSec = 0.05f;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Drive") float MaxSimSeconds = 180.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Drive") float MaxSimSeconds = 240.f;
 
 	// ---- 차량 간 충돌 회피 ----
 	// 조향은 그대로 두고 속도만 줄인다(경로를 벗어나 피하지는 않는다). 앞차와 나란히 서는 "종방향 회피".
+	// 기동 구간(면에 드나드는 구간)에서는 주행 중인 다른 시뮬 차량만 본다 — 서 있는 차는 계획이 이미 간격을 검사했고,
+	// 바로 옆·뒤에 서 있는 차를 "앞을 막는 차"로 보면 주차 도중에 서 버린다.
 	/** 끄면 예전처럼 서로 통과한다. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Avoid") bool bAvoidCollision = true;
-	/** 진행 방향 몇 미터 앞까지 다른 주행 차량을 보는가. */
+	/** 진행 방향 몇 미터 앞까지 다른 차량을 보는가. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Avoid") float AvoidLookAheadM = 9.f;
 	/** 진행축 기준 좌우 감시 폭(반폭). 이보다 옆으로 벗어난 차는 내 길을 막지 않는 것으로 본다. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Avoid") float AvoidCorridorHalfM = 1.7f;
@@ -179,63 +202,34 @@ public:
 	 * 마주 보고 선 두 대가 영원히 서 있는 것을 막는 안전장치다 — 이때는 두 차가 겹쳐 지나간다.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Avoid") float AvoidDeadlockSec = 4.f;
-	/**
-	 * 출차 통로를 주차면 바깥쪽으로 이만큼 민다. 입차는 통로 중심을 그대로 쓰므로
-	 * 같은 열에서 마주쳐도 옆으로 스쳐 지나간다(우측통행 대용).
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sim|Layout") float ExitLaneOffsetM = 2.5f;
 
 private:
-	// ---- 기하 ----
-	AParkingPresetManager* FindPresetManager() const;
 	ACarPlacementManager* FindCarManager() const;
 
-	/**
-	 * 주차면 목록의 출처를 정한다.
-	 * 1순위 AParkingPresetManager::StoredPresets(RPC preset.load 경로),
-	 * 비어 있으면 config_pmaker.json 의 preset_file 을 직접 읽는다.
-	 * — 시작 시 자동 로딩은 PresetMakerWidget 이 자기 배열로만 그리기 때문에 매니저 목록이 비어 있다.
-	 */
-	const TArray<FParkingPreset>& ResolvePresets();
-
-	/** 모든 프리셋의 모든 면을 주행용 기하로 펼친다. */
-	void BuildAllSlots(TArray<FParkSimSlot>& Out);
-
-	/** 다른 주행이 지금 쓰고 있는 (프리셋 idx, 면 번호) 집합. 같은 면에 두 대가 겹치지 않게 후보에서 뺀다. */
-	void CollectOccupiedSlots(TSet<TPair<int32, int32>>& Out) const;
+	/** 다른 주행이 지금 쓰고 있는 면(faceKey)과 그 차량들. */
+	static void CollectBusy(UWorld* World, const AParkingSimManager* Self, TSet<FString>& OutFaces, TSet<const ACarActor*>& OutCars);
 
 	/** 끝난 주행 액터가 KeepFinishedRuns 를 넘으면 오래된 것부터 파괴한다(SpawnRun 에서 호출). */
 	static void PruneFinishedRuns(UWorld* World);
 
-	/** 대상 면이 드나들 수 있는 쪽(±DepthDir)을 고른다. 맞은편 열에 막히지 않은 쪽 우선. */
-	FVector2D ChooseOpenDir(const FParkSimSlot& Target, const TArray<FParkSimSlot>& All, const FBox2D& Bounds) const;
-
-	/** 볼록 사각형 내부 판정. */
-	static bool IsInsideQuad(const FVector2D& P, const FVector2D(&Q)[4]);
-
-	/**
-	 * 이 주차면 안에 서 있는 차량(없으면 nullptr). 손으로 배치했든 랜덤이든 시뮬이 세웠든 가리지 않는다.
-	 * 입차는 이걸로 "빈 면"을 고르고, 출차는 이걸로 "몰고 나갈 차"를 고른다.
-	 */
-	ACarActor* FindCarInSlot(const FParkSimSlot& Slot) const;
-
-	/** DT_CarCatalog 를 1회 로드해 캐시(RPC·UI 어느 쪽에서 시작해도 같은 카탈로그를 쓴다). */
-	const TArray<FCarPresetEntry>& EnsureCatalog();
+	/** 차량 카탈로그(car_catalog.json 폴백 포함)를 1회 로드해 캐시. */
+	static const TArray<FCarPresetEntry>& SharedCatalog();
 
 	// ---- 주행 ----
+	/** 계획 경로를 0.05 m 표본으로 펼치고 기어 단위 속도 프로파일을 만든다. */
+	void BuildTrack();
 	void TickDrive(float Dt);
 
 	/**
 	 * 전방 감시로 목표 속도를 깎는다. 진행 통로(폭 ±AvoidCorridorHalfM, 길이 AvoidLookAheadM) 안에
-	 * 차량이 있으면 그 앞 AvoidSafeGapM 에서 설 수 있는 속도로 제한한다. 대상은 주차장의 모든 차량이다
-	 * — 다른 주행 차량이든 그냥 서 있는 차량이든 막으면 선다.
+	 * 차량이 있으면 그 앞 AvoidSafeGapM 에서 설 수 있는 속도로 제한한다.
+	 * @param bStaticToo 거짓이면 주행 중인 다른 시뮬 차량만 본다(기동 구간).
 	 * 다른 주행과 서로 막아 AvoidDeadlockSec 이상 굳으면 RunId 가 작은 쪽이 통과해 교착을 끊는다.
 	 * 서 있는 차량에 막힌 경우는 여기서 풀지 않는다(TickDrive 가 "정체중단"으로 접는다).
-	 * @param TravelDir 실제로 나아가는 방향(후진 구간은 차 방위의 반대).
-	 * @param MaxRangeM 이 거리 너머는 보지 않는다. 마지막 구간에서 목적지 뒤의 주차 차량을 오인하지 않게 한다.
 	 */
-	float ApplyAvoidance(float InTargetSpeed, const FVector2D& TravelDir, float MaxRangeM, float Dt);
+	float ApplyAvoidance(float InTargetSpeed, const FVector2D& TravelDir, float MaxRangeM, float Dt, bool bStaticToo);
 	void TickReplay(float Dt);
+	/** 차체 중심·진행 방위(도)로 차량을 놓는다. */
 	void ApplyCarPose(const FVector2D& PosM, float YawDegIn);
 
 	/** 차량 매니저에서 이번 주행 차량을 지운다(출차 완료·재시작 공용). */
@@ -260,38 +254,38 @@ private:
 
 	UPROPERTY(Transient) TObjectPtr<ACarActor> Car = nullptr;
 
-	UPROPERTY(Transient) TArray<FCarPresetEntry> CachedCatalog;
-	bool bCatalogLoaded = false;
+	/** 이번 주행의 계획과 그것을 펼친 궤적. */
+	FParkSimWorldPlan Plan;
+	struct FTrackPt
+	{
+		FVector2D Rear = FVector2D::ZeroVector;  // 뒷축 중심(m)
+		double Th = 0.0;                         // 진행 방위(라디안)
+		double S = 0.0;                          // 누적 거리(m)
+		double V = 0.0;                          // 속도 프로파일(m/s)
+		int32 Seg = 0;
+		int32 Gear = 1;
+	};
+	TArray<FTrackPt> Track;
+	/** 기어 단위 구간의 끝 표본 인덱스(오름차순, 마지막 = Track.Num()-1). */
+	TArray<int32> MoveEnds;
+	int32 MoveIdx = 0;
+	double CurS = 0.0;
+	int32 TrackIdx = 0;
+	float PauseLeft = 0.f;
+	int32 CurSeg = INDEX_NONE;
+	int32 CurGear = 1;
 
-	/** 매니저 목록이 비었을 때 config 파일에서 읽어 둔 프리셋(파일 경로가 바뀌지 않는 한 재사용). */
-	TArray<FParkingPreset> ConfigPresets;
-	FString ConfigPresetPath;
-
-	TArray<FVector2D> Waypoints;
-	TArray<FString> WaypointRoles;
-	int32 WpIndex = 0;
-
-	FVector2D PosM = FVector2D::ZeroVector;
+	FVector2D PosM = FVector2D::ZeroVector;   // 차체 중심(m)
+	/** 액터 원점 → 메시 바운즈 중심(차 기준 전방·우측, m). 원점이 차체 중심이 아닌 메시도 계획대로 놓기 위한 보정. */
+	FVector2D PivotOff = FVector2D::ZeroVector;
 	float YawDeg = 0.f;
 	float SpeedMps = 0.f;
 	float ElapsedSec = 0.f;
 	float SampleAccum = 0.f;
 	float TraveledM = 0.f;
-	float FinalYawDeg = 0.f;
 
 	/** 이번 주행의 방향. */
 	EParkSimDir RunDir = EParkSimDir::Enter;
-
-	/**
-	 * 후진으로 가는 구간의 인덱스. INDEX_NONE 이면 전 구간 전진.
-	 *  - 입차 + 후면주차 : 마지막 구간(진입점 → 면 중심)
-	 *  - 출차 + 전면주차 : 첫 구간(면 중심 → 진입점) — 코가 면 안쪽을 보고 있으니 빼낼 때 후진이다.
-	 */
-	int32 ReverseLegIndex = INDEX_NONE;
-	/** 슬롯 안팎을 오가는 저속 구간의 인덱스(입차=마지막, 출차=첫 구간). */
-	int32 SlotLegIndex = INDEX_NONE;
-	/** 후진 구간에 들어섰음을 로그에 한 번만 남기기 위한 래치. */
-	bool bReverseLogged = false;
 
 	// 충돌 회피 상태
 	/** 회피 때문에 서 있은 시간(교착 판정용). 길이 뚫리면 0 으로 돌아간다. */

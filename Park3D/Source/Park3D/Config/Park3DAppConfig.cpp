@@ -157,6 +157,8 @@ bool UPark3DAppConfigLibrary::FromJson(const FString& Json, FPark3DAppConfig& Ou
 			double Aisle = 0.0;
 			if ((*Obj)->TryGetNumberField(TEXT("sim_aisle_m"), Aisle) && Aisle > 0.0) { Opt.SimAisleM = static_cast<float>(Aisle); }
 			if ((*Obj)->TryGetStringField(TEXT("lot_type"), Str) && !Str.TrimStartAndEnd().IsEmpty()) { Opt.LotType = Str.TrimStartAndEnd().ToLower(); }
+			const TSharedPtr<FJsonObject>* Lane = nullptr;
+			if ((*Obj)->TryGetObjectField(TEXT("sim_lane_rules"), Lane) && Lane && Lane->IsValid()) { Opt.SimLaneRules = *Lane; }
 			Parsed.Levels.Add(MoveTemp(Opt));
 		}
 	}

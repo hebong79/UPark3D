@@ -5,6 +5,8 @@
 #include "../RpcParamUtil.h"
 #include "../../CarActor.h"
 #include "../../Sim/ParkingSimManager.h"
+#include "../../Sim/ParkLaneGraph.h"
+#include "Misc/Base64.h"
 
 namespace
 {
@@ -64,6 +66,20 @@ namespace
 		O->SetNumberField(TEXT("carLengthM"), P.Car.Length);
 		O->SetNumberField(TEXT("carWidthM"), P.Car.Width);
 		O->SetNumberField(TEXT("minTurnRadiusM"), P.Car.MinRadius);
+		{
+			// 게이트 연결을 통로 그래프로 했는지(보드 #981). used=false 면 예전 Dubins 한 번 연결 또는 통로 끝 출발/도착.
+			TSharedPtr<FJsonObject> L = MakeShared<FJsonObject>();
+			L->SetBoolField(TEXT("used"), P.bLaneRoute);
+			TArray<TSharedPtr<FJsonValue>> Ids;
+			for (const FString& Id : P.LaneEdges) { Ids.Add(MakeShared<FJsonValueString>(Id)); }
+			L->SetArrayField(TEXT("edges"), Ids);
+			L->SetNumberField(TEXT("lengthM"), P.LaneLengthM);
+			L->SetStringField(TEXT("rulesSource"), P.LaneRulesSource);
+			TArray<TSharedPtr<FJsonValue>> Pts;
+			for (const FVector2D& V : P.LanePts) { Pts.Add(MakeShared<FJsonValueObject>(RpcDto::Vec3(V.X, V.Y, 0.0))); }
+			L->SetArrayField(TEXT("pts"), Pts);   // 추종 목표선(차는 곡률 한계 때문에 모서리를 조금 깎는다 — 실제 궤적은 polyline)
+			O->SetObjectField(TEXT("laneRoute"), L);
+		}
 
 		TArray<TSharedPtr<FJsonValue>> Segs, Line;
 		ParkPlan::FPose Pose = P.Start;
@@ -282,6 +298,95 @@ namespace
 		O->SetObjectField(TEXT("exit"), SimGateToDto(Exit));
 		return O;
 	}
+
+	/** 통로 그래프 + 적용된 규칙 → sim.lanes 응답. */
+	TSharedPtr<FJsonObject> SimLanesDto(UWorld* World, bool bRebuild, bool bWithGrid, FRpcError& E, const ParkLane::FBuildParams* Tune = nullptr)
+	{
+		const ParkLane::FLaneGraph* G = ParkLane::GetGraph(World, bRebuild, Tune);
+		if (!G)
+		{
+			E.FailDomain(TEXT("주차면이 없어 통로 그래프를 만들 수 없습니다."));
+			return nullptr;
+		}
+		TArray<ParkLane::FEdgeState> States;
+		FString Source;
+		FVector2D Center;
+		ParkLane::ResolveWorldRules(World, *G, States, Source, Center);
+
+		auto Xy = [](const FVector2D& P)
+		{
+			TSharedPtr<FJsonObject> J = MakeShared<FJsonObject>();
+			J->SetNumberField(TEXT("x"), FMath::RoundToDouble(P.X * 1000.0) / 1000.0);
+			J->SetNumberField(TEXT("y"), FMath::RoundToDouble(P.Y * 1000.0) / 1000.0);
+			return J;
+		};
+		TArray<TSharedPtr<FJsonValue>> Nodes, Edges;
+		for (int32 i = 0; i < G->Nodes.Num(); ++i)
+		{
+			TSharedPtr<FJsonObject> J = Xy(G->Nodes[i].Pos);
+			J->SetStringField(TEXT("id"), ParkLane::NodeId(i));
+			Nodes.Add(MakeShared<FJsonValueObject>(J));
+		}
+		for (int32 i = 0; i < G->Edges.Num(); ++i)
+		{
+			const ParkLane::FLaneEdge& Ed = G->Edges[i];
+			TSharedPtr<FJsonObject> J = MakeShared<FJsonObject>();
+			J->SetStringField(TEXT("id"), ParkLane::EdgeId(i));
+			J->SetStringField(TEXT("from"), ParkLane::NodeId(Ed.From));
+			J->SetStringField(TEXT("to"), ParkLane::NodeId(Ed.To));
+			TArray<TSharedPtr<FJsonValue>> Pts;
+			for (const FVector2D& P : Ed.Pts) { Pts.Add(MakeShared<FJsonValueObject>(Xy(P))); }
+			J->SetArrayField(TEXT("pts"), Pts);
+			J->SetNumberField(TEXT("lengthM"), Ed.LengthM);
+			J->SetNumberField(TEXT("minWidthM"), Ed.MinWidthM);
+			J->SetStringField(TEXT("rule"), ParkLane::RuleName(States[i].Rule));
+			J->SetBoolField(TEXT("reverse"), States[i].bReverse);   // one 일 때 to → from
+			J->SetStringField(TEXT("by"), States[i].By);           // default / loop / connector / config / runtime
+			Edges.Add(MakeShared<FJsonValueObject>(J));
+		}
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetArrayField(TEXT("nodes"), Nodes);
+		O->SetArrayField(TEXT("edges"), Edges);
+		O->SetStringField(TEXT("rulesSource"), Source);
+		{
+			const ParkLane::FRules& Rt = ParkLane::RuntimeRules(World);
+			const ParkLane::FRules Cfg = ParkLane::ConfigRules(World);
+			O->SetStringField(TEXT("loop"), !Rt.Loop.IsEmpty() ? Rt.Loop : (Cfg.Loop.IsEmpty() ? TEXT("none") : Cfg.Loop));
+		}
+		TArray<FParkSimLotSlot> Slots;
+		ParkSimLot::CollectSlots(World, Slots);
+		FParkSimGate Entr, Exit;
+		if (ParkSimLot::ResolveGates(World, Slots, Entr, Exit))
+		{
+			O->SetStringField(TEXT("suggestedLoop"), ParkLane::SuggestLoop(Center, Entr.Pos, Entr.YawDeg));
+			O->SetObjectField(TEXT("entrance"), SimGateToDto(Entr));
+			O->SetObjectField(TEXT("exit"), SimGateToDto(Exit));
+		}
+		O->SetObjectField(TEXT("loopCenter"), Xy(Center));
+		TSharedPtr<FJsonObject> Build = MakeShared<FJsonObject>();
+		Build->SetObjectField(TEXT("boundsMin"), Xy(G->Bounds.Min));
+		Build->SetObjectField(TEXT("boundsMax"), Xy(G->Bounds.Max));
+		Build->SetNumberField(TEXT("cellM"), G->CellM);
+		Build->SetNumberField(TEXT("groundZ"), G->GroundZ);
+		Build->SetNumberField(TEXT("drivableCells"), G->DrivableCells);
+		Build->SetNumberField(TEXT("freeCells"), G->FreeCells);
+		Build->SetNumberField(TEXT("buildMs"), G->BuildMs);
+		Build->SetStringField(TEXT("note"), G->Note);
+		O->SetObjectField(TEXT("build"), Build);
+		if (bWithGrid && G->GridCells.Num() > 0)
+		{
+			// 칸마다 1바이트(0 막힘 / 1 주행 가능 / 2 주차면), 행 우선 index = iy*w + ix, 칸 중심 = origin + (ix, iy)*cellM(UE x, y).
+			TSharedPtr<FJsonObject> Gd = MakeShared<FJsonObject>();
+			Gd->SetObjectField(TEXT("origin"), Xy(G->GridOrigin));
+			Gd->SetNumberField(TEXT("cellM"), G->CellM);
+			Gd->SetNumberField(TEXT("w"), G->GridW);
+			Gd->SetNumberField(TEXT("h"), G->GridH);
+			Gd->SetStringField(TEXT("data"), FBase64::Encode(G->GridCells));
+			O->SetObjectField(TEXT("grid"), Gd);
+		}
+		return O;
+	}
 }
 
 AParkingSimManager* FSimRpcModule::SpawnRun(FRpcError& OutError) const
@@ -419,7 +524,7 @@ void FSimRpcModule::Register(URpcDispatcher& Dispatcher)
 		return RpcDto::MakeObject(O);
 	});
 	Dispatcher.SetMethodMeta(TEXT("sim.plan"), { false, false, TargetDoc + TEXT(", debug?"),
-		TEXT("sim.start 와 같은 면 선택·경로 계획만 하고 주행은 하지 않는다. debug=true 면 실패해도 {ok:false, error, plan(가장 나은 후보)}. seed 를 같게 주면 이어지는 sim.start 가 같은 면·경로를 쓴다(차량 배치가 그 사이 바뀌지 않았다면). {slot, parkMode, entrance, exit, plan:{lotType, maneuver, clearanceM, gearChanges, lengthM, note, segments[{gear,kind,steer,lengthM,radiusM?,angleDeg?,label,transit}], polyline[{x,y,yaw,gear,seg}]}}") });
+		TEXT("sim.start 와 같은 면 선택·경로 계획만 하고 주행은 하지 않는다. debug=true 면 실패해도 {ok:false, error, plan(가장 나은 후보)}. seed 를 같게 주면 이어지는 sim.start 가 같은 면·경로를 쓴다(차량 배치가 그 사이 바뀌지 않았다면). {slot, parkMode, entrance, exit, plan:{lotType, maneuver, clearanceM, gearChanges, lengthM, note, laneRoute{used, edges[], lengthM, rulesSource, pts[{x,y}](추종 목표선)}(통로 그래프가 있으면 게이트↔면 앞 통로를 그래프·규칙대로 달린다), segments[{gear,kind,steer,lengthM,radiusM?,angleDeg?,label,transit}], polyline[{x,y,yaw,gear,seg}]}}") });
 
 	// 주차면 목록 + 유형 판정 + 입구·출구. 웹 클라이언트가 면을 고르는 화면에 쓴다.
 	Dispatcher.Register(TEXT("sim.slots"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
@@ -487,6 +592,51 @@ void FSimRpcModule::Register(URpcDispatcher& Dispatcher)
 	});
 	Dispatcher.SetMethodMeta(TEXT("sim.setGates"), { true, false, TEXT("{entrance?:{x,y,yaw}, exit?:{x,y,yaw}, reset?:bool}"),
 		TEXT("입구·출구를 이 레벨에 한해 바꾼다(UE 월드 미터, yaw=그 점에서의 진행 방향 도). 저장하지 않는다 — 재기동하면 config/자동. reset=true 는 RPC 값을 지운다. 응답은 sim.gates 와 같다") });
+
+	// 통로 그래프(보드 #981) 조회 / 규칙 지정.
+	Dispatcher.Register(TEXT("sim.lanes"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		// 다시 만들 때만 격자 조정값을 받는다(그 레벨의 다음 재생성까지 유지).
+		ParkLane::FBuildParams Tune;
+		const bool bRebuild = RpcParam::GetBool(P, TEXT("rebuild"), false);
+		Tune.GroundTolM = RpcParam::GetFloat(P, TEXT("groundTolM"), Tune.GroundTolM);
+		Tune.HalfWidthM = RpcParam::GetFloat(P, TEXT("halfWidthM"), Tune.HalfWidthM);
+		TSharedPtr<FJsonObject> O = SimLanesDto(GetWorldPtr(), bRebuild, RpcParam::GetBool(P, TEXT("withGrid"), false), E, bRebuild ? &Tune : nullptr);
+		return O.IsValid() ? RpcDto::MakeObject(O) : nullptr;
+	});
+	Dispatcher.SetMethodMeta(TEXT("sim.lanes"), { false, false, TEXT("{rebuild?:bool, withGrid?:bool, groundTolM?(rebuild 때만, 기본 0.05), halfWidthM?(rebuild 때만, 기본 1.0)}"),
+		TEXT("통로 그래프 — 지면 높이 격자(±5 cm, 차 지붕 2.5 m 아래 장애물 제외)에서 주차면을 빼고 차 반폭 1.0 m 로 깎은 골격. {nodes[{id,x,y}], edges[{id,from,to,pts[{x,y}],lengthM,minWidthM,rule:one|two|blocked,reverse(one 일 때 to→from),by:default|loop|connector|config|runtime}], rulesSource, loop, suggestedLoop, loopCenter, entrance, exit, build}. 첫 호출·주차면 변경 뒤에 수백 ms~수 초 걸린다(캐시). id 는 같은 레벨·같은 면 구성이면 같다. withGrid=true 면 grid{origin,cellM,w,h,data(base64, 칸당 1바이트 0 막힘/1 주행 가능/2 주차면, index=iy*w+ix)}") });
+
+	Dispatcher.Register(TEXT("sim.setLaneRules"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		UWorld* World = GetWorldPtr();
+		ParkLane::FRules Parsed;
+		FString Err;
+		if (!ParkLane::ParseRules(P, Parsed, Err))
+		{
+			E.FailDomain(Err);
+			return nullptr;
+		}
+		const ParkLane::FLaneGraph* G = ParkLane::GetGraph(World);
+		for (const TPair<FString, ParkLane::FEdgeRule>& It : Parsed.Edges)
+		{
+			bool bKnown = false;
+			for (int32 i = 0; G && i < G->Edges.Num(); ++i) { bKnown |= ParkLane::EdgeId(i) == It.Key; }
+			if (!bKnown)
+			{
+				E.FailDomain(FString::Printf(TEXT("%s 는 이 레벨의 통로 그래프에 없습니다 — sim.lanes 의 edges[].id 를 쓰세요."), *It.Key));
+				return nullptr;
+			}
+		}
+		ParkLane::FRules R = RpcParam::GetBool(P, TEXT("reset"), false) ? ParkLane::FRules() : ParkLane::RuntimeRules(World);
+		if (!Parsed.Loop.IsEmpty()) { R.Loop = Parsed.Loop; }
+		for (const TPair<FString, ParkLane::FEdgeRule>& It : Parsed.Edges) { R.Edges.Add(It.Key, It.Value); }
+		ParkLane::SetRuntimeRules(World, R);
+		TSharedPtr<FJsonObject> O = SimLanesDto(World, false, false, E);
+		return O.IsValid() ? RpcDto::MakeObject(O) : nullptr;
+	});
+	Dispatcher.SetMethodMeta(TEXT("sim.setLaneRules"), { true, false, TEXT("{loop?:\"ccw\"|\"cw\"|\"none\", edges?:[{id, rule:\"one\"|\"two\"|\"blocked\", reverse?}], reset?:bool}"),
+		TEXT("통로 규칙을 이 레벨에 한해 건다(저장 안 함 — 재기동하면 config levels[].sim_lane_rules / 기본). reset=true 는 먼저 RPC 규칙을 지운다. edges 는 id 별로 덮어쓴다. 적용 순서: 에지 개별 > loop > 기본 two(우측통행). ccw = UE 탑뷰(X 위·Y 오른쪽)에서 반시계. 응답은 sim.lanes 와 같다. sim.start/exit/plan 이 이 규칙대로 달린다") });
 
 	// 정지. runId 로 한 건, all=true 면 도는 주행 전부, 둘 다 없으면 가장 최근 주행.
 	Dispatcher.Register(TEXT("sim.stop"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>

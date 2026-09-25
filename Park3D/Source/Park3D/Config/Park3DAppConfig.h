@@ -9,6 +9,8 @@
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "Park3DAppConfig.generated.h"
 
+class FJsonObject;
+
 class UWorld;
 
 /**
@@ -45,6 +47,8 @@ struct FPark3DLevelOption
 	TOptional<float> SimAisleM;
 	/** 면 유형 강제("parallel"/"perpendicular"/"angled"). 없으면 면 배치로 자동 판정. JSON `lot_type`. */
 	TOptional<FString> LotType;
+	/** 통로 그래프 규칙 {loop?, edges?:[{id, rule, reverse?}]} 원본(해석은 ParkLane::ParseRules). JSON `sim_lane_rules`. */
+	TSharedPtr<FJsonObject> SimLaneRules;
 };
 
 /** config_pmaker.json 한 벌. 값이 없는 항목은 "미지정"(0/빈 문자열)으로 남겨 호출부가 건너뛴다. */

@@ -66,6 +66,12 @@ struct FParkSimWorldPlan
 	bool bRearIn = false;                  // 입차: 후진주차였나 / 출차: 출발 자세가 후진주차였나
 	FString Note;                          // 모드 대체·가정 등 사람이 읽을 메모
 	ParkPlan::FCarDims Car;
+	/** 게이트 연결을 통로 그래프로 했나(보드 #981). 거짓이면 예전 Dubins 한 번 연결이거나 통로 끝 출발/도착. */
+	bool bLaneRoute = false;
+	TArray<FString> LaneEdges;             // 지난 통로 에지 id(순서대로)
+	double LaneLengthM = 0.0;              // 그래프 위 경로 길이(추종 전 중심선)
+	FString LaneRulesSource;               // runtime / config / default
+	TArray<FVector2D> LanePts;             // 추종한 목표선(지름길·우측통행 오프셋 적용 후, 게이트·기동 이음점 포함)
 
 	double TotalLength() const { double L = 0; for (const ParkPlan::FSeg& S : Segs) { L += S.Len; } return L; }
 };

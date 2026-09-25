@@ -2,6 +2,7 @@
 
 #include "ParkSimLot.h"
 
+#include "ParkLaneGraph.h"
 #include "../CarActor.h"
 #include "../CarPlacementManager.h"
 #include "../Config/Park3DAppConfig.h"
@@ -273,6 +274,154 @@ namespace
 		OutEntr.Source = OutExit.Source = TEXT("auto");
 		return true;
 	}
+
+	// ---- 통로 그래프 연결(보드 #981) ----
+
+	/** 통로 그래프 + 그 레벨에 걸린 규칙. */
+	struct FPsLane
+	{
+		const ParkLane::FLaneGraph* G = nullptr;
+		TArray<ParkLane::FEdgeState> States;
+		FString Source;
+	};
+
+	bool PsLaneLoad(UWorld* World, FPsLane& Out)
+	{
+		Out.G = ParkLane::GetGraph(World);
+		if (!Out.G || Out.G->IsEmpty()) { return false; }
+		FVector2D C;
+		ParkLane::ResolveWorldRules(World, *Out.G, Out.States, Out.Source, C);
+		return true;
+	}
+
+	/** 면 앞 통로 에지(열 방향과 나란한 것, 면 통로 쪽 가장자리에서 6 m 안). */
+	bool PsLaneAtSlot(const FPsLane& L, const FParkSimLotSlot& Slot, const FCarDims& Car, ParkLane::FAnchor& Out)
+	{
+		const double Aisle = Slot.AisleWidthM > 0.0 ? Slot.AisleWidthM : 6.0;
+		const double Off = Slot.Type == ELotType::Parallel ? Car.Width * 0.5 + 1.0 : FMath::Min(Aisle * 0.5, 3.0);
+		const FVector2D Q = Slot.Center + Slot.AisleDir * (PsHalfExtent(Slot, Slot.AisleDir) + Off);
+		double D;
+		return ParkLane::Project(*L.G, L.States, Q, Out, D, Slot.RowDir, 0.6, 6.0);
+	}
+
+	/** 월드 방향 Ex 로 그 에지를 달릴 때의 에지 방향(+1 = From→To). */
+	int32 PsEdgeDir(const FPsLane& L, const ParkLane::FAnchor& A, const FVector2D& Ex)
+	{
+		return FVector2D::DotProduct(L.G->Edges[A.Edge].TangentAt(A.S), Ex) >= 0.0 ? 1 : -1;
+	}
+
+	/**
+	 * 후보 진행 방향 중 그래프 경로가 있는 것을 짧은 순으로. 입차는 게이트 → 면 앞, 출차는 면 앞 → 게이트.
+	 * 가장 짧은 쪽이 실제로 못 도는 모서리면(SweepHits) 호출자가 다음 쪽을 해 본다.
+	 */
+	TArray<FVector2D> PsRankTravelDirs(const FPsLane& L, const ParkLane::FAnchor& SlotAnchor, const ParkLane::FAnchor& GateAnchor, bool bEnter,
+		const TArray<FVector2D>& Options)
+	{
+		TArray<TPair<double, FVector2D>> Found;
+		for (const FVector2D& Ex : Options)
+		{
+			ParkLane::FAnchor T = SlotAnchor;
+			T.Dir = PsEdgeDir(L, SlotAnchor, Ex);
+			ParkLane::FRoute R;
+			const bool bOk = bEnter ? ParkLane::FindRoute(*L.G, L.States, GateAnchor, T, R) : ParkLane::FindRoute(*L.G, L.States, T, GateAnchor, R);
+			if (bOk) { Found.Add({ R.LengthM, Ex }); }
+		}
+		Found.Sort([](const TPair<double, FVector2D>& A, const TPair<double, FVector2D>& B) { return A.Key < B.Key; });
+		TArray<FVector2D> Out;
+		for (const TPair<double, FVector2D>& F : Found) { Out.Add(F.Value); }
+		return Out;
+	}
+
+	/** 방향 후보를 차례로 계획해 처음 성공한 것. 모두 실패하면 첫(가장 짧은) 방향의 실패를 돌려준다. */
+	template <typename FPlanFn>
+	FParkSimWorldPlan PsTryDirs(const TArray<FVector2D>& Dirs, FPlanFn&& PlanDir)
+	{
+		FParkSimWorldPlan First;
+		TArray<FString> Why;
+		for (int32 i = 0; i < Dirs.Num(); ++i)
+		{
+			FParkSimWorldPlan W = PlanDir(Dirs[i]);
+			if (W.bOk)
+			{
+				if (i > 0)
+				{
+					const FString Fallback = TEXT("가까운 쪽 통로로는 모서리를 돌 수 없어 반대쪽으로 돌아감");
+					W.Note = W.Note.IsEmpty() ? Fallback : Fallback + TEXT(" · ") + W.Note;
+				}
+				return W;
+			}
+			Why.Add(FString::Printf(TEXT("[%s 방향] %s"), i == 0 ? TEXT("가까운") : TEXT("반대"), *W.Note));
+			if (i == 0) { First = MoveTemp(W); }
+		}
+		if (Why.Num() > 1) { First.Note = FString::Join(Why, TEXT(" / ")); }
+		return First;
+	}
+
+	/** 통로 주행 구간의 서 있는 차량 간격(주차장 전체 차량). 차가 없으면 -1. */
+	double PsRouteClearance(UWorld* World, const FPose& Start, const TArray<FSeg>& Segs, const FCarDims& Car,
+		const TSet<const ACarActor*>& Ignore, FString& OutClosest)
+	{
+		double Best = -1.0;
+		if (ACarPlacementManager* CarMgr = PsCarManager(World))
+		{
+			for (const TObjectPtr<ACarActor>& C : CarMgr->GetCars())
+			{
+				if (!IsValid(C) || C->IsHidden() || Ignore.Contains(C.Get())) { continue; }
+				FPoly2D Wp;
+				if (!ParkSimLot::CarPolygon(C, Wp)) { continue; }
+				const double D = PathClearance(Start, Segs, Car, { Wp }, 0.2);
+				if (Best < 0.0 || D < Best) { Best = D; OutClosest = FString::Printf(TEXT("차량 %s"), *C->CarData.id); }
+			}
+		}
+		return Best;
+	}
+
+	void PsLaneFill(FParkSimWorldPlan& W, const FPsLane& L, const ParkLane::FRoute& R)
+	{
+		W.bLaneRoute = true;
+		W.LaneLengthM = R.LengthM;
+		W.LaneRulesSource = L.Source;
+		for (const int32 E : R.Edges) { W.LaneEdges.Add(ParkLane::EdgeId(E)); }
+	}
+
+	FString PsEdgeList(const ParkLane::FRoute& R)
+	{
+		TArray<FString> Ids;
+		for (int32 i = 0; i < R.Edges.Num(); ++i) { Ids.Add(ParkLane::EdgeId(R.Edges[i]) + (R.EdgeDirs[i] > 0 ? TEXT("+") : TEXT("-"))); }
+		return FString::Join(Ids, TEXT("→"));
+	}
+
+	/** 추종 경로가 격자의 벽·장애물에 닿으면 실패(note), 주차면 모서리를 지나면 note 만 남긴다. */
+	bool PsLaneSweepOk(FParkSimWorldPlan& W, const ParkLane::FLaneGraph& G, const FPose& Start, const TArray<FSeg>& Route, const FCarDims& Car,
+		const ParkLane::FRoute& R, const FParkSimGate& Gate)
+	{
+		FVector2D At;
+		const int32 Hit = ParkLane::SweepHits(G, Start, Route, Car, At, Gate.Pos, 4.0);   // 게이트 4 m 안은 차단봉이 열린다고 본다
+		if (Hit == 2)
+		{
+			W.Note = FString::Printf(TEXT("통로 그래프 경로(%s)를 따라가면 (%.1f, %.1f) 에서 벽·장애물에 닿습니다(최소 회전반경 %.1f m)"),
+				*PsEdgeList(R), At.X, At.Y, Car.MinRadius);
+			return false;
+		}
+		if (Hit == 1)
+		{
+			W.Note = FString::Printf(TEXT("참고: 통로 주행이 (%.1f, %.1f) 에서 주차면 가장자리를 지납니다"), At.X, At.Y);
+		}
+		return true;
+	}
+
+	FString PsNoLaneNote(const FParkSimLotSlot& Slot, const TCHAR* Where)
+	{
+		return FString::Printf(TEXT("경고: 통로 그래프에서 %d번 면 앞 통로 또는 %s 근처 통로를 찾지 못해 직선 연결(Dubins)로 이었습니다 — 주차면을 가로지를 수 있습니다"),
+			Slot.Number, Where);
+	}
+
+	/** 지름길 직선이 벽·주차면 선에서 지킬 여유: 차 반폭 + 0.35 m(주차된 차는 면 선을 조금 넘는다). 골격 자체의 여유보다 크면 지름길이 안 생길 뿐이다. */
+	double PsShortcutClear(const ParkLane::FLaneGraph& G, const FCarDims& Car) { return FMath::Max(G.Params.HalfWidthM - 0.05, Car.Width * 0.5 + 0.35); }
+
+	double PsLookahead(const FCarDims& Car) { return FMath::Max(3.0, Car.MinRadius * 0.9); }
+	double PsKMax(const FCarDims& Car) { return 1.0 / (Car.MinRadius * 1.05); }
+	FVector2D PsYawDir(double YawDeg) { const double Y = FMath::DegreesToRadians(YawDeg); return FVector2D(FMath::Cos(Y), FMath::Sin(Y)); }
 }
 
 namespace ParkSimLot
@@ -477,160 +626,351 @@ namespace ParkSimLot
 	FParkSimWorldPlan PlanEnter(UWorld* World, const FParkSimLotSlot& Slot, bool bRearIn, const FCarDims& Car,
 		const FParkSimGate& Entrance, const TSet<const ACarActor*>& Ignore)
 	{
-		FParkSimWorldPlan W;
-		W.Type = Slot.Type;
-		W.Car = Car;
+		FParkSimWorldPlan Base;
+		Base.Type = Slot.Type;
+		Base.Car = Car;
 		const bool bRear = (Slot.Type == ELotType::Parallel) ? true : bRearIn;
-		W.bRearIn = bRear;
+		Base.bRearIn = bRear;
 
 		const double Along = FVector2D::DotProduct(Slot.Center - Entrance.Pos, Slot.RowDir);
-		const FVector2D Ex = (Slot.Type == ELotType::Angled) ? PsAngledTravelDir(Slot) : (Along >= 0.0 ? Slot.RowDir : -Slot.RowDir);
-
-		const FPsLevelOptions Opts = PsReadLevelOptions(World);
-		FLotFrame F;
-		FLocalProblem P;
-		TArray<FString> ObsNames;
-		PsBuildProblem(World, Slot, Ex, Car, Ignore, F, P, Opts, ObsNames);
-
-		TArray<FParkSimLotSlot> All;
-		CollectSlots(World, All);
-		double RowMin, RowMax;
-		PsRowRange(All, Slot, F, RowMin, RowMax);
-		// 입구가 자동(미지정)인 정형·사선은 게이트에서 Dubins 로 오면 주차된 차를 가로지를 수 있다 → 통로 끝에서 출발한다.
+		const FVector2D DefaultEx = (Slot.Type == ELotType::Angled) ? PsAngledTravelDir(Slot) : (Along >= 0.0 ? Slot.RowDir : -Slot.RowDir);
+		// 입구가 자동(미지정)인 정형·사선은 게이트에서 오면 주차된 차를 가로지를 수 있다 → 통로 끝에서 출발한다.
 		const bool bAisleStart = Entrance.Source == TEXT("auto") && Slot.Type != ELotType::Parallel;
-		const double EntrX = F.ToLocal(Entrance.Pos).X;
-		P.ApproachX = (bAisleStart || EntrX < RowMin - 3.0) ? RowMin - 3.0 : EntrX + 8.0;
 
-		const FPlan L = ParkPlan::PlanEnter(P, bRear);
-		W.Closest = ObsNames.IsValidIndex(L.ClosestObstacle) ? ObsNames[L.ClosestObstacle] : FString();
-		W.ClearanceM = L.Clearance;
-		W.GearChanges = L.GearChanges;
-		W.Maneuver = L.Desc;
-		if (!L.bOk)
+		// 통로 그래프가 있으면 진행 방향은 규칙이 허락하는 쪽을 입구에서 가까운 순으로 해 본다(사선은 기울기 방향 고정).
+		FPsLane Lane;
+		ParkLane::FAnchor SlotA, GateA;
+		bool bLane = !bAisleStart && PsLaneLoad(World, Lane);
+		FString LaneNote;
+		TArray<FVector2D> Dirs = { DefaultEx };
+		if (bLane)
 		{
-			W.Note = FString::Printf(TEXT("안전 간격 %.2f m 를 지키는 %s 기동이 없습니다(가장 나은 후보 %.2f m, 가장 가까운 것: %s)"),
-				P.ClearOk, bRear ? TEXT("후진주차") : TEXT("전진주차"), L.Clearance, *W.Closest);
-			W.Start = F.PoseToWorld(L.Start);   // 실패해도 가장 나은 후보를 남긴다(sim.plan debug)
-			for (const FSeg& S : L.Segs) { W.Segs.Add(PsSegToWorld(F, S)); }
-			return W;
+			double Dg;
+			if (!PsLaneAtSlot(Lane, Slot, Car, SlotA) || !ParkLane::Project(*Lane.G, Lane.States, Entrance.Pos, GateA, Dg))
+			{
+				bLane = false;
+				LaneNote = PsNoLaneNote(Slot, TEXT("입구"));
+			}
+			else
+			{
+				const TArray<FVector2D> DirOpts = Slot.Type == ELotType::Angled ? TArray<FVector2D>{ DefaultEx } : TArray<FVector2D>{ DefaultEx, -DefaultEx };
+				Dirs = PsRankTravelDirs(Lane, SlotA, GateA, true, DirOpts);
+				if (Dirs.Num() == 0)
+				{
+					Base.Note = FString::Printf(TEXT("통로 규칙상 입구에서 %d번 면 앞 통로(%s)로 가는 길이 없습니다 — sim.lanes / sim.setLaneRules 를 확인하세요"),
+						Slot.Number, *ParkLane::EdgeId(SlotA.Edge));
+					return Base;
+				}
+			}
 		}
 
-		const FPose Start = F.PoseToWorld(L.Start);
-		if (bAisleStart)
+		return PsTryDirs(Dirs, [&](const FVector2D& Ex) -> FParkSimWorldPlan
 		{
-			W.Start = Start;
-			W.UsedGate.Pos = FVector2D(Start.X, Start.Y);
-			W.UsedGate.YawDeg = FMath::RadiansToDegrees(Start.Th);
-			W.UsedGate.Source = TEXT("aisle");
-			W.Note = TEXT("입구 미지정 — 통로 끝에서 출발(config levels[].sim_entrance 또는 sim.setGates 로 지정)");
+			FParkSimWorldPlan W = Base;
+			const FPsLevelOptions Opts = PsReadLevelOptions(World);
+			FLotFrame F;
+			FLocalProblem P;
+			TArray<FString> ObsNames;
+			PsBuildProblem(World, Slot, Ex, Car, Ignore, F, P, Opts, ObsNames);
+
+			TArray<FParkSimLotSlot> All;
+			CollectSlots(World, All);
+			double RowMin, RowMax;
+			PsRowRange(All, Slot, F, RowMin, RowMax);
+			const double EntrX = F.ToLocal(Entrance.Pos).X;
+			// 그래프 경로가 통로를 달려 오므로 기동 앞 직진은 2 m 만 둔다(PpWithApproach 의 최소값).
+			P.ApproachX = bLane ? 1e9 : ((bAisleStart || EntrX < RowMin - 3.0) ? RowMin - 3.0 : EntrX + 8.0);
+
+			const FPlan L = ParkPlan::PlanEnter(P, bRear);
+			W.Closest = ObsNames.IsValidIndex(L.ClosestObstacle) ? ObsNames[L.ClosestObstacle] : FString();
+			W.ClearanceM = L.Clearance;
+			W.GearChanges = L.GearChanges;
+			W.Maneuver = L.Desc;
+			if (!L.bOk)
+			{
+				W.Note = FString::Printf(TEXT("안전 간격 %.2f m 를 지키는 %s 기동이 없습니다(가장 나은 후보 %.2f m, 가장 가까운 것: %s)"),
+					P.ClearOk, bRear ? TEXT("후진주차") : TEXT("전진주차"), L.Clearance, *W.Closest);
+				W.Start = F.PoseToWorld(L.Start);   // 실패해도 가장 나은 후보를 남긴다(sim.plan debug)
+				for (const FSeg& S : L.Segs) { W.Segs.Add(PsSegToWorld(F, S)); }
+				return W;
+			}
+
+			const FPose Start = F.PoseToWorld(L.Start);
+			if (bAisleStart)
+			{
+				W.Start = Start;
+				W.UsedGate.Pos = FVector2D(Start.X, Start.Y);
+				W.UsedGate.YawDeg = FMath::RadiansToDegrees(Start.Th);
+				W.UsedGate.Source = TEXT("aisle");
+				W.Note = TEXT("입구 미지정 — 통로 끝에서 출발(config levels[].sim_entrance 또는 sim.setGates 로 지정)");
+				for (const FSeg& S : L.Segs) { W.Segs.Add(PsSegToWorld(F, S)); }
+				W.bOk = true;
+				return W;
+			}
+			if (bLane)
+			{
+				// 입구 → 그래프 → 면 앞 통로 → 기동 시작 자세. 기동 시작에서 거꾸로 추종하므로 이음매 오차는 0 이다.
+				const FVector2D Sp(Start.X, Start.Y);
+				ParkLane::FAnchor T = SlotA;
+				T.Dir = PsEdgeDir(Lane, SlotA, Ex);
+				T.S = Lane.G->Edges[T.Edge].Nearest(Sp - Ex * 6.0);
+				ParkLane::FRoute R;
+				if (!ParkLane::FindRoute(*Lane.G, Lane.States, GateA, T, R))
+				{
+					W.Note = FString::Printf(TEXT("통로 규칙상 입구에서 %d번 면 앞 통로(%s)로 가는 길이 없습니다 — sim.lanes / sim.setLaneRules 를 확인하세요"),
+						Slot.Number, *ParkLane::EdgeId(SlotA.Edge));
+					return W;
+				}
+				// 목표선: 게이트 → (그래프 경로) → 기동 이음점. 지름길은 게이트~이음점 앞(A1)까지 걸어 이음점 방향(Ex)을 지킨다.
+				// 양방향 에지의 우측통행 오프셋은 모서리에서 차를 바깥 벽 쪽으로 밀 수 있다 → 오프셋으로 안 되면 가운데 선으로 한 번 더.
+				const FVector2D GDir = PsYawDir(Entrance.YawDeg);
+				TArray<FSeg> Route;
+				FPose RStart;
+				bool bFollowed = false;
+				for (const bool bOffset : { true, false })
+				{
+					W.Note.Reset();   // 앞 시도의 실패 메모를 남기지 않는다
+					TArray<FVector2D> Mid = R.Pts;
+					if (bOffset) { ParkLane::OffsetForTraffic(*Lane.G, Lane.States, R, Car.Width * 0.5, Mid); }
+					TArray<FVector2D> Pts = { Entrance.Pos };
+					Pts.Append(Mid);
+					Pts.Add(Sp - Ex * 1.0);
+					ParkLane::Shortcut(*Lane.G, Pts, PsShortcutClear(*Lane.G, Car));
+					Pts.Insert(Entrance.Pos - GDir * 4.0, 0);
+					Pts.Add(Sp);
+					ParkLane::Fillet(Pts, Car.MinRadius * 1.15);
+					W.LanePts = Pts;
+					if (!ParkLane::FollowInto(Start, Pts, 4.0, PsKMax(Car), PsLookahead(Car), Route, RStart, 3.0, TEXT("통로를 따라 주행(통로 그래프)")))
+					{
+						W.Note = FString::Printf(TEXT("통로 그래프 경로(%s)를 최소 회전반경으로 따라갈 수 없습니다(경로에서 4.5 m 넘게 벗어남)"), *PsEdgeList(R));
+						continue;
+					}
+					if (!PsLaneSweepOk(W, *Lane.G, RStart, Route, Car, R, Entrance)) { continue; }
+					bFollowed = true;
+					break;
+				}
+				if (!bFollowed)
+				{
+					W.Start = RStart;   // 따라간 데까지(sim.plan debug)
+					W.Segs = MoveTemp(Route);
+					for (const FSeg& S : L.Segs) { W.Segs.Add(PsSegToWorld(F, S)); }
+					return W;
+				}
+				FString RouteClosest;
+				W.TransitClearanceM = PsRouteClearance(World, RStart, Route, Car, Ignore, RouteClosest);
+				if (W.TransitClearanceM >= 0.0 && W.TransitClearanceM < P.ClearOk)
+				{
+					const FString Warn = FString::Printf(TEXT("주의: 통로 주행 구간이 %s 와 %.2f m"), *RouteClosest, W.TransitClearanceM);
+					W.Note = W.Note.IsEmpty() ? Warn : W.Note + TEXT(" · ") + Warn;
+				}
+				W.Start = RStart;
+				W.UsedGate = Entrance;
+				W.Segs = MoveTemp(Route);
+				for (const FSeg& S : L.Segs) { W.Segs.Add(PsSegToWorld(F, S)); }
+				PsLaneFill(W, Lane, R);
+				W.bOk = true;
+				return W;
+			}
+			TArray<FSeg> Link;
+			if (!DubinsPath(PsGatePose(Entrance), Start, Car.MinRadius * 1.3, Link, 3.0, TEXT("입구에서 통로로 진입")))
+			{
+				W.Note = TEXT("입구에서 통로로 잇는 경로를 만들지 못했습니다");
+				return W;
+			}
+			FString TransitClosest;
+			W.TransitClearanceM = PsTransitClearance(F, P, ObsNames, PsGatePose(Entrance), Link, TransitClosest);
+			if (W.TransitClearanceM >= 0.0 && W.TransitClearanceM < P.ClearOk)
+			{
+				W.Note = FString::Printf(TEXT("주의: 입구→통로 연결 구간이 %s 와 %.2f m — 입구 위치(sim.setGates)를 통로 쪽으로 옮기세요"),
+					*TransitClosest, W.TransitClearanceM);
+			}
+			if (!LaneNote.IsEmpty()) { W.Note = W.Note.IsEmpty() ? LaneNote : LaneNote + TEXT(" · ") + W.Note; }
+			W.Start = PsGatePose(Entrance);
+			W.UsedGate = Entrance;
+			W.Segs = MoveTemp(Link);
 			for (const FSeg& S : L.Segs) { W.Segs.Add(PsSegToWorld(F, S)); }
 			W.bOk = true;
 			return W;
-		}
-		TArray<FSeg> Link;
-		if (!DubinsPath(PsGatePose(Entrance), Start, Car.MinRadius * 1.3, Link, 3.0, TEXT("입구에서 통로로 진입")))
-		{
-			W.Note = TEXT("입구에서 통로로 잇는 경로를 만들지 못했습니다");
-			return W;
-		}
-		FString TransitClosest;
-		W.TransitClearanceM = PsTransitClearance(F, P, ObsNames, PsGatePose(Entrance), Link, TransitClosest);
-		if (W.TransitClearanceM >= 0.0 && W.TransitClearanceM < P.ClearOk)
-		{
-			W.Note = FString::Printf(TEXT("주의: 입구→통로 연결 구간이 %s 와 %.2f m — 입구 위치(sim.setGates)를 통로 쪽으로 옮기세요"),
-				*TransitClosest, W.TransitClearanceM);
-		}
-		W.Start = PsGatePose(Entrance);
-		W.UsedGate = Entrance;
-		W.Segs = MoveTemp(Link);
-		for (const FSeg& S : L.Segs) { W.Segs.Add(PsSegToWorld(F, S)); }
-		W.bOk = true;
-		return W;
+		});
 	}
 
 	FParkSimWorldPlan PlanExit(UWorld* World, const FParkSimLotSlot& Slot, const FVector2D& CarCenter, double CarYawRad,
 		const FCarDims& Car, const FParkSimGate& Exit, const TSet<const ACarActor*>& Ignore)
 	{
-		FParkSimWorldPlan W;
-		W.Type = Slot.Type;
-		W.Car = Car;
+		FParkSimWorldPlan Base;
+		Base.Type = Slot.Type;
+		Base.Car = Car;
 
 		const FVector2D Fwd(FMath::Cos(CarYawRad), FMath::Sin(CarYawRad));
-		FVector2D Ex;
+		FVector2D DefaultEx;
 		if (Slot.Type == ELotType::Parallel)
 		{
-			Ex = FVector2D::DotProduct(Fwd, Slot.RowDir) >= 0.0 ? Slot.RowDir : -Slot.RowDir;   // 도로변은 서 있는 방향대로 나간다
+			DefaultEx = FVector2D::DotProduct(Fwd, Slot.RowDir) >= 0.0 ? Slot.RowDir : -Slot.RowDir;   // 도로변은 서 있는 방향대로 나간다
 		}
 		else if (Slot.Type == ELotType::Angled)
 		{
-			Ex = PsAngledTravelDir(Slot);   // 사선은 일방통행 — 들어온 방향 그대로 빠져나간다
+			DefaultEx = PsAngledTravelDir(Slot);   // 사선은 일방통행 — 들어온 방향 그대로 빠져나간다
 		}
 		else
 		{
-			Ex = FVector2D::DotProduct(Exit.Pos - Slot.Center, Slot.RowDir) >= 0.0 ? Slot.RowDir : -Slot.RowDir;
+			DefaultEx = FVector2D::DotProduct(Exit.Pos - Slot.Center, Slot.RowDir) >= 0.0 ? Slot.RowDir : -Slot.RowDir;
 		}
 		// 출발 자세가 후진주차였나(코가 통로 쪽).
-		W.bRearIn = FVector2D::DotProduct(Fwd, Slot.AisleDir) > 0.0;
-
-		const FPsLevelOptions Opts = PsReadLevelOptions(World);
-		FLotFrame F;
-		FLocalProblem P;
-		TArray<FString> ObsNames;
-		PsBuildProblem(World, Slot, Ex, Car, Ignore, F, P, Opts, ObsNames);
-
-		TArray<FParkSimLotSlot> All;
-		CollectSlots(World, All);
-		double RowMin, RowMax;
-		PsRowRange(All, Slot, F, RowMin, RowMax);
-
-		const FPose ParkedW = RearAxleFromCenter(CarCenter, CarYawRad, Car);
-		const FPose Parked = F.PoseToLocal(ParkedW);
+		Base.bRearIn = FVector2D::DotProduct(Fwd, Slot.AisleDir) > 0.0;
 		// 출구가 자동(미지정)인 정형·사선은 통로 끝까지만 가서 끝낸다(입차와 같은 이유).
 		const bool bAisleEnd = Exit.Source == TEXT("auto") && Slot.Type != ELotType::Parallel;
-		const double ExitX = F.ToLocal(Exit.Pos).X;
-		P.LeaveX = FMath::Max(Parked.X + 6.0, (bAisleEnd || ExitX > RowMax + 3.0) ? RowMax + 3.0 : ExitX - 8.0);
 
-		const FPlan L = ParkPlan::PlanExit(P, Parked);
-		W.Closest = ObsNames.IsValidIndex(L.ClosestObstacle) ? ObsNames[L.ClosestObstacle] : FString();
-		W.ClearanceM = L.Clearance;
-		W.GearChanges = L.GearChanges;
-		W.Maneuver = L.Desc;
-		if (!L.bOk)
+		// 통로 그래프: 정형은 규칙이 허락하는 쪽을 출구까지 가까운 순으로 해 보고, 도로변·사선은 방향이 정해져 있어 확인만 한다.
+		FPsLane Lane;
+		ParkLane::FAnchor SlotA, GateA;
+		bool bLane = !bAisleEnd && PsLaneLoad(World, Lane);
+		FString LaneNote;
+		TArray<FVector2D> Dirs = { DefaultEx };
+		if (bLane)
 		{
-			W.Note = FString::Printf(TEXT("안전 간격 %.2f m 를 지키는 출차 기동이 없습니다(가장 나은 후보 %.2f m, 가장 가까운 것: %s)"), P.ClearOk, L.Clearance, *W.Closest);
+			double Dg;
+			if (!PsLaneAtSlot(Lane, Slot, Car, SlotA) || !ParkLane::Project(*Lane.G, Lane.States, Exit.Pos, GateA, Dg))
+			{
+				bLane = false;
+				LaneNote = PsNoLaneNote(Slot, TEXT("출구"));
+			}
+			else
+			{
+				const TArray<FVector2D> DirOpts = Slot.Type == ELotType::Perpendicular ? TArray<FVector2D>{ DefaultEx, -DefaultEx } : TArray<FVector2D>{ DefaultEx };
+				Dirs = PsRankTravelDirs(Lane, SlotA, GateA, false, DirOpts);
+				if (Dirs.Num() == 0)
+				{
+					Base.Note = FString::Printf(TEXT("통로 규칙상 %d번 면 앞 통로(%s)에서 출구로 가는 길이 없습니다 — sim.lanes / sim.setLaneRules 를 확인하세요"),
+						Slot.Number, *ParkLane::EdgeId(SlotA.Edge));
+					Base.Start = RearAxleFromCenter(CarCenter, CarYawRad, Car);
+					return Base;
+				}
+			}
+		}
+
+		return PsTryDirs(Dirs, [&](const FVector2D& Ex) -> FParkSimWorldPlan
+		{
+			FParkSimWorldPlan W = Base;
+			const FPsLevelOptions Opts = PsReadLevelOptions(World);
+			FLotFrame F;
+			FLocalProblem P;
+			TArray<FString> ObsNames;
+			PsBuildProblem(World, Slot, Ex, Car, Ignore, F, P, Opts, ObsNames);
+
+			TArray<FParkSimLotSlot> All;
+			CollectSlots(World, All);
+			double RowMin, RowMax;
+			PsRowRange(All, Slot, F, RowMin, RowMax);
+
+			const FPose ParkedW = RearAxleFromCenter(CarCenter, CarYawRad, Car);
+			const FPose Parked = F.PoseToLocal(ParkedW);
+			const double ExitX = F.ToLocal(Exit.Pos).X;
+			// 그래프 경로가 이어 달리므로 기동 뒤 직진은 2 m 만 둔다(PpWithLeave 의 최소값).
+			P.LeaveX = bLane ? -1e9 : FMath::Max(Parked.X + 6.0, (bAisleEnd || ExitX > RowMax + 3.0) ? RowMax + 3.0 : ExitX - 8.0);
+
+			const FPlan L = ParkPlan::PlanExit(P, Parked);
+			W.Closest = ObsNames.IsValidIndex(L.ClosestObstacle) ? ObsNames[L.ClosestObstacle] : FString();
+			W.ClearanceM = L.Clearance;
+			W.GearChanges = L.GearChanges;
+			W.Maneuver = L.Desc;
+			if (!L.bOk)
+			{
+				W.Note = FString::Printf(TEXT("안전 간격 %.2f m 를 지키는 출차 기동이 없습니다(가장 나은 후보 %.2f m, 가장 가까운 것: %s)"), P.ClearOk, L.Clearance, *W.Closest);
+				W.Start = ParkedW;
+				for (const FSeg& S : L.Segs) { W.Segs.Add(PsSegToWorld(F, S)); }
+				return W;
+			}
+
 			W.Start = ParkedW;
 			for (const FSeg& S : L.Segs) { W.Segs.Add(PsSegToWorld(F, S)); }
-			return W;
-		}
-
-		W.Start = ParkedW;
-		for (const FSeg& S : L.Segs) { W.Segs.Add(PsSegToWorld(F, S)); }
-		const FPose End = Run(ParkedW, W.Segs);
-		if (bAisleEnd)
-		{
-			W.UsedGate.Pos = FVector2D(End.X, End.Y);
-			W.UsedGate.YawDeg = FMath::RadiansToDegrees(End.Th);
-			W.UsedGate.Source = TEXT("aisle");
-			W.Note = TEXT("출구 미지정 — 통로 끝에서 끝냄(config levels[].sim_exit 또는 sim.setGates 로 지정)");
+			const FPose End = Run(ParkedW, W.Segs);
+			if (bAisleEnd)
+			{
+				W.UsedGate.Pos = FVector2D(End.X, End.Y);
+				W.UsedGate.YawDeg = FMath::RadiansToDegrees(End.Th);
+				W.UsedGate.Source = TEXT("aisle");
+				W.Note = TEXT("출구 미지정 — 통로 끝에서 끝냄(config levels[].sim_exit 또는 sim.setGates 로 지정)");
+				W.bOk = true;
+				return W;
+			}
+			if (bLane)
+			{
+				// 기동 끝 자세 → 면 앞 통로 → 그래프 → 출구. 기동 끝에서 앞으로 추종하므로 이음매 오차는 0 이다.
+				const FVector2D Ep(End.X, End.Y);
+				ParkLane::FAnchor T = SlotA;
+				T.Dir = PsEdgeDir(Lane, SlotA, Ex);
+				T.S = Lane.G->Edges[T.Edge].Nearest(Ep + Ex * 6.0);
+				ParkLane::FRoute R;
+				if (!ParkLane::FindRoute(*Lane.G, Lane.States, T, GateA, R))
+				{
+					W.Note = FString::Printf(TEXT("통로 규칙상 %d번 면 앞 통로(%s)에서 출구로 가는 길이 없습니다 — sim.lanes / sim.setLaneRules 를 확인하세요"),
+						Slot.Number, *ParkLane::EdgeId(SlotA.Edge));
+					return W;
+				}
+				// 목표선: 기동 끝 → 이음점(A1) → (그래프 경로) → 출구. 지름길은 A1~출구 사이에만 건다.
+				// 우측통행 오프셋으로 모서리를 못 돌면 가운데 선으로 한 번 더(입차와 같은 이유).
+				const FVector2D XDir = PsYawDir(Exit.YawDeg);
+				TArray<FSeg> Route;
+				FPose REnd;
+				bool bFollowed = false;
+				for (const bool bOffset : { true, false })
+				{
+					W.Note.Reset();   // 앞 시도의 실패 메모를 남기지 않는다
+					TArray<FVector2D> Mid = R.Pts;
+					if (bOffset) { ParkLane::OffsetForTraffic(*Lane.G, Lane.States, R, Car.Width * 0.5, Mid); }
+					TArray<FVector2D> Pts = { Ep + Ex * 1.0 };
+					Pts.Append(Mid);
+					Pts.Add(Exit.Pos);
+					ParkLane::Shortcut(*Lane.G, Pts, PsShortcutClear(*Lane.G, Car));
+					Pts.Insert(Ep, 0);
+					Pts.Add(Exit.Pos + XDir * 4.0);
+					ParkLane::Fillet(Pts, Car.MinRadius * 1.15);
+					W.LanePts = Pts;
+					if (!ParkLane::Follow(End, Pts, ParkLane::PolylineLength(Pts) - 4.0, PsKMax(Car), PsLookahead(Car), Route, REnd, 3.0, TEXT("통로를 따라 출구로(통로 그래프)")))
+					{
+						W.Note = FString::Printf(TEXT("통로 그래프 경로(%s)를 최소 회전반경으로 따라갈 수 없습니다(경로에서 4.5 m 넘게 벗어남)"), *PsEdgeList(R));
+						continue;
+					}
+					if (!PsLaneSweepOk(W, *Lane.G, End, Route, Car, R, Exit)) { continue; }
+					bFollowed = true;
+					break;
+				}
+				if (!bFollowed)
+				{
+					W.Segs.Append(Route);   // 따라간 데까지(sim.plan debug)
+					return W;
+				}
+				FString RouteClosest;
+				W.TransitClearanceM = PsRouteClearance(World, End, Route, Car, Ignore, RouteClosest);
+				if (W.TransitClearanceM >= 0.0 && W.TransitClearanceM < P.ClearOk)
+				{
+					const FString Warn = FString::Printf(TEXT("주의: 통로 주행 구간이 %s 와 %.2f m"), *RouteClosest, W.TransitClearanceM);
+					W.Note = W.Note.IsEmpty() ? Warn : W.Note + TEXT(" · ") + Warn;
+				}
+				W.UsedGate = Exit;
+				W.Segs.Append(Route);
+				PsLaneFill(W, Lane, R);
+				W.bOk = true;
+				return W;
+			}
+			TArray<FSeg> Link;
+			if (!DubinsPath(End, PsGatePose(Exit), Car.MinRadius * 1.3, Link, 3.0, TEXT("통로에서 출구로")))
+			{
+				W.Note = TEXT("통로에서 출구로 잇는 경로를 만들지 못했습니다");
+				return W;
+			}
+			FString TransitClosest;
+			W.TransitClearanceM = PsTransitClearance(F, P, ObsNames, End, Link, TransitClosest);
+			if (W.TransitClearanceM >= 0.0 && W.TransitClearanceM < P.ClearOk)
+			{
+				W.Note = FString::Printf(TEXT("주의: 통로→출구 연결 구간이 %s 와 %.2f m — 출구 위치(sim.setGates)를 통로 쪽으로 옮기세요"),
+					*TransitClosest, W.TransitClearanceM);
+			}
+			if (!LaneNote.IsEmpty()) { W.Note = W.Note.IsEmpty() ? LaneNote : LaneNote + TEXT(" · ") + W.Note; }
+			W.UsedGate = Exit;
+			W.Segs.Append(Link);
 			W.bOk = true;
 			return W;
-		}
-		TArray<FSeg> Link;
-		if (!DubinsPath(End, PsGatePose(Exit), Car.MinRadius * 1.3, Link, 3.0, TEXT("통로에서 출구로")))
-		{
-			W.Note = TEXT("통로에서 출구로 잇는 경로를 만들지 못했습니다");
-			return W;
-		}
-		FString TransitClosest;
-		W.TransitClearanceM = PsTransitClearance(F, P, ObsNames, End, Link, TransitClosest);
-		if (W.TransitClearanceM >= 0.0 && W.TransitClearanceM < P.ClearOk)
-		{
-			W.Note = FString::Printf(TEXT("주의: 통로→출구 연결 구간이 %s 와 %.2f m — 출구 위치(sim.setGates)를 통로 쪽으로 옮기세요"),
-				*TransitClosest, W.TransitClearanceM);
-		}
-		W.UsedGate = Exit;
-		W.Segs.Append(Link);
-		W.bOk = true;
-		return W;
+		});
 	}
 }

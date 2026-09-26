@@ -149,11 +149,32 @@ namespace
 		return RpcDto::MakeObject(O);
 	}
 
-	/** 카메라 렌더타깃 → JPEG/PNG base64 응답. RHI 없으면(-nullrhi) -32000. */
-	TSharedPtr<FJsonValue> DoCapture(APTZCameraActor* Cam, int32 CamId, bool bPng, int32 Quality, FRpcError& E)
+	/**
+	 * 캡처 크기 해석(보드 #991) — width/height 생략이면 스트림 타깃 크기 그대로.
+	 * 한쪽만 주면 스트림 타깃 비율을 유지하고, 결과는 16..3840 × 16..2160 으로 자른다.
+	 */
+	void ResolveCaptureSize(const TSharedPtr<FJsonObject>& P, const UTextureRenderTarget2D* RT, int32& OutW, int32& OutH)
 	{
-		Cam->CaptureOnce(); // 프레시 프레임(선택 전환 직후 stale 방지).
-		UTextureRenderTarget2D* RT = Cam->RenderTarget;
+		OutW = RT->SizeX;
+		OutH = RT->SizeY;
+		const bool bW = RpcParam::Has(P, TEXT("width"));
+		const bool bH = RpcParam::Has(P, TEXT("height"));
+		if (bW) { OutW = RpcParam::GetInt(P, TEXT("width"), OutW); }
+		if (bH) { OutH = RpcParam::GetInt(P, TEXT("height"), OutH); }
+		if (bW && !bH && RT->SizeX > 0) { OutH = FMath::RoundToInt(static_cast<double>(OutW) * RT->SizeY / RT->SizeX); }
+		if (bH && !bW && RT->SizeY > 0) { OutW = FMath::RoundToInt(static_cast<double>(OutH) * RT->SizeX / RT->SizeY); }
+		OutW = FMath::Clamp(OutW, 16, 3840);
+		OutH = FMath::Clamp(OutH, 16, 2160);
+	}
+
+	/** 카메라 렌더타깃 → JPEG/PNG base64 응답. RHI 없으면(-nullrhi) -32000. width/height 가 다르면 별도 타깃에 1장. */
+	TSharedPtr<FJsonValue> DoCapture(APTZCameraActor* Cam, int32 CamId, bool bPng, int32 Quality, const TSharedPtr<FJsonObject>& P, FRpcError& E)
+	{
+		if (!Cam->RenderTarget) { E.FailDomain(TEXT("렌더타깃 없음(InitRenderTarget 미호출)")); return nullptr; }
+		int32 W = 0, H = 0;
+		ResolveCaptureSize(P, Cam->RenderTarget, W, H);
+		const double T0 = FPlatformTime::Seconds();
+		UTextureRenderTarget2D* RT = Cam->CaptureAtSize(W, H); // 프레시 프레임(선택 전환 직후 stale 방지).
 		if (!RT) { E.FailDomain(TEXT("렌더타깃 없음(InitRenderTarget 미호출)")); return nullptr; }
 		FTextureRenderTargetResource* Res = RT->GameThread_GetRenderTargetResource();
 		if (!Res) { E.FailDomain(TEXT("렌더 리소스 없음 — 실RHI 필요(-nullrhi 캡처 불가)")); return nullptr; }
@@ -166,6 +187,7 @@ namespace
 			E.FailDomain(TEXT("렌더타깃 픽셀 읽기 실패"));
 			return nullptr;
 		}
+		const double RenderMs = (FPlatformTime::Seconds() - T0) * 1000.0; // 렌더 + 리드백(인코딩 제외)
 
 		TArray<uint8> Bytes;
 		if (!RpcImage::EncodeColors(Bitmap, RT->SizeX, RT->SizeY, bPng, Quality, Bytes))
@@ -180,6 +202,7 @@ namespace
 		O->SetNumberField(TEXT("height"), RT->SizeY);
 		O->SetStringField(TEXT("format"), bPng ? TEXT("png") : TEXT("jpg"));
 		O->SetNumberField(TEXT("camId"), CamId);
+		O->SetNumberField(TEXT("renderMs"), FMath::RoundToDouble(RenderMs * 10.0) / 10.0);
 		return RpcDto::MakeObject(O);
 	}
 
@@ -592,14 +615,14 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 		int32 CamId = 0;
 		APTZCameraActor* Cam = ResolveCaptureCam(Mgr, P, CamId, E); if (!Cam) return nullptr;
 		const int32 Quality = RpcParam::GetInt(P, TEXT("quality"), 85);
-		return DoCapture(Cam, CamId, /*bPng=*/false, Quality, E);
+		return DoCapture(Cam, CamId, /*bPng=*/false, Quality, P, E);
 	});
 	Dispatcher.Register(TEXT("cam.capturePNG"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		ACameraControlManager* Mgr = GetCameraManager(E); if (!Mgr) return nullptr;
 		int32 CamId = 0;
 		APTZCameraActor* Cam = ResolveCaptureCam(Mgr, P, CamId, E); if (!Cam) return nullptr;
-		return DoCapture(Cam, CamId, /*bPng=*/true, /*Quality=*/0, E);
+		return DoCapture(Cam, CamId, /*bPng=*/true, /*Quality=*/0, P, E);
 	});
 
 	// ---- 카메라별 전용 포트 스트리밍(설계서 20260805_180808 §15) ----

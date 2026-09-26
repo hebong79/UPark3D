@@ -141,6 +141,38 @@ void APTZCameraActor::CaptureOnce()
 	}
 }
 
+UTextureRenderTarget2D* APTZCameraActor::CaptureAtSize(int32 W, int32 H)
+{
+	if (!Capture || !RenderTarget)
+	{
+		return nullptr;
+	}
+	if (W == RenderTarget->SizeX && H == RenderTarget->SizeY)
+	{
+		CaptureOnce();
+		return RenderTarget;
+	}
+
+	if (!SizedCaptureTarget)
+	{
+		SizedCaptureTarget = NewObject<UTextureRenderTarget2D>(this);
+		SizedCaptureTarget->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8_SRGB; // InitRenderTarget 과 같은 감마 규약
+		SizedCaptureTarget->ClearColor = FLinearColor::Black;
+		SizedCaptureTarget->bAutoGenerateMips = false;
+	}
+	if (SizedCaptureTarget->SizeX != W || SizedCaptureTarget->SizeY != H)
+	{
+		SizedCaptureTarget->InitAutoFormat(W, H);
+		SizedCaptureTarget->UpdateResourceImmediate(true);
+	}
+
+	// CaptureScene 은 호출 시점의 타깃으로 렌더 명령을 넣으므로 바로 되돌려도 스트림에 섞이지 않는다.
+	Capture->TextureTarget = SizedCaptureTarget;
+	Capture->CaptureScene();
+	Capture->TextureTarget = RenderTarget;
+	return SizedCaptureTarget;
+}
+
 void APTZCameraActor::SetPoleVisible(bool bVisible)
 {
 	if (PoleMesh)

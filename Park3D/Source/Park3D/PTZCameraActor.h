@@ -46,6 +46,10 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "PTZ")
 	UTextureRenderTarget2D* RenderTarget;
 
+	/** CaptureAtSize 전용 캐시(스트림과 다른 크기 1장 촬영용). 크기가 바뀔 때만 재초기화. */
+	UPROPERTY(Transient)
+	UTextureRenderTarget2D* SizedCaptureTarget;
+
 	/** 최대 줌 배율(설계 §7.3, zoom 1~36). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PTZ")
 	float MaxZoom = 36.f;
@@ -104,6 +108,13 @@ public:
 	/** 1회 즉시 캡처(선택 전환 stale 방지, 설계 §12-B). */
 	UFUNCTION(BlueprintCallable, Category = "PTZ")
 	void CaptureOnce();
+
+	/**
+	 * W×H 로 1프레임만 촬영해 그 타깃을 돌려준다(cam.captureJPG width/height, 보드 #991).
+	 * 스트림용 RenderTarget 과 크기가 같으면 CaptureOnce 와 같다. 다르면 캐시 타깃에 찍고
+	 * Capture->TextureTarget 을 RenderTarget 으로 되돌린다 — 스트림 해상도·fps 는 변하지 않는다.
+	 */
+	UTextureRenderTarget2D* CaptureAtSize(int32 W, int32 H);
 
 	/** 폴대 가시성 토글. 숨김 시 콜리전도 동반 off(바닥 트레이스 오탐 방지, 설계 §12-H). */
 	UFUNCTION(BlueprintCallable, Category = "PTZ")

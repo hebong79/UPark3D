@@ -7,7 +7,9 @@
 #include "../Rpc/RpcDispatcher.h"
 #include "../Rpc/Modules/CamRpcModule.h"
 #include "../CameraControlManager.h"
+#include "../PTZCameraActor.h"
 #include "../Park3DDataPaths.h"
+#include "Components/StaticMeshComponent.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Engine/World.h"
@@ -140,6 +142,24 @@ namespace
 		bool V = Default;
 		if (R.IsValid() && R->Type == EJson::Object) { R->AsObject()->TryGetBoolField(Key, V); }
 		return V;
+	}
+
+	/** 매니저 풀에서 폴대가 보이는 카메라 수(보드 #940 — 표식 스위치와 어긋나면 안 된다). */
+	int32 VisiblePoleCount(ACameraControlManager* Mgr)
+	{
+		int32 N = 0;
+		for (int32 i = 0; Mgr && i < Mgr->GetCameraCount(); ++i)
+		{
+			const APTZCameraActor* Cam = Mgr->GetCamera(i);
+			if (Cam && Cam->PoleMesh && Cam->PoleMesh->IsVisible()) ++N;
+		}
+		return N;
+	}
+
+	ACameraControlManager* FindCameraManager(UWorld* World)
+	{
+		return Cast<ACameraControlManager>(
+			UGameplayStatics::GetActorOfClass(World, ACameraControlManager::StaticClass()));
 	}
 
 	int32 CountCamMarkActors(UWorld* World)
@@ -386,6 +406,87 @@ bool FCamRpcExtMarksTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("enabled=false"), BoolOf(Off, TEXT("enabled"), true));
 	TestEqual(TEXT("끈 뒤 CamMark 액터 0개"), CountCamMarkActors(World), 0);
 
+	ResetCameraManager(World);
+	return true;
+}
+
+// ===== 바닥 폴대가 표식 스위치를 따르는가(보드 #940) =====
+// 수정 전에는 APTZCameraActor 가 폴대를 '보임'으로 만들고 cam.setMarks 만 그것을 껐으므로,
+// 스위치가 꺼진 채 스폰된 카메라(cam.create / cam.loadPosFile)는 전부 기둥을 달고 나왔다.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCamRpcExtMarkPolesTest,
+	"Park3D.Rpc.CamModuleExt.MarkPoles",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCamRpcExtMarkPolesTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = EditorWorldOrNull();
+	if (!World) { AddWarning(TEXT("에디터 월드 없음 — 건너뜀.")); return true; }
+	ResetCameraManager(World);
+	DeleteTestPosFile();
+
+	URpcDispatcher* D = NewObject<URpcDispatcher>();
+	FCamRpcModule Cam([World]() -> UWorld* { return World; });
+	Cam.Register(*D);
+	auto Dispatch = [&](const FString& M, const TSharedPtr<FJsonObject>& P, TSharedPtr<FJsonValue>& R) -> bool
+	{ FRpcError E; return D->Dispatch(M, P, R, E); };
+
+	// --- 표식 꺼짐(기본)에서 만든 카메라 → 폴대 숨김 ---
+	TSharedPtr<FJsonValue> C1, C2;
+	Dispatch(TEXT("cam.create"), nullptr, C1);
+	Dispatch(TEXT("cam.create"), nullptr, C2);
+	ACameraControlManager* Mgr = FindCameraManager(World);
+	if (!Mgr) { AddError(TEXT("카메라 매니저를 찾지 못함")); return false; }
+	TestEqual(TEXT("cam.create 2대"), Mgr->GetCameraCount(), 2);
+	TestFalse(TEXT("매니저 폴대 스위치 기본 off"), Mgr->ArePolesVisible());
+	TestEqual(TEXT("marks off: 보이는 폴대 0"), VisiblePoleCount(Mgr), 0);
+
+	TSharedPtr<FJsonValue> M0;
+	Dispatch(TEXT("cam.marks"), nullptr, M0);
+	TestFalse(TEXT("cam.marks enabled=false"), BoolOf(M0, TEXT("enabled"), true));
+	TestFalse(TEXT("cam.marks polesVisible=false"), BoolOf(M0, TEXT("polesVisible"), true));
+	TestEqual(TEXT("조회 뒤에도 보이는 폴대 0"), VisiblePoleCount(Mgr), 0);
+
+	// --- 표식 꺼짐에서 파일 로드(3대로 증가) → 늘어난 카메라도 숨김 ---
+	TSharedPtr<FJsonObject> ImpP = MakeShared<FJsonObject>();
+	ImpP->SetStringField(TEXT("fileName"), TestPosFile);
+	ImpP->SetObjectField(TEXT("content"), CamPosDoc(3));
+	ImpP->SetBoolField(TEXT("overwrite"), true);
+	TSharedPtr<FJsonValue> ImpR;
+	TestTrue(TEXT("cam.importPosFile 성공"), Dispatch(TEXT("cam.importPosFile"), ImpP, ImpR));
+	TSharedPtr<FJsonObject> LoadP = MakeShared<FJsonObject>();
+	LoadP->SetStringField(TEXT("fileName"), TestPosFile);
+	TSharedPtr<FJsonValue> LoadR;
+	TestTrue(TEXT("cam.loadPosFile 성공"), Dispatch(TEXT("cam.loadPosFile"), LoadP, LoadR));
+	TestEqual(TEXT("로드 후 3대"), Mgr->GetCameraCount(), 3);
+	TestEqual(TEXT("로드 후에도 보이는 폴대 0"), VisiblePoleCount(Mgr), 0);
+
+	// --- 켜기 → 전부 보임. 그 뒤에 만든 카메라도 보임 ---
+	TSharedPtr<FJsonValue> On;
+	TestTrue(TEXT("cam.setMarks true"), Dispatch(TEXT("cam.setMarks"), nullptr, On));
+	TestTrue(TEXT("polesVisible=true"), BoolOf(On, TEXT("polesVisible"), false));
+	TestTrue(TEXT("매니저 폴대 스위치 on"), Mgr->ArePolesVisible());
+	TestEqual(TEXT("marks on: 폴대 3"), VisiblePoleCount(Mgr), 3);
+
+	TSharedPtr<FJsonValue> C4; Dispatch(TEXT("cam.create"), nullptr, C4);
+	TestEqual(TEXT("추가 후 4대"), Mgr->GetCameraCount(), 4);
+	TestEqual(TEXT("marks on: 새 카메라도 폴대 보임(4)"), VisiblePoleCount(Mgr), 4);
+
+	// --- 끄기 → 전부 숨김. 그 뒤에 만든 카메라도 숨김 ---
+	TSharedPtr<FJsonObject> OffP = MakeShared<FJsonObject>(); OffP->SetBoolField(TEXT("enabled"), false);
+	TSharedPtr<FJsonValue> Off;
+	TestTrue(TEXT("cam.setMarks false"), Dispatch(TEXT("cam.setMarks"), OffP, Off));
+	TestFalse(TEXT("polesVisible=false"), BoolOf(Off, TEXT("polesVisible"), true));
+	TestEqual(TEXT("끈 뒤 보이는 폴대 0"), VisiblePoleCount(Mgr), 0);
+
+	TSharedPtr<FJsonValue> C5; Dispatch(TEXT("cam.create"), nullptr, C5);
+	TestEqual(TEXT("끈 뒤 추가한 카메라도 폴대 숨김"), VisiblePoleCount(Mgr), 0);
+
+	// --- 초기화(카메라 1대 재구성)에서도 스위치를 따른다 ---
+	TSharedPtr<FJsonValue> RstR;
+	TestTrue(TEXT("cam.resetCameras 성공"), Dispatch(TEXT("cam.resetCameras"), nullptr, RstR));
+	TestEqual(TEXT("초기화 후에도 보이는 폴대 0"), VisiblePoleCount(Mgr), 0);
+
+	DeleteTestPosFile();
 	ResetCameraManager(World);
 	return true;
 }

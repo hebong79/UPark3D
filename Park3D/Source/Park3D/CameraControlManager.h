@@ -155,9 +155,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Camera")
 	APTZCameraActor* TracePole(APlayerController* PC) const;
 
-	/** 전체 폴대 표시/숨김(숨김 시 콜리전 동반 off, 설계 §12-H). */
+	/**
+	 * 전체 폴대 표시/숨김(숨김 시 콜리전 동반 off, 설계 §12-H).
+	 * 값은 bPolesVisible 에 남아 AddCamera 로 나중에 생기는 카메라에도 적용된다 —
+	 * 이게 없으면 스위치를 끈 뒤 스폰된 카메라만 기둥을 달고 나온다(보드 #940).
+	 */
 	UFUNCTION(BlueprintCallable, Category = "Camera")
 	void ShowAllPoles(bool bShow);
+
+	/** 지금 폴대를 보이기로 되어 있는가(ShowAllPoles 가 마지막으로 받은 값). */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Camera")
+	bool ArePolesVisible() const { return bPolesVisible; }
 
 	/** 인덱스 폴대만 강조(나머지 복원). */
 	UFUNCTION(BlueprintCallable, Category = "Camera")
@@ -167,4 +175,8 @@ private:
 	/** PTZ 카메라 액터 풀(CarPlacementManager::Cars 와 동형). */
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<APTZCameraActor>> Cameras;
+
+	/** 폴대 표시 스위치(풀 전체 공유). 카메라 액터 기본값(숨김)과 같은 false 로 시작한다. */
+	UPROPERTY(Transient)
+	bool bPolesVisible = false;
 };

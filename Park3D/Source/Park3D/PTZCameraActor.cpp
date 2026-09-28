@@ -33,8 +33,11 @@ APTZCameraActor::APTZCameraActor()
 	PoleMesh->SetupAttachment(Root);
 	PoleMesh->SetUsingAbsoluteLocation(true);   // Root 높이(Z) 비상속 → 바닥 고정
 	PoleMesh->SetUsingAbsoluteRotation(true);   // Capture 팬틸트 비상속 → 수직 유지
-	// 폴대 클릭 선택(TracePole)을 위해 Visibility 블록 유지. 물리 충돌 불필요 → Query 전용(CarActor 관례).
-	PoleMesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	// 기본은 숨김 — 표시 스위치(ACameraControlManager::ShowAllPoles / RPC cam.setMarks)가 켤 때만 보인다.
+	// 기본을 '보임'으로 두면 스위치가 꺼져 있는데도 새로 스폰된 카메라 밑에 기둥이 선다(보드 #940).
+	// 콜리전은 SetPoleVisible 과 같은 규약으로 맞춘다(숨김=off, 표시=Query 전용 — 폴대 클릭 선택 TracePole 용, §12-H).
+	PoleMesh->SetVisibility(false);
+	PoleMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	PoleMesh->ComponentTags.AddUnique(PoleTag);
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylFinder(TEXT("/Engine/BasicShapes/Cylinder"));

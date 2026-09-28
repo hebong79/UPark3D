@@ -119,6 +119,7 @@ APTZCameraActor* ACameraControlManager::AddCamera(FString Name)
 	Cam->SetZoom(1.f);
 	Cam->InitRenderTarget();
 	Cam->SetCaptureEnabled(false);   // 신규는 비선택 → 캡처 off(선택 시 SelectCamera 가 활성)
+	Cam->SetPoleVisible(bPolesVisible);   // 폴대는 풀 공용 스위치를 따른다(보드 #940 — 스위치가 꺼졌는데 새 카메라만 기둥이 섰다).
 	Cameras.Add(Cam);
 
 	UE_LOG(LogTemp, Log, TEXT("[CameraControl] AddCamera: %s (총 %d대)"), *Name, Cameras.Num());
@@ -280,6 +281,8 @@ APTZCameraActor* ACameraControlManager::TracePole(APlayerController* PC) const
 
 void ACameraControlManager::ShowAllPoles(bool bShow)
 {
+	// 스위치 값을 남긴다 — AddCamera 가 나중에 생기는 카메라에 같은 값을 적용한다.
+	bPolesVisible = bShow;
 	for (APTZCameraActor* Cam : Cameras)
 	{
 		if (Cam)

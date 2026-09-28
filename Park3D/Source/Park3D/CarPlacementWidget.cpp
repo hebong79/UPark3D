@@ -824,6 +824,13 @@ void UCarPlacementWidget::SyncSelectionVisuals()
 	}
 }
 
+void UCarPlacementWidget::ClearSelection()
+{
+	SelectedIndices.Reset();
+	PrimaryIndex = INDEX_NONE;
+	SyncSelectionVisuals();
+}
+
 // ===== 상세 필드 =====
 void UCarPlacementWidget::FillDetailFields(const FCarPos& Pos)
 {

@@ -142,6 +142,12 @@ public:
 	 */
 	static UCarPlacementWidget* FindWithSelectionMarkUI(const UWorld* World);
 
+	/**
+	 * 선택을 모두 비운다(목록 강조·월드 선택 표시 함께). 기동·레벨 전환 자동 로딩이
+	 * LoadFromJsonFile 의 "첫 차량 선택"을 되돌리려고 쓴다. UFUNCTION 이 아니다(쿠킹된 WBP 베이스 규약).
+	 */
+	void ClearSelection();
+
 	UFUNCTION(BlueprintCallable, Category = "Car") FString GetDefaultCarFilePath() const;
 	UFUNCTION(BlueprintCallable, Category = "Car") bool SaveToJsonFile(const FString& FilePath);
 	UFUNCTION(BlueprintCallable, Category = "Car") bool LoadFromJsonFile(const FString& FilePath);

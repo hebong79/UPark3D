@@ -550,7 +550,17 @@ void APark3DGameMode::ApplyStartupConfig()
 		[](UUserWidget* W, const FString& P) { UCameraControlWidget* T = Cast<UCameraControlWidget>(W); return T && T->LoadFromJsonFile(P); });
 
 	ApplyToPanel(TEXT("차량배치"), Menu->CarPlacementWidgetClass, TEXT("CarPos"), Config.CarPosFile,
-		[](UUserWidget* W, const FString& P) { UCarPlacementWidget* T = Cast<UCarPlacementWidget>(W); return T && T->LoadFromJsonFile(P); });
+		[](UUserWidget* W, const FString& P)
+		{
+			UCarPlacementWidget* T = Cast<UCarPlacementWidget>(W);
+			if (!T || !T->LoadFromJsonFile(P))
+			{
+				return false;
+			}
+			// "열기" 본체는 첫 차량을 선택하므로 기동·레벨 전환 화면에 선택 표시가 뜬다 → 자동 로딩에서만 비운다.
+			T->ClearSelection();
+			return true;
+		});
 }
 
 void APark3DGameMode::ApplyCameraStart()

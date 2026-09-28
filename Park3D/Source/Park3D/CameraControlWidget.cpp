@@ -1122,10 +1122,16 @@ void UCameraControlWidget::HandlePicking()
 
 void UCameraControlWidget::HandleShowPole()
 {
-	bShowPole = !bShowPole;
 	if (ACameraControlManager* Mgr = GetCameraManager())
 	{
+		// 위젯 플래그가 아니라 월드의 현재 상태에서 뒤집는다 — 그 사이 RPC(cam.setMarks)가 바꿔 놨을 수 있다
+		// (car.hideAll 체크박스와 같은 관례: 상태는 매니저가 갖고 UI 는 열 때/누를 때 읽는다).
+		bShowPole = !Mgr->ArePolesVisible();
 		Mgr->ShowAllPoles(bShowPole);
+	}
+	else
+	{
+		bShowPole = !bShowPole;
 	}
 	SetButtonLabel(Btn_ShowPole, bShowPole ? TEXT("폴대 숨기기") : TEXT("폴대 보기"));
 }

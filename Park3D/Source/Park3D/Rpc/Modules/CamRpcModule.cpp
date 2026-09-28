@@ -382,6 +382,7 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 		ACameraControlManager* Mgr = GetCameraManager(E); if (!Mgr) return nullptr;
 		const int32 NewCamId = Mgr->GetCameraCount() + 1;
 		Mgr->AddCamera(FString::Printf(TEXT("Camera-%d"), NewCamId));
+		Mgr->ShowAllPoles(bMarksEnabled); // 폴대는 표식 스위치를 따른다(매니저는 레벨마다 새로 생기므로 재적용).
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetNumberField(TEXT("camId"), Mgr->GetCameraCount());
 		return RpcDto::MakeObject(O);
@@ -1096,6 +1097,7 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 			for (int32 i = 0; i < Mgr->GetCameraCount(); ++i) { S->NotifyPtzCommand(i + 1); }
 		}
 		if (bMarksEnabled) { RebuildMarks(Mgr); } // 대수가 바뀌었을 수 있다.
+		Mgr->ShowAllPoles(bMarksEnabled);         // 늘어난 카메라의 폴대도 스위치를 따른다.
 		TSharedPtr<FJsonObject> O = PosFileSummary(Path, Doc);
 		O->SetBoolField(TEXT("ok"), true);
 		return RpcDto::MakeObject(O);
@@ -1181,6 +1183,7 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 		PushCamNumberAnchors(GetWorldPtr(), PresetMemory);
 		if (UCamStreamSubsystem* S = GetStreamSubsystem(GetWorldPtr())) { S->NotifyPtzCommand(1); }
 		if (bMarksEnabled) { RebuildMarks(Mgr); }
+		Mgr->ShowAllPoles(bMarksEnabled);
 
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetBoolField(TEXT("ok"), true);
@@ -1208,6 +1211,8 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 		ACameraControlManager* Mgr = GetCameraManager(E); if (!Mgr) return nullptr;
 		// 켜져 있으면 카메라 대수와 표식 수를 맞춘다(cam.create/delete 뒤에도 같은 것을 본다).
 		if (bMarksEnabled && MarkActors.Num() != Mgr->GetCameraCount()) { RebuildMarks(Mgr); }
+		// 폴대도 스위치에 맞춘다 — 조회가 '꺼짐'이라고 답하는데 기둥이 서 있는 일이 없게(보드 #940). 값이 같으면 비용 없음.
+		Mgr->ShowAllPoles(bMarksEnabled);
 		return MarksState(Mgr);
 	});
 
@@ -1405,6 +1410,9 @@ TSharedPtr<FJsonValue> FCamRpcModule::MarksState(ACameraControlManager* Mgr)
 	}
 	TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 	O->SetBoolField(TEXT("enabled"), bMarksEnabled);
+	// 바닥 기둥의 실제 상태(공 = enabled, 기둥 = 이 값). 둘은 같아야 하지만 패널 「폴대 보기」 버튼이
+	// 기둥만 따로 켤 수 있으므로 사실을 그대로 싣는다.
+	O->SetBoolField(TEXT("polesVisible"), Mgr ? Mgr->ArePolesVisible() : false);
 	O->SetNumberField(TEXT("dropM"), CamMarkDropM);
 	O->SetNumberField(TEXT("ballRadiusM"), CamMarkBallRadiusM);
 	O->SetArrayField(TEXT("marks"), Arr);

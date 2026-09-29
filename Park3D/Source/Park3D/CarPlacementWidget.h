@@ -148,6 +148,21 @@ public:
 	 */
 	void ClearSelection();
 
+	/** 월드(매니저)에 있는 차량 패널 인스턴스(체크박스 유무 무관). 없으면 nullptr. UFUNCTION 아님. */
+	static UCarPlacementWidget* FindInWorld(const UWorld* World);
+
+	/**
+	 * RPC(car.select 다중)가 정한 선택을 패널에 반영한다 — 목록 강조·월드 표시·상세 필드. 마지막 항목이 상세 기준.
+	 * UFUNCTION 아님(쿠킹된 WBP 베이스 규약).
+	 */
+	void SetSelectionFromRpc(const TArray<int32>& Indices);
+
+	/**
+	 * RPC(car.moveAll/rotateAll)가 옮긴 차량의 월드 값을 패널 데이터(CarData)로 되읽는다.
+	 * 안 하면 패널의 다음 RefreshView(RebuildAll)가 옛 값으로 되돌린다. id 가 같은 칸만 갱신. UFUNCTION 아님.
+	 */
+	void SyncCarDataFromWorld(const TArray<int32>& Indices);
+
 	UFUNCTION(BlueprintCallable, Category = "Car") FString GetDefaultCarFilePath() const;
 	UFUNCTION(BlueprintCallable, Category = "Car") bool SaveToJsonFile(const FString& FilePath);
 	UFUNCTION(BlueprintCallable, Category = "Car") bool LoadFromJsonFile(const FString& FilePath);

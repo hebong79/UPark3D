@@ -204,6 +204,191 @@ bool FRpcCarExtShowAllTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// ===== car.rotateAll: 전체(숨긴 차 포함)·일부 차량을 제자리 회전 (보드 #1029) =====
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRpcCarRotateAllTest,
+	"Park3D.Rpc.CarModuleExt.RotateAll",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FRpcCarRotateAllTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = CpEditorWorld();
+	if (!World) { AddWarning(TEXT("에디터 월드 없음 — 건너뜀.")); return true; }
+	CpCleanupCarManager(World);
+
+	URpcDispatcher* D = NewObject<URpcDispatcher>();
+	FCarRpcModule Car([World]() -> UWorld* { return World; });
+	Car.SetCatalog(CpTestCatalog());
+	Car.Register(*D);
+
+	const FString IdA = CpCreateCar(D, 1, 1);
+	const FString IdB = CpCreateCar(D, 4, 4);
+	TestFalse(TEXT("차량 2대 생성"), IdA.IsEmpty() || IdB.IsEmpty());
+	ACarPlacementManager* Mgr = Cast<ACarPlacementManager>(UGameplayStatics::GetActorOfClass(World, ACarPlacementManager::StaticClass()));
+	if (!TestNotNull(TEXT("매니저"), Mgr)) return false;
+	ACarActor* A = Mgr->FindByNameId(IdA);
+	ACarActor* B = Mgr->FindByNameId(IdB);
+	if (!TestNotNull(TEXT("A"), A) || !TestNotNull(TEXT("B"), B)) return false;
+	A->CarData.rotY = 72.09f;
+	B->CarData.rotY = 300.f;
+	B->SetActorHiddenInGame(true);
+	const FVector PosA = A->GetActorLocation();
+
+	auto Call = [&](TFunction<void(FJsonObject&)> Fill, TSharedPtr<FJsonValue>& R) -> bool
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>(); Fill(*P);
+		FRpcError E;
+		return D->Dispatch(TEXT("car.rotateAll"), P, R, E);
+	};
+
+	// deltaRotY 180 → 전부(숨긴 B 포함), 0..360 정규화, 위치 불변.
+	{
+		TSharedPtr<FJsonValue> R;
+		TestTrue(TEXT("delta 성공"), Call([](FJsonObject& P) { P.SetNumberField(TEXT("deltaRotY"), 180); }, R));
+		TestEqual(TEXT("changedCount 2"), CpNumField(R, TEXT("changedCount")), 2);
+		TestEqual(TEXT("cars 2행"), CpArrayNum(R, TEXT("cars")), 2);
+		TestEqual(TEXT("A 252.09"), A->CarData.rotY, 252.09f, 0.01f);
+		TestEqual(TEXT("B 120 (숨긴 차 포함·정규화)"), B->CarData.rotY, 120.f, 0.01f);
+		TestTrue(TEXT("A 위치 불변"), A->GetActorLocation().Equals(PosA, 0.1));
+	}
+	// rotY 절대값 + 일부 + 없는 id → notFound.
+	{
+		TSharedPtr<FJsonValue> R;
+		TestTrue(TEXT("abs 성공"), Call([&](FJsonObject& P)
+		{
+			P.SetNumberField(TEXT("rotY"), -90);
+			TArray<TSharedPtr<FJsonValue>> Ids;
+			Ids.Add(MakeShared<FJsonValueString>(IdA));
+			Ids.Add(MakeShared<FJsonValueString>(TEXT("nope")));
+			P.SetArrayField(TEXT("carNameIds"), Ids);
+		}, R));
+		TestEqual(TEXT("changedCount 1"), CpNumField(R, TEXT("changedCount")), 1);
+		TestEqual(TEXT("notFound 1"), CpArrayNum(R, TEXT("notFound")), 1);
+		TestEqual(TEXT("A 270"), A->CarData.rotY, 270.f, 0.01f);
+		TestEqual(TEXT("B 그대로 120"), B->CarData.rotY, 120.f, 0.01f);
+	}
+	// 둘 다 / 둘 다 없음 → 거부.
+	{
+		TSharedPtr<FJsonValue> R;
+		TestFalse(TEXT("둘 다 거부"), Call([](FJsonObject& P) { P.SetNumberField(TEXT("rotY"), 0); P.SetNumberField(TEXT("deltaRotY"), 0); }, R));
+		TestFalse(TEXT("둘 다 없음 거부"), Call([](FJsonObject&) {}, R));
+	}
+
+	CpCleanupCarManager(World);
+	return true;
+}
+
+// ===== car.select 다중 · car.getSelection · car.moveAll/rotateAll selected =====
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRpcCarSelectionBatchTest,
+	"Park3D.Rpc.CarModuleExt.SelectionBatch",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FRpcCarSelectionBatchTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = CpEditorWorld();
+	if (!World) { AddWarning(TEXT("에디터 월드 없음 — 건너뜀.")); return true; }
+	CpCleanupCarManager(World);
+
+	URpcDispatcher* D = NewObject<URpcDispatcher>();
+	FCarRpcModule Car([World]() -> UWorld* { return World; });
+	Car.SetCatalog(CpTestCatalog());
+	Car.Register(*D);
+
+	const FString IdA = CpCreateCar(D, 1, 1);
+	const FString IdB = CpCreateCar(D, 4, 4);
+	const FString IdC = CpCreateCar(D, 8, 8);
+	ACarPlacementManager* Mgr = Cast<ACarPlacementManager>(UGameplayStatics::GetActorOfClass(World, ACarPlacementManager::StaticClass()));
+	if (!TestNotNull(TEXT("매니저"), Mgr)) return false;
+	ACarActor* A = Mgr->FindByNameId(IdA);
+	ACarActor* B = Mgr->FindByNameId(IdB);
+	ACarActor* C = Mgr->FindByNameId(IdC);
+	if (!TestNotNull(TEXT("A"), A) || !TestNotNull(TEXT("B"), B) || !TestNotNull(TEXT("C"), C)) return false;
+
+	auto Ids = [](std::initializer_list<FString> L)
+	{
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		for (const FString& S : L) { Arr.Add(MakeShared<FJsonValueString>(S)); }
+		return Arr;
+	};
+
+	// A,B 선택 + 없는 id.
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+		P->SetArrayField(TEXT("carNameIds"), Ids({ IdA, IdB, TEXT("nope") }));
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestTrue(TEXT("다중 select 성공"), D->Dispatch(TEXT("car.select"), P, R, E));
+		TestEqual(TEXT("selectedCount 2"), CpNumField(R, TEXT("selectedCount")), 2);
+		TestEqual(TEXT("notFound 1"), CpArrayNum(R, TEXT("notFound")), 1);
+		TestTrue(TEXT("A·B 선택, C 아님"), A->IsSelected() && B->IsSelected() && !C->IsSelected());
+	}
+	// additive 로 C 추가 → getSelection 3.
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+		P->SetArrayField(TEXT("carNameIds"), Ids({ IdC }));
+		P->SetBoolField(TEXT("additive"), true);
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestTrue(TEXT("additive 성공"), D->Dispatch(TEXT("car.select"), P, R, E));
+		TSharedPtr<FJsonValue> G; FRpcError GE;
+		TestTrue(TEXT("getSelection 성공"), D->Dispatch(TEXT("car.getSelection"), nullptr, G, GE));
+		TestEqual(TEXT("선택 3대"), CpNumField(G, TEXT("selectedCount")), 3);
+	}
+	// 다시 A,B 만 선택 → selected 이동·회전은 C 를 건드리지 않는다.
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+		P->SetArrayField(TEXT("carNameIds"), Ids({ IdA, IdB }));
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		D->Dispatch(TEXT("car.select"), P, R, E);
+	}
+	const FVector PosA = A->GetActorLocation();
+	const FVector PosC = C->GetActorLocation();
+	const float RotC = C->CarData.rotY;
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+		TSharedPtr<FJsonObject> Delta = MakeShared<FJsonObject>();
+		Delta->SetNumberField(TEXT("x"), 2.0); Delta->SetNumberField(TEXT("y"), -1.0);
+		P->SetObjectField(TEXT("delta"), Delta);
+		P->SetBoolField(TEXT("selected"), true);
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestTrue(TEXT("moveAll selected 성공"), D->Dispatch(TEXT("car.moveAll"), P, R, E));
+		TestEqual(TEXT("moveAll changedCount 2"), CpNumField(R, TEXT("changedCount")), 2);
+		const FVector Moved = A->GetActorLocation() - PosA;
+		TestEqual(TEXT("A x +200cm"), Moved.X, 200.0, 1.0);
+		TestEqual(TEXT("A y -100cm"), Moved.Y, -100.0, 1.0);
+		TestTrue(TEXT("C 위치 불변"), C->GetActorLocation().Equals(PosC, 0.1));
+	}
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+		P->SetNumberField(TEXT("rotY"), 45);
+		P->SetBoolField(TEXT("selected"), true);
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestTrue(TEXT("rotateAll selected 성공"), D->Dispatch(TEXT("car.rotateAll"), P, R, E));
+		TestEqual(TEXT("rotateAll changedCount 2"), CpNumField(R, TEXT("changedCount")), 2);
+		TestEqual(TEXT("A 45"), A->CarData.rotY, 45.f, 0.01f);
+		TestEqual(TEXT("B 45"), B->CarData.rotY, 45.f, 0.01f);
+		TestEqual(TEXT("C 회전 불변"), C->CarData.rotY, RotC, 0.01f);
+	}
+	// 거부: delta 없음, carNameIds+selected 동시.
+	{
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestFalse(TEXT("delta 없음 거부"), D->Dispatch(TEXT("car.moveAll"), MakeShared<FJsonObject>(), R, E));
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+		P->SetNumberField(TEXT("deltaRotY"), 10);
+		P->SetBoolField(TEXT("selected"), true);
+		P->SetArrayField(TEXT("carNameIds"), Ids({ IdA }));
+		TestFalse(TEXT("ids+selected 거부"), D->Dispatch(TEXT("car.rotateAll"), P, R, E));
+	}
+	// 빈 배열 = 선택 해제.
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+		P->SetArrayField(TEXT("carNameIds"), TArray<TSharedPtr<FJsonValue>>());
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestTrue(TEXT("빈 선택 성공"), D->Dispatch(TEXT("car.select"), P, R, E));
+		TestTrue(TEXT("전부 해제"), !A->IsSelected() && !B->IsSelected() && !C->IsSelected());
+	}
+
+	CpCleanupCarManager(World);
+	return true;
+}
+
 // ===== car.setSelectionMark / car.getSelectionMark: 선택 상태는 두고 표시만 끈다 =====
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRpcCarSelectionMarkTest,
 	"Park3D.Rpc.CarModuleExt.SelectionMark",

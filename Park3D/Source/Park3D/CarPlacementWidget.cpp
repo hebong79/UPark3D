@@ -1027,6 +1027,55 @@ UCarPlacementWidget* UCarPlacementWidget::FindWithSelectionMarkUI(const UWorld* 
 	return nullptr;
 }
 
+UCarPlacementWidget* UCarPlacementWidget::FindInWorld(const UWorld* World)
+{
+	if (!World)
+	{
+		return nullptr;
+	}
+	for (TObjectIterator<UCarPlacementWidget> It; It; ++It)
+	{
+		UCarPlacementWidget* W = *It;
+		if (W && !W->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject) && IsValid(W) && W->GetWorld() == World)
+		{
+			return W;
+		}
+	}
+	return nullptr;
+}
+
+void UCarPlacementWidget::SetSelectionFromRpc(const TArray<int32>& Indices)
+{
+	SelectedIndices = Indices;
+	PrimaryIndex = Indices.Num() > 0 ? Indices.Last() : INDEX_NONE;
+	if (CarData.datas.IsValidIndex(PrimaryIndex))
+	{
+		FillDetailFields(CarData.datas[PrimaryIndex]);
+	}
+	SyncSelectionVisuals();
+}
+
+void UCarPlacementWidget::SyncCarDataFromWorld(const TArray<int32>& Indices)
+{
+	ACarPlacementManager* Mgr = GetCarManager();
+	if (!Mgr)
+	{
+		return;
+	}
+	for (const int32 Idx : Indices)
+	{
+		const ACarActor* C = Mgr->GetCar(Idx);
+		if (C && CarData.datas.IsValidIndex(Idx) && CarData.datas[Idx].id == C->CarData.id)
+		{
+			CarData.datas[Idx] = C->ToCarPos(MetersToUU);
+		}
+	}
+	if (CarData.datas.IsValidIndex(PrimaryIndex) && Indices.Contains(PrimaryIndex))
+	{
+		FillDetailFields(CarData.datas[PrimaryIndex]);
+	}
+}
+
 void UCarPlacementWidget::AddCarAtWorld(const FVector& WorldLoc)
 {
 	const TArray<FCarPresetEntry> Catalog = GetCatalog();

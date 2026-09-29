@@ -132,6 +132,40 @@ namespace
 		return MakeShared<FJsonValueObject>(Row);
 	}
 
+	/**
+	 * car.moveAll / car.rotateAll 대상 → 매니저 인덱스. carNameIds(부분) · selected:true(현재 선택) · 둘 다 없음(전부).
+	 * 숨긴 차 포함. 없는 id 는 OutNotFound 로 모은다(실패 아님).
+	 */
+	bool ResolveBatchTargets(ACarPlacementManager* Mgr, const TSharedPtr<FJsonObject>& P,
+		TArray<int32>& OutIdx, TArray<TSharedPtr<FJsonValue>>& OutNotFound, FRpcError& E)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* IdArr = nullptr;
+		const bool bIds = P.IsValid() && P->TryGetArrayField(TEXT("carNameIds"), IdArr);
+		const bool bSelected = RpcParam::GetBool(P, TEXT("selected"), false);
+		if (bIds && bSelected)
+		{
+			E.FailDomain(TEXT("carNameIds 와 selected 는 함께 줄 수 없습니다"));
+			return false;
+		}
+		const TArray<TObjectPtr<ACarActor>>& Cars = Mgr->GetCars();
+		if (bIds)
+		{
+			for (const TSharedPtr<FJsonValue>& V : *IdArr)
+			{
+				const FString Id = (V.IsValid() && V->Type == EJson::String) ? V->AsString() : FString();
+				const int32 Idx = Id.IsEmpty() ? INDEX_NONE : Mgr->IndexOfNameId(Id);
+				if (Idx != INDEX_NONE) { OutIdx.AddUnique(Idx); }
+				else { OutNotFound.Add(MakeShared<FJsonValueString>(Id)); }
+			}
+			return true;
+		}
+		for (int32 i = 0; i < Cars.Num(); ++i)
+		{
+			if (Cars[i] && (!bSelected || Cars[i]->IsSelected())) { OutIdx.Add(i); }
+		}
+		return true;
+	}
+
 	/** 카탈로그에서 prefabName → prefabId. 못 찾으면 0. */
 	int32 PrefabIdFromCatalogName(const TArray<FCarPresetEntry>& Catalog, const FString& Name)
 	{
@@ -410,13 +444,67 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 	Dispatcher.Register(TEXT("car.select"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
-		FString Id;
-		if (!RpcParam::RequireString(P, TEXT("carNameId"), Id, E)) return nullptr;
-		const int32 Idx = Mgr->IndexOfNameId(Id);
-		if (Idx == INDEX_NONE) { E.FailDomain(FString::Printf(TEXT("차량 없음: %s"), *Id)); return nullptr; }
-		Mgr->SetSelectedIndices({ Idx });
-		return RpcDto::OkTrue();
+		// 한 대(carNameId, 기존 계약) 또는 여러 대(carNameIds, 빈 배열 = 선택 해제). additive 는 기존 선택에 더한다.
+		const TArray<TSharedPtr<FJsonValue>>* IdArr = nullptr;
+		const bool bMulti = P.IsValid() && P->TryGetArrayField(TEXT("carNameIds"), IdArr);
+		TArray<int32> Sel;
+		TArray<TSharedPtr<FJsonValue>> NotFound;
+		if (bMulti)
+		{
+			for (const TSharedPtr<FJsonValue>& V : *IdArr)
+			{
+				const FString Id = (V.IsValid() && V->Type == EJson::String) ? V->AsString() : FString();
+				const int32 Idx = Id.IsEmpty() ? INDEX_NONE : Mgr->IndexOfNameId(Id);
+				if (Idx != INDEX_NONE) { Sel.AddUnique(Idx); }
+				else { NotFound.Add(MakeShared<FJsonValueString>(Id)); }
+			}
+		}
+		else
+		{
+			FString Id;
+			if (!RpcParam::RequireString(P, TEXT("carNameId"), Id, E)) return nullptr;
+			const int32 Idx = Mgr->IndexOfNameId(Id);
+			if (Idx == INDEX_NONE) { E.FailDomain(FString::Printf(TEXT("차량 없음: %s"), *Id)); return nullptr; }
+			Sel.Add(Idx);
+		}
+		if (RpcParam::GetBool(P, TEXT("additive"), false))
+		{
+			TArray<int32> Merged;
+			const TArray<TObjectPtr<ACarActor>>& Cars = Mgr->GetCars();
+			for (int32 i = 0; i < Cars.Num(); ++i) { if (Cars[i] && Cars[i]->IsSelected()) { Merged.Add(i); } }
+			for (const int32 Idx : Sel) { Merged.AddUnique(Idx); }
+			Sel = MoveTemp(Merged);
+		}
+
+		// 패널이 있으면 패널을 거친다(목록 강조·상세·다음 방향키 이동 대상이 같아진다). 없으면 매니저만.
+		if (UCarPlacementWidget* W = UCarPlacementWidget::FindInWorld(Mgr->GetWorld())) { W->SetSelectionFromRpc(Sel); }
+		else { Mgr->SetSelectedIndices(Sel); }
+
+		if (!bMulti) { return RpcDto::OkTrue(); }
+		TArray<TSharedPtr<FJsonValue>> Ids;
+		for (const int32 Idx : Sel) { if (const ACarActor* C = Mgr->GetCar(Idx)) { Ids.Add(MakeShared<FJsonValueString>(C->CarData.id)); } }
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetNumberField(TEXT("selectedCount"), Ids.Num());
+		O->SetArrayField(TEXT("carNameIds"), Ids);
+		O->SetArrayField(TEXT("notFound"), NotFound);
+		return RpcDto::MakeObject(O);
 	});
+	Dispatcher.SetMethodMeta(TEXT("car.select"), { true, false, TEXT("{carNameId} | {carNameIds: string[] (빈 배열=해제), additive?=false}"),
+		TEXT("차량 선택(다중 가능, 패널이 있으면 패널 선택과 같이). 다중 형식 응답 {ok, selectedCount, carNameIds, notFound}") });
+
+	Dispatcher.Register(TEXT("car.getSelection"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
+		TArray<TSharedPtr<FJsonValue>> Ids;
+		for (const ACarActor* C : Mgr->GetCars()) { if (C && C->IsSelected()) { Ids.Add(MakeShared<FJsonValueString>(C->CarData.id)); } }
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetNumberField(TEXT("selectedCount"), Ids.Num());
+		O->SetArrayField(TEXT("carNameIds"), Ids);
+		return RpcDto::MakeObject(O);
+	});
+	Dispatcher.SetMethodMeta(TEXT("car.getSelection"), { false, false, TEXT("{}"), TEXT("현재 선택된 차량 → {ok, selectedCount, carNameIds}") });
 
 	// ---- 위치 · 회전 ----
 	Dispatcher.Register(TEXT("car.setPosition"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
@@ -594,6 +682,100 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetNumberField(TEXT("rotatedCount"), Rotated);
 		return RpcDto::MakeObject(O);
 	});
+
+	// 전체·일부(carNameIds)·선택(selected) 차량을 각자 제자리에서 회전(보드 #1029). 위치는 그대로, rotY 만 바꾼다.
+	// car.groupRotate 는 presetId 단위라 car.create 로 만든 차(presetId 0)를 "전부" 로 못 묶는다.
+	// 숨긴 차도 대상. 없는 id 는 실패가 아니라 notFound 로 알린다.
+	Dispatcher.Register(TEXT("car.rotateAll"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
+		const bool bHasDelta = RpcParam::Has(P, TEXT("deltaRotY"));
+		const bool bHasAbs = RpcParam::Has(P, TEXT("rotY"));
+		if (bHasDelta == bHasAbs)
+		{
+			E.FailDomain(TEXT("deltaRotY 와 rotY 중 정확히 하나를 주세요"));
+			return nullptr;
+		}
+		double Value = 0.0;
+		if (!RpcParam::RequireFloat(P, bHasDelta ? TEXT("deltaRotY") : TEXT("rotY"), Value, E)) return nullptr;
+
+		TArray<int32> Targets;
+		TArray<TSharedPtr<FJsonValue>> NotFound;
+		if (!ResolveBatchTargets(Mgr, P, Targets, NotFound, E)) return nullptr;
+
+		TArray<TSharedPtr<FJsonValue>> Rows;
+		for (const int32 Idx : Targets)
+		{
+			ACarActor* Car = Mgr->GetCar(Idx);
+			Car->CarData.rotY = bHasDelta
+				? UCarPlacementLibrary::AddYawDeg(Car->CarData.rotY, static_cast<float>(Value))
+				: UCarPlacementLibrary::AddYawDeg(static_cast<float>(Value), 0.f);
+			Car->ApplyTransformFromData(Mgr->MetersToUU);
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("carNameId"), Car->CarData.id);
+			Row->SetNumberField(TEXT("rotY"), Car->CarData.rotY);
+			Rows.Add(MakeShared<FJsonValueObject>(Row));
+		}
+		if (UCarPlacementWidget* W = UCarPlacementWidget::FindInWorld(Mgr->GetWorld())) { W->SyncCarDataFromWorld(Targets); }
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetNumberField(TEXT("changedCount"), Rows.Num());
+		O->SetArrayField(TEXT("cars"), Rows);
+		O->SetArrayField(TEXT("notFound"), NotFound);
+		return RpcDto::MakeObject(O);
+	});
+	Dispatcher.SetMethodMeta(TEXT("car.rotateAll"), { true, false, TEXT("{deltaRotY?: deg | rotY?: deg (정확히 하나), carNameIds?: string[] | selected?: bool}"),
+		TEXT("차량을 각자 제자리에서 회전(위치 불변, 숨긴 차 포함, 0..360 정규화). 대상: carNameIds · selected=현재 선택 · 없으면 전부. {ok, changedCount, cars:[{carNameId,rotY}], notFound}") });
+
+	// 전체·일부·선택 차량을 같은 delta(UE 미터, z=높이)만큼 평행 이동. 이동 후 지면에 다시 앉힌다(ApplyTransformFromData).
+	// 회전은 그대로. 패널의 다중 선택 방향키 이동(ApplyGroupTranslation)과 같은 동작.
+	Dispatcher.Register(TEXT("car.moveAll"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
+		const TSharedPtr<FJsonObject>* DeltaObj = nullptr;
+		if (!P.IsValid() || !P->TryGetObjectField(TEXT("delta"), DeltaObj))
+		{
+			E.FailDomain(TEXT("필수 파라미터 누락: delta ({x,y,z?} UE 미터)"));
+			return nullptr;
+		}
+		double Dx = 0.0, Dy = 0.0, Dz = 0.0;
+		(*DeltaObj)->TryGetNumberField(TEXT("x"), Dx);
+		(*DeltaObj)->TryGetNumberField(TEXT("y"), Dy);
+		(*DeltaObj)->TryGetNumberField(TEXT("z"), Dz);
+
+		TArray<int32> Targets;
+		TArray<TSharedPtr<FJsonValue>> NotFound;
+		if (!ResolveBatchTargets(Mgr, P, Targets, NotFound, E)) return nullptr;
+
+		TArray<TSharedPtr<FJsonValue>> Rows;
+		for (const int32 Idx : Targets)
+		{
+			ACarActor* Car = Mgr->GetCar(Idx);
+			Car->CarData.pos.x += static_cast<float>(Dx);
+			Car->CarData.pos.y += static_cast<float>(Dy);
+			Car->CarData.pos.z += static_cast<float>(Dz);
+			Car->ApplyTransformFromData(Mgr->MetersToUU);
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("carNameId"), Car->CarData.id);
+			TSharedPtr<FJsonObject> Pos = MakeShared<FJsonObject>();
+			Pos->SetNumberField(TEXT("x"), Car->CarData.pos.x);
+			Pos->SetNumberField(TEXT("y"), Car->CarData.pos.y);
+			Pos->SetNumberField(TEXT("z"), Car->CarData.pos.z);
+			Row->SetObjectField(TEXT("pos"), Pos);
+			Rows.Add(MakeShared<FJsonValueObject>(Row));
+		}
+		if (UCarPlacementWidget* W = UCarPlacementWidget::FindInWorld(Mgr->GetWorld())) { W->SyncCarDataFromWorld(Targets); }
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetNumberField(TEXT("changedCount"), Rows.Num());
+		O->SetArrayField(TEXT("cars"), Rows);
+		O->SetArrayField(TEXT("notFound"), NotFound);
+		return RpcDto::MakeObject(O);
+	});
+	Dispatcher.SetMethodMeta(TEXT("car.moveAll"), { true, false, TEXT("{delta:{x,y,z?} UE 미터, carNameIds?: string[] | selected?: bool}"),
+		TEXT("차량을 같은 delta 만큼 평행 이동(회전 불변, 지면 재안착, 숨긴 차 포함). 대상: carNameIds · selected=현재 선택 · 없으면 전부. {ok, changedCount, cars:[{carNameId,pos}], notFound}") });
 
 	// ---- 색상 ----
 	Dispatcher.Register(TEXT("car.setColor"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>

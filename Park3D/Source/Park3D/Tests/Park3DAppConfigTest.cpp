@@ -569,4 +569,40 @@ bool FPark3DAppConfigSimGatesTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// levels[].move_actors — name 과 pos{x,y,z} 가 다 있어야 받고, yaw 는 선택.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPark3DAppConfigMoveActorsTest,
+	"Park3D.AppConfig.MoveActors",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FPark3DAppConfigMoveActorsTest::RunTest(const FString& Parameters)
+{
+	const FString Json = TEXT(R"({
+		"levels": [
+			{"name": "A", "level": "Levels/LV_A", "move_actors": [
+				{"name": " StaticMeshActor_128 ", "pos": {"x": -7.3165, "y": -31.7978, "z": 0.005}},
+				{"name": "Booth", "pos": {"x": 1, "y": 2, "z": 3}, "yaw": -19},
+				{"name": "NoZ", "pos": {"x": 1, "y": 2}},
+				{"pos": {"x": 1, "y": 2, "z": 3}}
+			]},
+			{"name": "B", "level": "Levels/LV_B"}
+		]
+	})");
+	FPark3DAppConfig C;
+	if (!TestTrue(TEXT("파싱"), UPark3DAppConfigLibrary::FromJson(Json, C)) || !TestEqual(TEXT("항목 2개"), C.Levels.Num(), 2))
+	{
+		return true;
+	}
+	const TArray<FPark3DActorMove>& M = C.Levels[0].MoveActors;
+	if (!TestEqual(TEXT("불완전 항목 2개는 버린다"), M.Num(), 2))
+	{
+		return true;
+	}
+	TestEqual(TEXT("이름 앞뒤 공백 제거"), M[0].Name, FString(TEXT("StaticMeshActor_128")));
+	TestTrue(TEXT("위치(m)"), FVector::Dist(M[0].PosM, FVector(-7.3165, -31.7978, 0.005)) < 1e-6);
+	TestFalse(TEXT("yaw 없으면 미지정"), M[0].Yaw.IsSet());
+	TestTrue(TEXT("yaw"), M[1].Yaw.IsSet() && FMath::IsNearlyEqual(M[1].Yaw.GetValue(), -19.f));
+	TestEqual(TEXT("B: 키가 없으면 빈 목록"), C.Levels[1].MoveActors.Num(), 0);
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

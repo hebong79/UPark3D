@@ -508,6 +508,30 @@ bool FPark3DAppConfigLevelsTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("nullptr 이면 그대로"), Other.CarPosFile, FString(TEXT("CarPos_Seoshin_2Cam.json")));
 	TestNull(TEXT("현재 레벨 미상이면 nullptr"), UPark3DAppConfigLibrary::ApplyLevelOverrides(Other, TEXT("")));
 
+	// 3.5) 기본맵 — 항목의 map_floor·light_file 이 최상위 값을 덮는다. 키가 없는 항목은 최상위 유지.
+	{
+		FPark3DAppConfig B;
+		const FString BJson = TEXT(R"({
+			"map_floor": false, "light_file": "Top.json",
+			"levels": [
+				{"name": "기본맵", "level": "Maps/PresetMaker1", "map_floor": true, "light_file": "Basic.json"},
+				{"name": "서신지구대", "level": "Levels/LV_Park_01"}
+			]
+		})");
+		if (TestTrue(TEXT("기본맵 파싱"), UPark3DAppConfigLibrary::FromJson(BJson, B)) && TestEqual(TEXT("기본맵 항목 2개"), B.Levels.Num(), 2))
+		{
+			FPark3DAppConfig Basic = B;
+			TestNotNull(TEXT("기본맵 적중"), UPark3DAppConfigLibrary::ApplyLevelOverrides(Basic, TEXT("/Game/Maps/PresetMaker1")));
+			TestTrue(TEXT("기본맵 map_floor 덮임"), Basic.bMapFloor);
+			TestEqual(TEXT("기본맵 light_file 덮임"), Basic.LightFile, FString(TEXT("Basic.json")));
+
+			FPark3DAppConfig Park = B;
+			UPark3DAppConfigLibrary::ApplyLevelOverrides(Park, TEXT("/Game/Levels/LV_Park_01"));
+			TestFalse(TEXT("키 없는 항목은 map_floor 최상위 유지"), Park.bMapFloor);
+			TestEqual(TEXT("키 없는 항목은 light_file 최상위 유지"), Park.LightFile, FString(TEXT("Top.json")));
+		}
+	}
+
 	// 4) levels 키가 없으면 기존 목록을 건드리지 않는다(부분 설정 허용 규칙).
 	FPark3DAppConfig Keep = C;
 	TestTrue(TEXT("파싱 성공"), UPark3DAppConfigLibrary::FromJson(TEXT(R"({"rpc_port": 13510})"), Keep));

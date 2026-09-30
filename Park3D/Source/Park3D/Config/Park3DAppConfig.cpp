@@ -142,6 +142,8 @@ bool UPark3DAppConfigLibrary::FromJson(const FString& Json, FPark3DAppConfig& Ou
 			if ((*Obj)->TryGetStringField(TEXT("carpos_file"), Str))    { Opt.CarPosFile = Str.TrimStartAndEnd(); }
 			if ((*Obj)->TryGetStringField(TEXT("camerapos_file"), Str)) { Opt.CameraPosFile = Str.TrimStartAndEnd(); }
 			if ((*Obj)->TryGetStringField(TEXT("slot_file"), Str))      { Opt.SlotFile = Str.TrimStartAndEnd(); }
+			if ((*Obj)->TryGetStringField(TEXT("light_file"), Str))     { Opt.LightFile = Str.TrimStartAndEnd(); }
+			if ((*Obj)->TryGetBoolField(TEXT("map_floor"), bFlag))      { Opt.MapFloor = bFlag; }
 			// 주차 시뮬 게이트: {x, y, yaw} 셋이 다 있어야 받는다(한 값만 빠져도 엉뚱한 곳이 입구가 된다).
 			for (const TPair<const TCHAR*, TOptional<FVector>*> Gate : { TPair<const TCHAR*, TOptional<FVector>*>(TEXT("sim_entrance"), &Opt.SimEntrance),
 				TPair<const TCHAR*, TOptional<FVector>*>(TEXT("sim_exit"), &Opt.SimExit) })
@@ -287,6 +289,8 @@ const FPark3DLevelOption* UPark3DAppConfigLibrary::ApplyLevelOverrides(FPark3DAp
 		if (Opt.CarPosFile.IsSet())    { Config.CarPosFile = Opt.CarPosFile.GetValue(); }
 		if (Opt.CameraPosFile.IsSet()) { Config.CameraPosFile = Opt.CameraPosFile.GetValue(); }
 		if (Opt.SlotFile.IsSet())      { Config.SlotFile = Opt.SlotFile.GetValue(); }
+		if (Opt.LightFile.IsSet())     { Config.LightFile = Opt.LightFile.GetValue(); }
+		if (Opt.MapFloor.IsSet())      { Config.bMapFloor = Opt.MapFloor.GetValue(); }
 		return &Opt; // 같은 레벨이 두 번 적혀 있으면 첫 항목이 이긴다(콤보도 첫 항목을 고른다).
 	}
 	return nullptr;

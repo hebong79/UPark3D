@@ -38,6 +38,14 @@ struct FPark3DLevelOption
 	TOptional<FString> SlotFile;
 
 	/**
+	 * 이 주차장에서 코드 단색 바닥(AMapFloorActor)을 깔지(JSON `map_floor`). 없으면 최상위 값 유지.
+	 * 노면이 없는 기본맵(Maps/PresetMaker1)은 true, 자기 노면이 있는 주차장 레벨은 최상위 false 를 그대로 쓴다.
+	 */
+	TOptional<bool> MapFloor;
+	/** 이 주차장의 조명 파일(Save/3D/Light 기준, JSON `light_file`). 없으면 최상위 값 유지. */
+	TOptional<FString> LightFile;
+
+	/**
 	 * 주차 시뮬 입구·출구(UE 월드 미터, Z 자리에 진행 yaw 도). JSON `sim_entrance`/`sim_exit` = {x, y, yaw}.
 	 * 없으면 시뮬이 면 배치로 자동 계산한다. 비-UPROPERTY — 쿠킹 에셋이 이 구조체를 참조하지 않지만 JSON 파서 전용 값이라 둘 필요가 없다.
 	 */
@@ -266,7 +274,7 @@ public:
 
 	/**
 	 * `levels[]` 중 CurrentLevelPath 와 같은 레벨의 항목을 찾아 그 데이터 파일(키가 있는 것만)로 Config 의 최상위
-	 * `*_file` 을 덮는다. 주차장 선택으로 옮겨 온 레벨에서 시작 자동 로딩이 그 주차장의 파일을 쓰게 하려는 것.
+	 * `*_file`·`light_file`·`map_floor` 를 덮는다. 주차장 선택으로 옮겨 온 레벨에서 시작 자동 로딩이 그 주차장의 파일을 쓰게 하려는 것.
 	 * @return 적용한 항목(없으면 nullptr — Config 는 그대로).
 	 */
 	static const FPark3DLevelOption* ApplyLevelOverrides(FPark3DAppConfig& Config, const FString& CurrentLevelPath);

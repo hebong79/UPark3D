@@ -136,8 +136,14 @@ void APark3DGameMode::BeginPlay()
 	// 설정을 여기서 한 번 더 읽는 이유: ApplyStartupConfig 는 이 아래(메뉴 표시 뒤)에서 돌아
 	// 그때는 이미 바닥이 스폰된 뒤다. 파일 하나 파싱이라 비용은 무시할 수준이다.
 	{
+		// levels[] 항목의 map_floor 가 최상위 값을 덮는다 — 기본맵(노면 없음)만 바닥을 깔게 하려는 것.
 		FPark3DAppConfig FloorConfig;
-		if (!UPark3DAppConfigLibrary::Load(FloorConfig) || FloorConfig.bMapFloor)
+		const bool bLoaded = UPark3DAppConfigLibrary::Load(FloorConfig);
+		if (bLoaded)
+		{
+			UPark3DAppConfigLibrary::ApplyLevelOverrides(FloorConfig, UPark3DAppConfigLibrary::GetCurrentLevelPath(GetWorld()));
+		}
+		if (!bLoaded || FloorConfig.bMapFloor)
 		{
 			AMapFloorActor::GetOrSpawn(GetWorld());
 		}
@@ -423,7 +429,12 @@ void APark3DGameMode::ApplyStartupLighting()
 	FLightSettings Settings;
 	FString Source;
 	FPark3DAppConfig AppConfig;
-	if (UPark3DAppConfigLibrary::Load(AppConfig) && !AppConfig.LightFile.IsEmpty()
+	const bool bLoaded = UPark3DAppConfigLibrary::Load(AppConfig);
+	if (bLoaded)
+	{
+		UPark3DAppConfigLibrary::ApplyLevelOverrides(AppConfig, UPark3DAppConfigLibrary::GetCurrentLevelPath(GetWorld()));
+	}
+	if (bLoaded && !AppConfig.LightFile.IsEmpty()
 		&& ULightControlLibrary::LoadFromFile(Park3DDataPaths::GetDataFilePath(TEXT("Light"), *AppConfig.LightFile), Settings))
 	{
 		Source = FString::Printf(TEXT("config_pmaker.json light_file=%s"), *AppConfig.LightFile);

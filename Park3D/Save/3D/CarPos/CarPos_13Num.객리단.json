@@ -2,10 +2,10 @@
 	"isUnreal": true,
 	"datas": [
 		{
-			"iD": "0-16.45.41",
-			"type": 1,
+			"iD": "0-15.41.28",
+			"type": 0,
 			"presetId": 0,
-			"slotId": 1,
+			"slotId": -1,
 			"prefabId": 2,
 			"pos":
 			{
@@ -19,10 +19,10 @@
 			"prefabName": "기아_EV6"
 		},
 		{
-			"iD": "1-16.45.43",
-			"type": 1,
+			"iD": "1-15.41.29",
+			"type": 0,
 			"presetId": 0,
-			"slotId": 2,
+			"slotId": -1,
 			"prefabId": 6,
 			"pos":
 			{
@@ -36,10 +36,10 @@
 			"prefabName": "기아_모닝"
 		},
 		{
-			"iD": "2-16.45.45",
-			"type": 1,
+			"iD": "2-15.41.30",
+			"type": 0,
 			"presetId": 0,
-			"slotId": 3,
+			"slotId": -1,
 			"prefabId": 7,
 			"pos":
 			{
@@ -53,10 +53,10 @@
 			"prefabName": "기아_봉고"
 		},
 		{
-			"iD": "3-16.45.47",
-			"type": 1,
+			"iD": "3-15.41.32",
+			"type": 0,
 			"presetId": 0,
-			"slotId": 4,
+			"slotId": -1,
 			"prefabId": 4,
 			"pos":
 			{
@@ -70,10 +70,10 @@
 			"prefabName": "기아_K5"
 		},
 		{
-			"iD": "4-16.45.49",
-			"type": 1,
+			"iD": "4-15.41.38",
+			"type": 0,
 			"presetId": 0,
-			"slotId": 5,
+			"slotId": -1,
 			"prefabId": 11,
 			"pos":
 			{
@@ -87,10 +87,10 @@
 			"prefabName": "기아_카니발"
 		},
 		{
-			"iD": "5-16.45.51",
-			"type": 1,
+			"iD": "5-15.41.39",
+			"type": 0,
 			"presetId": 0,
-			"slotId": 7,
+			"slotId": -1,
 			"prefabId": 13,
 			"pos":
 			{
@@ -104,10 +104,10 @@
 			"prefabName": "볼보_V60"
 		},
 		{
-			"iD": "6-16.45.54",
-			"type": 1,
+			"iD": "6-15.41.40",
+			"type": 0,
 			"presetId": 0,
-			"slotId": 8,
+			"slotId": -1,
 			"prefabId": 19,
 			"pos":
 			{
@@ -121,10 +121,10 @@
 			"prefabName": "현대_쏘나타"
 		},
 		{
-			"iD": "7-16.45.56",
-			"type": 1,
+			"iD": "7-15.41.43",
+			"type": 0,
 			"presetId": 0,
-			"slotId": 9,
+			"slotId": -1,
 			"prefabId": 10,
 			"pos":
 			{
@@ -138,10 +138,10 @@
 			"prefabName": "기아_쏘렌토"
 		},
 		{
-			"iD": "8-16.45.58",
-			"type": 1,
+			"iD": "8-15.41.45",
+			"type": 0,
 			"presetId": 0,
-			"slotId": 10,
+			"slotId": -1,
 			"prefabId": 1,
 			"pos":
 			{
@@ -149,16 +149,16 @@
 				"y": -5.6777000427246094,
 				"z": 0.0052893068641424179
 			},
-			"rotY": 252.0899658203125,
+			"rotY": 72.0899658203125,
 			"isFront": true,
 			"color": -1,
 			"prefabName": "BMW_1시리즈"
 		},
 		{
-			"iD": "9-16.46.00",
-			"type": 1,
+			"iD": "9-15.41.48",
+			"type": 0,
 			"presetId": 0,
-			"slotId": 11,
+			"slotId": -1,
 			"prefabId": 5,
 			"pos":
 			{
@@ -166,16 +166,16 @@
 				"y": 2.8958001136779785,
 				"z": 0.005692596547305584
 			},
-			"rotY": 252.0899658203125,
+			"rotY": 72.0899658203125,
 			"isFront": true,
 			"color": -1,
 			"prefabName": "기아_레이"
 		},
 		{
-			"iD": "10-16.46.02",
-			"type": 1,
+			"iD": "10-15.41.48",
+			"type": 0,
 			"presetId": 0,
-			"slotId": 12,
+			"slotId": -1,
 			"prefabId": 14,
 			"pos":
 			{
@@ -183,16 +183,16 @@
 				"y": 9.175999641418457,
 				"z": 0.0058456421829760075
 			},
-			"rotY": 252.0899658203125,
+			"rotY": 72.0899658203125,
 			"isFront": true,
 			"color": -1,
 			"prefabName": "제네시스_G90"
 		},
 		{
-			"iD": "11-16.46.04",
-			"type": 1,
+			"iD": "11-15.41.51",
+			"type": 0,
 			"presetId": 0,
-			"slotId": 13,
+			"slotId": -1,
 			"prefabId": 9,
 			"pos":
 			{
@@ -206,10 +206,10 @@
 			"prefabName": "기아_쏘울"
 		},
 		{
-			"iD": "12-16.46.06",
-			"type": 1,
+			"iD": "12-15.41.52",
+			"type": 0,
 			"presetId": 0,
-			"slotId": 14,
+			"slotId": -1,
 			"prefabId": 18,
 			"pos":
 			{

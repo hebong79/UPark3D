@@ -161,6 +161,30 @@ bool UPark3DAppConfigLibrary::FromJson(const FString& Json, FPark3DAppConfig& Ou
 			if ((*Obj)->TryGetStringField(TEXT("lot_type"), Str) && !Str.TrimStartAndEnd().IsEmpty()) { Opt.LotType = Str.TrimStartAndEnd().ToLower(); }
 			const TSharedPtr<FJsonObject>* Lane = nullptr;
 			if ((*Obj)->TryGetObjectField(TEXT("sim_lane_rules"), Lane) && Lane && Lane->IsValid()) { Opt.SimLaneRules = *Lane; }
+			// 옮길 액터: name 과 pos{x,y,z} 가 다 있어야 받는다(한 축만 빠져 0 으로 날아가는 사고가 없게).
+			const TArray<TSharedPtr<FJsonValue>>* MoveArr = nullptr;
+			if ((*Obj)->TryGetArrayField(TEXT("move_actors"), MoveArr) && MoveArr)
+			{
+				for (const TSharedPtr<FJsonValue>& MV : *MoveArr)
+				{
+					const TSharedPtr<FJsonObject>* M = nullptr;
+					const TSharedPtr<FJsonObject>* MP = nullptr;
+					FPark3DActorMove Move;
+					double Mx = 0, My = 0, Mz = 0, MYaw = 0;
+					if (!MV.IsValid() || !MV->TryGetObject(M) || !M || !M->IsValid()
+						|| !(*M)->TryGetStringField(TEXT("name"), Move.Name) || Move.Name.TrimStartAndEnd().IsEmpty()
+						|| !(*M)->TryGetObjectField(TEXT("pos"), MP) || !MP || !MP->IsValid()
+						|| !(*MP)->TryGetNumberField(TEXT("x"), Mx) || !(*MP)->TryGetNumberField(TEXT("y"), My) || !(*MP)->TryGetNumberField(TEXT("z"), Mz))
+					{
+						UE_LOG(LogTemp, Warning, TEXT("[Config] %s 의 move_actors 항목에 name 또는 pos{x,y,z} 가 없어 건너뜁니다."), *Opt.Name);
+						continue;
+					}
+					Move.Name.TrimStartAndEndInline();
+					Move.PosM = FVector(Mx, My, Mz);
+					if ((*M)->TryGetNumberField(TEXT("yaw"), MYaw)) { Move.Yaw = static_cast<float>(MYaw); }
+					Opt.MoveActors.Add(MoveTemp(Move));
+				}
+			}
 			Parsed.Levels.Add(MoveTemp(Opt));
 		}
 	}

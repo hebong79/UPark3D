@@ -132,6 +132,9 @@ protected:
 	/** config 의 hide_actors 목록을 숨긴다(env.hide 와 같은 공용 로직). 실행마다 한 번 적용한다. */
 	void ApplyConfigHiddenActors();
 
+	/** 현재 레벨의 config levels[].move_actors 대로 레벨 액터를 옮긴다(레벨 .umap 무수정). 실행마다 한 번 적용한다. */
+	void ApplyConfigMovedActors();
+
 	/**
 	 * 레벨의 프리셋 주차면(BP_ParkingSlot)·카메라(BP_Camera)가 화면에 띄우는 아이콘 위젯을 끈다.
 	 * 아이콘은 블루프린트의 WidgetComponent(WBP_ActorIcon/WBP_CameraIcon, Screen 스페이스)라 액터를 통째로

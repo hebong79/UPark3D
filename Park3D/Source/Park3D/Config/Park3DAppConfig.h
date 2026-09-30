@@ -14,6 +14,21 @@ class FJsonObject;
 class UWorld;
 
 /**
+ * 기동 때 옮길 레벨 액터 하나(JSON `levels[].move_actors[]` = {name, pos:{x,y,z}, yaw?}).
+ * 레벨 .umap 은 에디터 없이는 못 고치므로 hide_actors 처럼 런타임에 덮는다. 액터 이름은 레벨마다 달라
+ * (같은 StaticMeshActor_128 이 다른 레벨에선 다른 물체다) 최상위가 아니라 주차장 항목에만 둔다.
+ */
+struct FPark3DActorMove
+{
+	/** env.list 가 주는 name(AActor::GetName). */
+	FString Name;
+	/** 새 액터 위치(UE 월드 미터 — env.list pos 를 100 으로 나눈 값). */
+	FVector PosM = FVector::ZeroVector;
+	/** 새 yaw(도). 없으면 회전 유지. */
+	TOptional<float> Yaw;
+};
+
+/**
  * 주차장 선택 메뉴의 한 항목(JSON `levels[]`). `name` 이 콤보에 뜨고, 고르면 `level` 로 이동한다.
  * 데이터 파일 셋은 **키가 있을 때만** 최상위 `*_file` 을 덮는다(TOptional) — 주차장마다 차량·카메라 파일이
  * 다른데, 키를 빼먹은 항목이 최상위 값을 조용히 지우면 안 되고, 빈 문자열은 "이 주차장은 그 파일을 안 쓴다"는 뜻이다.
@@ -57,6 +72,8 @@ struct FPark3DLevelOption
 	TOptional<FString> LotType;
 	/** 통로 그래프 규칙 {loop?, edges?:[{id, rule, reverse?}]} 원본(해석은 ParkLane::ParseRules). JSON `sim_lane_rules`. */
 	TSharedPtr<FJsonObject> SimLaneRules;
+	/** 이 주차장에 들어왔을 때 옮길 레벨 액터들(JSON `move_actors`). 비-UPROPERTY(JSON 파서 전용). */
+	TArray<FPark3DActorMove> MoveActors;
 };
 
 /** config_pmaker.json 한 벌. 값이 없는 항목은 "미지정"(0/빈 문자열)으로 남겨 호출부가 건너뛴다. */

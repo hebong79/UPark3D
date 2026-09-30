@@ -4,7 +4,8 @@
 		{ "name": "기본맵", "level": "Maps/PresetMaker1", "map_floor": true, "light_file": "LightSettings_Base.json", "preset_file": "", "carpos_file": "", "camerapos_file": "", "slot_file": "" },
 		{ "name": "서신지구대", "level": "Levels/LV_Park_01", "preset_file": "", "carpos_file": "CarPos_Seoshin_2Cam.json", "camerapos_file": "CamPos_Seosin.json" },
 		{ "name": "객리단길", "level": "Levels/LV_Park_03", "preset_file": "", "carpos_file": "CarPos_13Num.객리단.json", "camerapos_file": "CamPos_13Face.객리단.json", "slot_file": "LevelSlots_13Face.객리단.json",
-		  "sim_entrance": { "x": 11.04, "y": 36.0, "yaw": -107.91 }, "sim_exit": { "x": -24.45, "y": -73.8, "yaw": -107.91 } }
+		  "sim_entrance": { "x": 11.04, "y": 36.0, "yaw": -107.91 }, "sim_exit": { "x": -24.45, "y": -73.8, "yaw": -107.91 },
+		  "move_actors": [ { "name": "StaticMeshActor_128", "pos": { "x": -7.3165, "y": -31.7978, "z": 0.005 } } ] }
 	],
 	"rpc_port": 13510,
 	"main_port": 13600,

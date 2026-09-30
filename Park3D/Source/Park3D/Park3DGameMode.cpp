@@ -122,6 +122,9 @@ void APark3DGameMode::BeginPlay()
 	// 숨김은 런타임 상태라 실행할 때마다 다시 걸어야 한다(env.hide 와 같은 처리를 여기서 한 번).
 	ApplyConfigHiddenActors();
 
+	// config 의 levels[].move_actors 적용 — 무인정산기처럼 레벨에 박힌 물체의 자리를 옮긴다.
+	ApplyConfigMovedActors();
+
 	// 프리셋 주차면 위에 떠 있던 표시 아이콘을 끈다.
 	HideParkingSlotIcons();
 
@@ -383,6 +386,60 @@ void APark3DGameMode::ApplyConfigHiddenActors()
 	}
 	UE_LOG(LogTemp, Log, TEXT("[Env] config hide_actors 적용: %d/%d 숨김%s"),
 		Changed.Num(), Config.HideActors.Num(),
+		Missing.Num() > 0 ? *FString::Printf(TEXT(" — 못 찾음: %s"), *FString::Join(Missing, TEXT(", "))) : TEXT(""));
+}
+
+void APark3DGameMode::ApplyConfigMovedActors()
+{
+	FPark3DAppConfig Config;
+	if (!UPark3DAppConfigLibrary::Load(Config))
+	{
+		return;
+	}
+	const FPark3DLevelOption* Lot = UPark3DAppConfigLibrary::ApplyLevelOverrides(
+		Config, UPark3DAppConfigLibrary::GetCurrentLevelPath(GetWorld()));
+	if (!Lot || Lot->MoveActors.Num() == 0)
+	{
+		return;
+	}
+
+	TMap<FString, const FPark3DActorMove*> Wanted;
+	for (const FPark3DActorMove& Move : Lot->MoveActors)
+	{
+		Wanted.Add(Move.Name, &Move);
+	}
+
+	int32 Moved = 0;
+	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	{
+		const FPark3DActorMove* const* Found = Wanted.Find(It->GetName());
+		if (!Found)
+		{
+			continue;
+		}
+		const FPark3DActorMove& Move = **Found;
+		// 레벨에 놓인 StaticMeshActor 는 Static 이라 SetActorLocation 이 거부된다 → 옮기기 전에 Movable 로.
+		if (USceneComponent* Root = It->GetRootComponent())
+		{
+			if (Root->Mobility == EComponentMobility::Static)
+			{
+				Root->SetMobility(EComponentMobility::Movable);
+			}
+		}
+		FRotator Rot = It->GetActorRotation();
+		if (Move.Yaw.IsSet()) { Rot.Yaw = Move.Yaw.GetValue(); }
+		It->SetActorLocationAndRotation(Move.PosM * 100.0, Rot, false, nullptr, ETeleportType::TeleportPhysics);
+		UE_LOG(LogTemp, Log, TEXT("[Env] config move_actors: %s → (%.3f, %.3f, %.3f) m, yaw %.2f"),
+			*Move.Name, Move.PosM.X, Move.PosM.Y, Move.PosM.Z, Rot.Yaw);
+		Wanted.Remove(Move.Name);
+		++Moved;
+	}
+
+	// 못 찾은 이름을 조용히 넘기지 않는다(hide_actors 와 같은 이유 — 레벨이 바뀌면 이름도 바뀐다).
+	TArray<FString> Missing;
+	Wanted.GetKeys(Missing);
+	UE_LOG(LogTemp, Log, TEXT("[Env] config move_actors 적용(%s): %d/%d 이동%s"),
+		*Lot->Name, Moved, Lot->MoveActors.Num(),
 		Missing.Num() > 0 ? *FString::Printf(TEXT(" — 못 찾음: %s"), *FString::Join(Missing, TEXT(", "))) : TEXT(""));
 }
 

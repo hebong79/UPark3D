@@ -13,6 +13,8 @@
 #include "Engine/Engine.h"
 #include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
+#include "Components/InstancedStaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 #include "Misc/Paths.h"
 #include "HAL/FileManager.h"
 
@@ -129,7 +131,7 @@ bool FRpcBayModuleCrudTest::RunTest(const FString& Parameters)
 	auto Dispatch = [&](const FString& M, const TSharedPtr<FJsonObject>& P, TSharedPtr<FJsonValue>& R) -> bool
 	{ FRpcError E; return D->Dispatch(M, P, R, E); };
 
-	TestEqual(TEXT("15개 등록"), D->NumMethods(), 15);
+	TestEqual(TEXT("16개 등록"), D->NumMethods(), 16);
 
 	// create: 이름 지정 + 자동 이름(bay_<n>)
 	TSharedPtr<FJsonValue> C1, C2;
@@ -511,6 +513,146 @@ bool FRpcBayModulePresetTest::RunTest(const FString& Parameters)
 
 	IFileManager::Get().Delete(*Path, /*RequireExists=*/false);
 	BayTestDestroyProps(World);
+	BayTestDestroyPresetManager(World);
+	return true;
+}
+
+// ===== presetsToLevel: 메모리 프리셋 → 지정 액터의 ISM_Slot 인스턴스 =====
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRpcBayModulePresetsToLevelTest,
+	"Park3D.Rpc.BayModule.PresetsToLevel",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FRpcBayModulePresetsToLevelTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = BayTestWorld();
+	if (!World)
+	{
+		AddWarning(TEXT("에디터 월드 없음 — presetsToLevel 테스트 건너뜀."));
+		return true;
+	}
+	BayTestDestroyPresetManager(World);
+
+	// 레벨 BP_ParkingSlot 은 C++ 로 못 만든다 → ISM_Slot(엔진 Plane)을 단 액터를 스폰해 actor 로 지정한다.
+	// 기존 인스턴스 1개: 로컬 X 가 긴 판(LV_Park_03 규약), 바닥 높이 11cm → 새 면이 이 축·높이를 따라야 한다.
+	FActorSpawnParameters SP;
+	SP.Name = FName(TEXT("T_PtlSlotActor"));
+	SP.NameMode = FActorSpawnParameters::ESpawnActorNameMode::Requested;
+	AActor* SlotActor = World->SpawnActor<AActor>(SP);
+	if (!SlotActor) { AddError(TEXT("테스트 액터 스폰 실패")); return false; }
+	const FString ActorName = SlotActor->GetName();
+	UInstancedStaticMeshComponent* Comp = NewObject<UInstancedStaticMeshComponent>(SlotActor, TEXT("ISM_Slot"));
+	Comp->SetMobility(EComponentMobility::Movable);
+	Comp->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Plane.Plane")));
+	SlotActor->SetRootComponent(Comp);
+	Comp->RegisterComponent();
+	Comp->AddInstance(FTransform(FRotator(0, 10, 0), FVector(-5000, -5000, 11), FVector(6, 2.5, 1)), /*bWorldSpace=*/true);
+
+	URpcDispatcher* D = NewObject<URpcDispatcher>();
+	FBayRpcModule Bay([World]() -> UWorld* { return World; });
+	Bay.Register(*D);
+	auto Dispatch = [&](const FString& M, const TSharedPtr<FJsonObject>& P, TSharedPtr<FJsonValue>& R) -> bool
+	{ FRpcError E; return D->Dispatch(M, P, R, E); };
+
+	// 프리셋: 면 회전 30°, 폭 방향으로 3면(2.5 × 5 m).
+	FParkingPreset Pr;
+	Pr.PresetIdx = 0;
+	Pr.FaceCount = 3;
+	Pr.Offset = FVector(40.0, 60.0, 0.0);
+	Pr.FaceRotate = 30.f;
+	Pr.BoxSizeX = 2.5f;
+	Pr.BoxSizeZ = 5.f;
+	Pr.DirType = EFaceDirType::Dir;
+	Pr.bIsBaseWidth = true;
+	AParkingPresetManager* Mgr = Cast<AParkingPresetManager>(UGameplayStatics::GetActorOfClass(World, AParkingPresetManager::StaticClass()));
+	if (!Mgr) Mgr = World->SpawnActor<AParkingPresetManager>();
+	if (!Mgr) { AddError(TEXT("프리셋 매니저 스폰 실패")); SlotActor->Destroy(); return false; }
+	Mgr->AddPreset(Pr);
+	const FParkingPreset Stored = Mgr->StoredPresets[0];
+
+	auto Params = [&](bool bReplace, bool bClear) -> TSharedPtr<FJsonObject>
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+		P->SetStringField(TEXT("source"), TEXT("memory"));
+		P->SetStringField(TEXT("actor"), ActorName);
+		P->SetBoolField(TEXT("replace"), bReplace);
+		P->SetBoolField(TEXT("clearPresets"), bClear);
+		return P;
+	};
+
+	// 1) 뒤에 붙이기(clearPresets:false) → 인스턴스 1 + 3, 키 #1..#3, 프리셋은 남는다.
+	{
+		TSharedPtr<FJsonValue> R;
+		TestTrue(TEXT("presetsToLevel 성공"), Dispatch(TEXT("bay.presetsToLevel"), Params(false, false), R));
+		TestEqual(TEXT("source memory"), BayTestStr(R, TEXT("source")), FString(TEXT("memory")));
+		TestEqual(TEXT("count 3"), (int32)BayTestNum(R, TEXT("count")), 3);
+		TestEqual(TEXT("actor"), BayTestStr(R, TEXT("actor")), ActorName);
+		TestEqual(TEXT("replaced 0"), (int32)BayTestNum(R, TEXT("replaced")), 0);
+		TestEqual(TEXT("clearedPresets 0"), (int32)BayTestNum(R, TEXT("clearedPresets")), 0);
+		TestEqual(TEXT("인스턴스 4"), Comp->GetInstanceCount(), 4);
+		TestEqual(TEXT("프리셋 유지"), Mgr->StoredPresets.Num(), 1);
+		const TArray<TSharedPtr<FJsonValue>>* Keys = nullptr;
+		if (R.IsValid() && R->AsObject()->TryGetArrayField(TEXT("bays"), Keys) && Keys && Keys->Num() == 3)
+		{
+			TestEqual(TEXT("첫 키 #1"), (*Keys)[0]->AsString(), FString::Printf(TEXT("level:%s#1"), *ActorName));
+		}
+		else { AddError(TEXT("bays[] 3개가 아님")); }
+
+		// 면마다: 중심 = 프리셋 면 중심(cm), Z = 기존 판 높이, 로컬 X 가 길이(5m)·로컬 Y 가 폭(2.5m)이고 폭 변과 나란하다.
+		for (int32 k = 0; k < 3; ++k)
+		{
+			FVector C[4];
+			AParkingPresetManager::ComputeSlotCorners(Stored, k, 100.f, 0.f, C);
+			const FVector Center = (C[0] + C[1] + C[2] + C[3]) * 0.25f;
+			FTransform T;
+			Comp->GetInstanceTransform(k + 1, T, /*bWorldSpace=*/true);
+			TestTrue(*FString::Printf(TEXT("면%d 중심 XY"), k), FVector::Dist2D(T.GetLocation(), Center) < 0.5);
+			TestTrue(*FString::Printf(TEXT("면%d Z=11"), k), FMath::IsNearlyEqual(T.GetLocation().Z, 11.0, 0.01));
+			TestTrue(*FString::Printf(TEXT("면%d 길이 5m"), k), FMath::IsNearlyEqual(FMath::Abs(T.GetScale3D().X), 5.0, 0.001));
+			TestTrue(*FString::Printf(TEXT("면%d 폭 2.5m"), k), FMath::IsNearlyEqual(FMath::Abs(T.GetScale3D().Y), 2.5, 0.001));
+			const FVector WidthEdge = (C[3] - C[0]).GetSafeNormal2D();
+			TestTrue(*FString::Printf(TEXT("면%d 폭축 정렬"), k), FMath::Abs(FVector::DotProduct(T.GetUnitAxis(EAxis::Y), WidthEdge)) > 0.999);
+		}
+	}
+
+	// 2) replace:true + 저장 → 액터 인스턴스가 프리셋 3면으로 교체, 프리셋 비움, 스냅샷 파일 생성.
+	const FString SavePath = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Automation"), TEXT("_AutomationTest_PresetsToLevel.json"));
+	IFileManager::Get().Delete(*SavePath, /*RequireExists=*/false);
+	{
+		TSharedPtr<FJsonObject> P = Params(true, true);
+		P->SetStringField(TEXT("saveFile"), SavePath);
+		TSharedPtr<FJsonValue> R;
+		TestTrue(TEXT("replace 성공"), Dispatch(TEXT("bay.presetsToLevel"), P, R));
+		TestEqual(TEXT("replaced 4"), (int32)BayTestNum(R, TEXT("replaced")), 4);
+		TestEqual(TEXT("replace 후 인스턴스 3"), Comp->GetInstanceCount(), 3);
+		TestEqual(TEXT("clearedPresets 1"), (int32)BayTestNum(R, TEXT("clearedPresets")), 1);
+		TestEqual(TEXT("프리셋 비움"), Mgr->StoredPresets.Num(), 0);
+		TestTrue(TEXT("ok"), BayTestBool(R, TEXT("ok")));
+		TestTrue(TEXT("스냅샷 파일 생성"), IFileManager::Get().FileExists(*SavePath));
+		FTransform T;
+		Comp->GetInstanceTransform(0, T, true);
+		TestTrue(TEXT("교체 뒤에도 옛 판 높이 11"), FMath::IsNearlyEqual(T.GetLocation().Z, 11.0, 0.01));
+	}
+
+	// 3) 거부: 모르는 source / ISM_Slot 없는 액터.
+	{
+		TSharedPtr<FJsonObject> Bad = Params(false, false);
+		Bad->SetStringField(TEXT("source"), TEXT("nope"));
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestFalse(TEXT("source nope 거부"), D->Dispatch(TEXT("bay.presetsToLevel"), Bad, R, E));
+		TestEqual(TEXT("코드 -32000"), E.Code, Park3DRpc::Domain);
+	}
+	{
+		Mgr->AddPreset(Pr);
+		TSharedPtr<FJsonObject> Bad = Params(false, false);
+		Bad->SetStringField(TEXT("actor"), TEXT("T_NoSuchActor_xyz"));
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestFalse(TEXT("없는 액터 거부"), D->Dispatch(TEXT("bay.presetsToLevel"), Bad, R, E));
+		TestEqual(TEXT("코드 -32000"), E.Code, Park3DRpc::Domain);
+		TestEqual(TEXT("거부 뒤 인스턴스 불변"), Comp->GetInstanceCount(), 3);
+	}
+
+	IFileManager::Get().Delete(*SavePath, /*RequireExists=*/false);
+	SlotActor->Destroy();
 	BayTestDestroyPresetManager(World);
 	return true;
 }

@@ -28,6 +28,7 @@
 #include "JsonObjectConverter.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "UObject/UObjectIterator.h"
 
 #if PARK3D_USE_FILE_DIALOG
 #include "DesktopPlatformModule.h"
@@ -1094,6 +1095,23 @@ bool UPresetMakerWidget::SaveToJsonFile(const FString& FilePath)
 	}
 	UE_LOG(LogTemp, Log, TEXT("[PresetMaker] 저장 %d개 → %s"), Presets.Num(), *FilePath);
 	return true;
+}
+
+UPresetMakerWidget* UPresetMakerWidget::FindInWorld(const UWorld* World)
+{
+	if (!World)
+	{
+		return nullptr;
+	}
+	for (TObjectIterator<UPresetMakerWidget> It; It; ++It)
+	{
+		UPresetMakerWidget* W = *It;
+		if (W && !W->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject) && IsValid(W) && W->GetWorld() == World)
+		{
+			return W;
+		}
+	}
+	return nullptr;
 }
 
 bool UPresetMakerWidget::LoadFromJsonFile(const FString& FilePath)

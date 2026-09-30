@@ -1317,6 +1317,177 @@ void FBayRpcModule::Register(URpcDispatcher& Dispatcher)
 		return RpcDto::MakeObject(O);
 	});
 
+	// bay.presetsToLevel {source?=auto|panel|memory  presetFile?  actor?  replace?=false  clearPresets?=true  saveFile?}
+	//   → {ok, source, presetCount, count, actor, bays[], replaced, z, clearedPresets, saved?{path,fileName,count,level}}
+	// 프리셋 면 → **레벨 면**(BP_ParkingSlot ISM_Slot 인스턴스). bay.fromPresets 는 프롭 면을 만들 뿐이라 바닥 번호·차량 스냅·
+	// 주차 시뮬(레벨 면만 본다)의 대상이 되지 않는다 — 이것은 그 면들을 레벨 주차면과 같은 자리(ISM)에 넣는다.
+	// 출처: presetFile(Save/3D/Preset 이름 또는 경로) > source 지정 > auto(프리셋 메이커 패널 목록이 있으면 패널, 없으면 메모리).
+	// 대상 액터 기본값은 번호순 **마지막** BP_ParkingSlot — 뒤에 붙여야 기존 면의 번호·키(level:<액터>#<n>)가 안 밀린다.
+	// 축 규약(X=길이/폭)과 높이는 그 액터의 첫 인스턴스를 따른다(없으면 X=폭, 프리셋 높이). 판 크기 = 프리셋 xSize × zSize.
+	// 레벨 에셋(.umap)은 안 바뀐다 — 남기려면 saveFile(=bay.saveLevel 스냅샷)을 주고 config `slot_file` 에 건다.
+	Dispatcher.Register(TEXT("bay.presetsToLevel"), [this, NeedWorld](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		UWorld* W = NeedWorld(E); if (!W) return nullptr;
+		AParkingPresetManager* Mgr = GetPresetManager(E); if (!Mgr) return nullptr;
+		UPresetMakerWidget* Panel = UPresetMakerWidget::FindInWorld(W);
+
+		// ── 출처 ──
+		const FString PresetFile = RpcParam::GetString(P, TEXT("presetFile"));
+		FString Source = RpcParam::GetString(P, TEXT("source"), TEXT("auto"));
+		TArray<FParkingPreset> Presets;
+		if (!PresetFile.IsEmpty())
+		{
+			const FString Path = UPark3DAppConfigLibrary::ResolveDataPath(TEXT("Preset"), PresetFile);
+			if (!UPresetMakerWidget::LoadPresetsFromJson(Path, Presets))
+			{
+				E.FailDomain(FString::Printf(TEXT("프리셋 파일을 읽지 못했습니다: %s"), *Path));
+				return nullptr;
+			}
+			Source = TEXT("file");
+		}
+		else
+		{
+			if (Source == TEXT("auto")) Source = (Panel && Panel->Presets.Num() > 0) ? TEXT("panel") : TEXT("memory");
+			if (Source == TEXT("panel"))
+			{
+				if (!Panel) { E.FailDomain(TEXT("프리셋 메이커 패널이 없습니다 (source:memory 또는 presetFile)")); return nullptr; }
+				Presets = Panel->Presets;
+			}
+			else if (Source == TEXT("memory"))
+			{
+				Presets = Mgr->ResolvePresets(); // StoredPresets, 비면 config preset_file(preset.numbers 와 같은 규약)
+			}
+			else
+			{
+				E.FailDomain(FString::Printf(TEXT("source 는 auto | panel | memory 중 하나입니다: %s"), *Source));
+				return nullptr;
+			}
+		}
+		int32 FaceTotal = 0;
+		for (const FParkingPreset& Pr : Presets) { FaceTotal += FMath::Max(0, Pr.FaceCount); }
+		if (FaceTotal == 0)
+		{
+			E.FailDomain(FString::Printf(TEXT("변환할 프리셋 면이 없습니다 (source=%s)"), *Source));
+			return nullptr;
+		}
+
+		// ── 대상 레벨 액터 ──
+		FString ActorName = RpcParam::GetString(P, TEXT("actor"));
+		if (ActorName.IsEmpty())
+		{
+			TArray<AActor*> SlotActors;
+			BayCollectSlotActors(W, SlotActors);
+			if (SlotActors.Num() == 0)
+			{
+				E.FailDomain(TEXT("레벨에 BP_ParkingSlot 액터가 없습니다 — actor 로 ISM_Slot 을 가진 액터를 지정하세요"));
+				return nullptr;
+			}
+			ActorName = SlotActors.Last()->GetName();
+		}
+		AActor* LevelActor = nullptr;
+		UInstancedStaticMeshComponent* Comp = BayLevelComp(W, ActorName, -1, &LevelActor);
+		if (!Comp)
+		{
+			E.FailDomain(FString::Printf(TEXT("ISM_Slot 을 가진 액터가 아닙니다: %s (bay.list 의 group)"), *ActorName));
+			return nullptr;
+		}
+
+		const float UU = BayMetersToUU(W);
+		FTransform First;
+		const bool bHasRef = Comp->GetInstanceCount() > 0 && Comp->GetInstanceTransform(0, First, /*bWorldSpace=*/true);
+		const bool bXLong = bHasRef && BayInstanceXLong(Comp, First);
+		const FVector Extent = Comp->GetStaticMesh()->GetBounds().BoxExtent;
+
+		int32 Replaced = 0;
+		if (RpcParam::GetBool(P, TEXT("replace"), false))
+		{
+			Replaced = Comp->GetInstanceCount();
+			Comp->ClearInstances();
+			for (auto It = HiddenLevelSlots.CreateIterator(); It; ++It)
+			{
+				FString Actor, Idx;
+				if (It.Key().Mid(6).Split(TEXT("#"), &Actor, &Idx) && Actor == ActorName) It.RemoveCurrent();
+			}
+		}
+
+		// ── 면마다 인스턴스 하나 ──
+		TArray<FString> Made;
+		double ZM = 0.0;
+		for (const FParkingPreset& Pr : Presets)
+		{
+			for (int32 k = 0; k < Pr.FaceCount; ++k)
+			{
+				FVector C[4];
+				AParkingPresetManager::ComputeSlotCorners(Pr, k, /*MetersToUU=*/1.f, /*FaceHeightZ=*/0.f, C); // [0]→[3] 이 폭(xSize) 변
+				FVector Center = (C[0] + C[1] + C[2] + C[3]) * 0.25f;
+				if (bHasRef) Center.Z = First.GetLocation().Z / UU; // 같은 액터의 면과 같은 바닥 높이
+				ZM = Center.Z;
+				const float Yaw = BayMod360(FMath::RadiansToDegrees(FMath::Atan2(C[3].Y - C[0].Y, C[3].X - C[0].X)));
+				const FTransform T = BayLevelTransform(Center, Yaw, FVector2D(Pr.BoxSizeX, Pr.BoxSizeZ), bXLong, UU, Extent);
+				const int32 Idx = Comp->AddInstance(T, /*bWorldSpace=*/true);
+				if (Idx != INDEX_NONE) Made.Add(BayLevelKey(ActorName, Idx));
+			}
+		}
+		Comp->MarkRenderStateDirty();
+
+		// ── 출처 비우기(선이 레벨 면 위에 두 겹으로 그려지지 않게) ──
+		int32 Cleared = 0;
+		if (RpcParam::GetBool(P, TEXT("clearPresets"), true))
+		{
+			if (Source == TEXT("panel"))
+			{
+				Cleared = Panel->Presets.Num();
+				Panel->ClearAll();
+			}
+			else if (Source == TEXT("memory"))
+			{
+				Cleared = Mgr->StoredPresets.Num(); // config preset_file 에서 온 것은 지울 수 없다(0)
+				Mgr->ClearPresets();
+			}
+		}
+		// 바닥 번호는 마지막에 그린 쪽이 이긴다 — 패널이 출처면 패널 목록 기준으로 다시 그린다.
+		if (Source == TEXT("panel")) Panel->RefreshView();
+		else BayRefreshSlotNumbers(W);
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetStringField(TEXT("source"), Source);
+		O->SetNumberField(TEXT("presetCount"), Presets.Num());
+		O->SetNumberField(TEXT("count"), Made.Num());
+		O->SetStringField(TEXT("actor"), ActorName);
+		O->SetArrayField(TEXT("bays"), BayStringArray(Made));
+		O->SetNumberField(TEXT("replaced"), Replaced);
+		O->SetNumberField(TEXT("z"), BayRound(ZM, 4));
+		O->SetNumberField(TEXT("clearedPresets"), Cleared);
+
+		// ── 선택: 레벨 면 스냅샷 저장(bay.saveLevel 과 같은 파일) ──
+		FString SaveFile = RpcParam::GetString(P, TEXT("saveFile"));
+		if (!SaveFile.IsEmpty())
+		{
+			if (!SaveFile.EndsWith(TEXT(".json"))) SaveFile += TEXT(".json");
+			const FString Path = UPark3DAppConfigLibrary::ResolveDataPath(TEXT("Bay"), SaveFile);
+			const FString Level = UPark3DAppConfigLibrary::GetCurrentLevelPath(W);
+			TArray<Park3DLevelSlots::FSlotInstance> Slots;
+			Park3DLevelSlots::Snapshot(W, HiddenLevelSlots, Slots);
+			if (!Park3DLevelSlots::SaveFile(Path, Level, Slots))
+			{
+				// 면은 이미 넣었다 — 실패를 숨기지 않되 변환 결과는 돌려준다.
+				O->SetBoolField(TEXT("ok"), false);
+				O->SetStringField(TEXT("saveError"), FString::Printf(TEXT("레벨 주차면 저장 실패: %s"), *Path));
+			}
+			else
+			{
+				TSharedPtr<FJsonObject> S = MakeShared<FJsonObject>();
+				S->SetStringField(TEXT("path"), Path);
+				S->SetStringField(TEXT("fileName"), FPaths::GetCleanFilename(Path));
+				S->SetNumberField(TEXT("count"), Slots.Num());
+				S->SetStringField(TEXT("level"), Level);
+				O->SetObjectField(TEXT("saved"), S);
+			}
+		}
+		return RpcDto::MakeObject(O);
+	});
+
 	// bay.toPresets {name? | names[]? | group? | all?(기본 전부) camIdx?=1 clearBays?=true}
 	//   → {count, presets[], bayCount, bays[], split[], clearedBays}. bay.fromPresets 의 역.
 	// 같은 group·종류·yaw 의 등간격 면이 프리셋 하나(아니면 면마다 하나, split[] 에 보고). 레벨 면은 지울 수 없어 clearBays 면 숨긴다.

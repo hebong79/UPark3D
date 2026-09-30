@@ -1,1 +1,62 @@
-{"datas":[{"idx":1,"presetName":"Preset 1","faceCount":5,"offsetPos":{"x":4.105,"y":0.0,"z":57.447},"faceRot":90.0,"groupRot":0.0,"xSize":6.0,"zSize":2.5,"dirType":1,"useBaseWidth":true,"camIdx":0},{"idx":2,"presetName":"Preset 2","faceCount":4,"offsetPos":{"x":4.175,"y":0.0,"z":25.717},"faceRot":90.0,"groupRot":0.0,"xSize":6.0,"zSize":2.5,"dirType":1,"useBaseWidth":true,"camIdx":0},{"idx":3,"presetName":"Preset 3","faceCount":4,"offsetPos":{"x":4.192,"y":0.0,"z":-0.063},"faceRot":90.0,"groupRot":0.0,"xSize":6.0,"zSize":2.5,"dirType":1,"useBaseWidth":true,"camIdx":0}]}
+{
+	"isUnreal": true,
+	"datas": [
+		{
+			"idx": 1,
+			"presetName": "BP_ParkingSlot",
+			"faceCount": 5,
+			"offsetPos":
+			{
+				"x": -17.240800857543945,
+				"y": -61.418800354003906,
+				"z": 0.010999999940395355
+			},
+			"faceRot": 72.089996337890625,
+			"groupRot": 0,
+			"xSize": 2.3999998569488525,
+			"zSize": 6,
+			"dirType": 1,
+			"useBaseWidth": false,
+			"camIdx": 1,
+			"use3D": false
+		},
+		{
+			"idx": 2,
+			"presetName": "BP_ParkingSlot2",
+			"faceCount": 4,
+			"offsetPos":
+			{
+				"x": -5.315000057220459,
+				"y": -24.518199920654297,
+				"z": 0.010999999940395355
+			},
+			"faceRot": 72.089996337890625,
+			"groupRot": 0,
+			"xSize": 2.3999998569488525,
+			"zSize": 6.5999999046325684,
+			"dirType": 1,
+			"useBaseWidth": false,
+			"camIdx": 1,
+			"use3D": false
+		},
+		{
+			"idx": 3,
+			"presetName": "BP_ParkingSlot3",
+			"faceCount": 4,
+			"offsetPos":
+			{
+				"x": 3.5446000099182129,
+				"y": 2.8958001136779785,
+				"z": 0.010999999940395355
+			},
+			"faceRot": 72.089996337890625,
+			"groupRot": 0,
+			"xSize": 2.3999998569488525,
+			"zSize": 6.5999999046325684,
+			"dirType": 1,
+			"useBaseWidth": false,
+			"camIdx": 1,
+			"use3D": false
+		}
+	]
+}

@@ -157,6 +157,9 @@ public:
 	/** Unity 스키마 JSON 파일에서 프리셋 목록을 로드(실패 시 false). */
 	static bool LoadPresetsFromJson(const FString& Path, TArray<FParkingPreset>& OutPresets);
 
+	/** 그 월드의 프리셋 메이커 패널(닫혀 있어도 인스턴스가 있으면). 없으면 nullptr — RPC 가 패널 목록을 읽을 때 쓴다(C++ 전용). */
+	static UPresetMakerWidget* FindInWorld(const UWorld* World);
+
 	// ---- 3차: 월드 3D 라인 뷰 갱신 ----
 	/** 현재 프리셋/선택/3D 토글 상태를 ParkingPresetManager 로 다시 그린다. */
 	UFUNCTION(BlueprintCallable, Category = "PresetMaker")

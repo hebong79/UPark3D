@@ -48,12 +48,21 @@ AMapFloorActor::AMapFloorActor()
 	}
 
 	// 머티리얼은 컴포넌트 오버라이드로 지정(메시 에셋 슬롯은 건드리지 않는다).
+	// 바닥은 서신지구대(LV_Park_01) 주차장 도로 슬래브와 같은 도로 아스팔트(차선 없음)를 쓴다.
+	// LV_Park_01 이 쿡에 들어 있어 이 에셋도 pak 에 함께 실린다. 못 찾으면 예전 단색 아스팔트로 물러난다.
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> RoadAsphaltFinder(
+		TEXT("/Game/Road_Creator_Pro/Materials/Asphalt/MI_Asphalt_no_Markings.MI_Asphalt_no_Markings"));
 	// 이 머티리얼은 월드 얼라인드(M_World 의 WorldAlignedTexture)라 스케일을 키워도 텍스처가
 	// 늘어나지 않는다 → UV 보정 코드 불필요.
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> AsphaltFinder(TEXT("/Game/M/MI_Asphalt.MI_Asphalt"));
-	if (AsphaltFinder.Succeeded())
+	if (RoadAsphaltFinder.Succeeded())
+	{
+		FloorMesh->SetMaterial(0, RoadAsphaltFinder.Object);
+	}
+	else if (AsphaltFinder.Succeeded())
 	{
 		FloorMesh->SetMaterial(0, AsphaltFinder.Object);
+		UE_LOG(LogTemp, Warning, TEXT("[MapFloor] 도로 아스팔트(MI_Asphalt_no_Markings)를 찾지 못해 /Game/M/MI_Asphalt 로 대체합니다."));
 	}
 	else
 	{

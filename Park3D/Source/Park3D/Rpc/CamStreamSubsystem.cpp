@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "CamStreamSubsystem.h"
+#include "Park3DRpcTypes.h"
 
 #include "MjpegStreamServer.h"
 #include "RpcImageUtil.h"
@@ -426,9 +427,10 @@ void UCamStreamSubsystem::Tick(float DeltaTime)
 
 			APTZCameraActor* Cam = Mgr ? Mgr->GetCamera(Ch.CamId - 1) : nullptr;
 			TArray<uint8> Jpeg;
+			const int64 Seq = Park3DRpc::SceneSeq();   // ProduceJpeg 은 동기 렌더 — 지금까지의 변경이 다 들어간다
 			if (Cam && ProduceJpeg(Cam, Jpeg))
 			{
-				Ch.Server->UpdateFrame(Jpeg);
+				Ch.Server->UpdateFrame(Jpeg, Seq);
 				++Ch.FpsWindowFrames;
 			}
 		}
@@ -511,9 +513,10 @@ void UCamStreamSubsystem::TickMainChannel(float DeltaTime)
 	PollMainReadback();
 
 	TArray<uint8> Jpeg;
-	if (TryTakeMainFrame(Jpeg))
+	int64 MainFrameId = -1;
+	if (TryTakeMainFrame(Jpeg, &MainFrameId))
 	{
-		MainChannel.Server->UpdateFrame(Jpeg);
+		MainChannel.Server->UpdateFrame(Jpeg, MainFrameId);
 		++MainChannel.FpsWindowFrames;
 	}
 
@@ -894,6 +897,7 @@ bool UCamStreamSubsystem::RequestMainCapture()
 	TSharedPtr<FCamStreamMainReadback, ESPMode::ThreadSafe> State = MainReadbackRing[MainRingWrite];
 	State->SceneMs = SceneMs;
 	State->ReadbackGameMs = 0.f;
+	State->SceneSeq = Park3DRpc::SceneSeq();   // CaptureScene 을 건 순간 — 이 뒤의 변경은 이 그림에 없다
 	{
 		FScopeLock Lock(&State->Mutex);
 		State->Width = MainRT->SizeX;
@@ -1045,7 +1049,24 @@ void UCamStreamSubsystem::PollMainReadbackSlot(const TSharedPtr<FCamStreamMainRe
 	State->ReadbackGameMs += static_cast<float>((FPlatformTime::Seconds() - PollStart) * 1000.0);
 }
 
-bool UCamStreamSubsystem::TryTakeMainFrame(TArray<uint8>& OutJpeg)
+int64 UCamStreamSubsystem::GetLatestFrameId(int32 CamId, bool& OutHasClients) const
+{
+	OutHasClients = false;
+	const FMjpegStreamServer* Server = nullptr;
+	if (CamId <= 0)
+	{
+		Server = MainChannel.Server;
+	}
+	else
+	{
+		for (const FCamStreamChannel& Ch : Channels) { if (Ch.CamId == CamId) { Server = Ch.Server; break; } }
+	}
+	if (!Server) return -1;
+	OutHasClients = Server->HasClients();
+	return Server->GetLatestFrameId();
+}
+
+bool UCamStreamSubsystem::TryTakeMainFrame(TArray<uint8>& OutJpeg, int64* OutFrameId)
 {
 	// 수거는 오직 "가장 오래된" 슬롯에서만 한다. 뒤 슬롯이 먼저 Ready 가 되어도 여기서 막히므로
 	// 내보내는 순서 = 요청한 순서가 보장된다(영상이 뒤로 튀지 않는다).
@@ -1071,6 +1092,7 @@ bool UCamStreamSubsystem::TryTakeMainFrame(TArray<uint8>& OutJpeg)
 		W = State->Width;
 		H = State->Height;
 		Pixels = MoveTemp(State->Pixels);
+		if (OutFrameId) { *OutFrameId = State->SceneSeq; }
 
 		// 성공이든 실패든 이 요청은 여기서 끝난다 — 다음 캡처를 받을 수 있게 비워 둔다
 		// (리드백 객체 자체는 재사용한다).

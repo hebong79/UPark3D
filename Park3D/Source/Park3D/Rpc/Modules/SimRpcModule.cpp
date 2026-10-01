@@ -269,6 +269,7 @@ namespace
 	bool SimParseGate(const TSharedPtr<FJsonObject>& P, const FString& Key, FParkSimGate& Out, FRpcError& E)
 	{
 		const TSharedPtr<FJsonObject>* G = nullptr;
+		RpcParam::MarkRead(P, Key);
 		if (!P.IsValid() || !P->TryGetObjectField(Key, G) || !G || !G->IsValid()) { return false; }
 		double X = 0, Y = 0, Yaw = 0;
 		if (!(*G)->TryGetNumberField(TEXT("x"), X) || !(*G)->TryGetNumberField(TEXT("y"), Y) || !(*G)->TryGetNumberField(TEXT("yaw"), Yaw))
@@ -612,6 +613,8 @@ void FSimRpcModule::Register(URpcDispatcher& Dispatcher)
 		UWorld* World = GetWorldPtr();
 		ParkLane::FRules Parsed;
 		FString Err;
+		RpcParam::MarkRead(P, TEXT("loop"));   // ParseRules 는 Rpc 밖(Sim) 파서라 직접 읽는다
+		RpcParam::MarkRead(P, TEXT("edges"));
 		if (!ParkLane::ParseRules(P, Parsed, Err))
 		{
 			E.FailDomain(Err);

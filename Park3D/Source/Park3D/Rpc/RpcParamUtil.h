@@ -10,6 +10,30 @@
 
 namespace RpcParam
 {
+	/**
+	 * 읽은 키 추적(보드 #1099 — 모르는 키를 조용히 삼키지 않기). 디스패처가 핸들러 호출 동안 스택에 둔다.
+	 * 아래 헬퍼는 params 최상위 객체(Root)에서 키를 읽을 때 자동으로 기록하고, 헬퍼를 거치지 않고 직접 읽는 곳은
+	 * MarkRead 를 부른다. 핸들러가 끝난 뒤 Root 에 있는데 한 번도 안 읽힌 키 = 핸들러가 무시한 키.
+	 * 조건부로 읽는 키는 그 경로를 탈 때만 기록된다 — 그 경로를 안 탔다면 실제로 쓰이지 않은 것이므로 그대로 알린다.
+	 */
+	class FReadTracker
+	{
+	public:
+		explicit FReadTracker(const TSharedPtr<FJsonObject>& InRoot);
+		~FReadTracker();
+		/** Root 에 있지만 읽히지 않은 키(정렬). */
+		TArray<FString> UnreadKeys() const;
+
+	private:
+		friend void MarkRead(const TSharedPtr<FJsonObject>& P, const FString& Key);
+		const FJsonObject* Root = nullptr;
+		TSet<FString> Read;
+		FReadTracker* Prev = nullptr;
+	};
+
+	/** 헬퍼 밖에서 P 의 키를 직접 읽을 때 부른다(추적 중이 아니거나 P 가 Root 가 아니면 아무 일도 안 한다). */
+	void MarkRead(const TSharedPtr<FJsonObject>& P, const FString& Key);
+
 	/** 키 존재 여부(null params 안전). */
 	bool Has(const TSharedPtr<FJsonObject>& P, const FString& Key);
 

@@ -443,7 +443,7 @@ void FRandomRpcModule::Register(URpcDispatcher& Dispatcher)
 	{
 		// 뷰 안 랜덤 배치는 Unity CPtzSpaceVehiclePlacer 의 6단계 게이트(뷰포트 거리균등 샘플링·지면 검증·
 		// 차량 간격·번호판 가시성 레이캐스트·기존 번호판 가림 검사·화면 2D 박스 겹침)를 요구한다. 이 포트는 미이식.
-		E.FailDomain(TEXT("미구현(random.placeInView): PTZ 뷰포트 배치 게이트 미이식 — 슬롯 배치는 random.slotPlace 사용"));
+		E.FailNotImplemented(TEXT("미구현(random.placeInView): PTZ 뷰포트 배치 게이트 미이식 — 슬롯 배치는 random.slotPlace 사용"));
 		return nullptr;
 	});
 }

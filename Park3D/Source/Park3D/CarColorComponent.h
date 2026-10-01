@@ -62,6 +62,9 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Car|Color")
 	FLinearColor GetCurrentColor() const { return CurrentColor; }
 
+	/** 원래 색이 아닌 색이 칠해져 있는가(car.list 의 colorName 판정용, C++ 전용). */
+	bool IsPainted() const { return bInitialized && !CurrentColor.Equals(OriginalColor, 1e-3f); }
+
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Car|Color")
 	float GetMetallicValue() const { return CurrentMetallic; }
 

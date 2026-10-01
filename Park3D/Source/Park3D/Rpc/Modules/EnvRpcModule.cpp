@@ -59,6 +59,7 @@ namespace
 	FRotator ReadRot(const TSharedPtr<FJsonObject>& P, const FString& Key, const FRotator& Default)
 	{
 		const TSharedPtr<FJsonObject>* Obj = nullptr;
+		RpcParam::MarkRead(P, Key);
 		if (!P.IsValid() || !P->TryGetObjectField(Key, Obj) || !Obj || !Obj->IsValid())
 		{
 			return Default;
@@ -134,6 +135,7 @@ namespace
 			Out.Add(Single);
 		}
 		const TArray<TSharedPtr<FJsonValue>>* NamesArr = nullptr;
+		RpcParam::MarkRead(P, TEXT("names"));
 		if (P.IsValid() && P->TryGetArrayField(TEXT("names"), NamesArr) && NamesArr)
 		{
 			for (const TSharedPtr<FJsonValue>& V : *NamesArr)
@@ -531,6 +533,7 @@ void FEnvRpcModule::Register(URpcDispatcher& Dispatcher)
 			Wanted.Add(Single);
 		}
 		const TArray<TSharedPtr<FJsonValue>>* NamesArr = nullptr;
+		RpcParam::MarkRead(P, TEXT("names"));
 		if (P.IsValid() && P->TryGetArrayField(TEXT("names"), NamesArr) && NamesArr)
 		{
 			for (const TSharedPtr<FJsonValue>& V : *NamesArr)

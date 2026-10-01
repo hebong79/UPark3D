@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "RpcModuleSupport.h"
+#include "../CarColorComponent.h"
 #include "../CarPlacementManager.h"
 #include "../CarActor.h"
 #include "../ParkingPresetManager.h"
@@ -153,6 +154,26 @@ namespace RpcDto
 		// 종류(kind)와 판에 실제 그려진 글자(지역명·자릿수 적용). OmiPark3D CarDto 의 가산 키와 같은 이름.
 		O->SetStringField(TEXT("plateKind"), Car->GetPlateKind());
 		O->SetStringField(TEXT("plateText"), Car->GetPlateDisplayText());
+		// 도색(보드 #1102 — 「빨간 차 지워」에 답하려면 색을 읽을 수 있어야 한다). color 는 저장 필드(-1=미지정),
+		// colorName·rgb 는 지금 칠해진 실제 색 — car.setColor(r,g,b) 는 color 를 안 바꾸므로 둘을 따로 준다.
+		O->SetNumberField(TEXT("color"), D.color);
+		FString ColorName = TEXT("original");
+		if (const UCarColorComponent* CC = Car->ColorComp)
+		{
+			const FLinearColor Cur = CC->GetCurrentColor();
+			O->SetObjectField(TEXT("rgb"), Vec3(Cur.R, Cur.G, Cur.B));
+			if (CC->IsPainted())
+			{
+				static const TCHAR* Names[] = { TEXT("white"), TEXT("black"), TEXT("silver"), TEXT("gray"), TEXT("red"),
+				                                TEXT("blue"), TEXT("green"), TEXT("yellow"), TEXT("orange"), TEXT("purple") };
+				ColorName = TEXT("custom");
+				for (int32 i = 0; i < UE_ARRAY_COUNT(Names); ++i)
+				{
+					if (Cur.Equals(UCarColorComponent::ColorForEnum(static_cast<ECarColor>(i)), 1e-3f)) { ColorName = Names[i]; break; }
+				}
+			}
+		}
+		O->SetStringField(TEXT("colorName"), ColorName);
 		return O;
 	}
 

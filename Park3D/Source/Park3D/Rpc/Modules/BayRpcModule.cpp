@@ -450,6 +450,7 @@ namespace
 		const FString Single = RpcParam::GetString(P, TEXT("name"));
 		if (!Single.IsEmpty()) Out.Add(Single);
 		const TArray<TSharedPtr<FJsonValue>>* Names = nullptr;
+		RpcParam::MarkRead(P, TEXT("names"));
 		if (P.IsValid() && P->TryGetArrayField(TEXT("names"), Names) && Names)
 		{
 			for (const TSharedPtr<FJsonValue>& V : *Names)
@@ -1036,13 +1037,18 @@ void FBayRpcModule::Register(URpcDispatcher& Dispatcher)
 	{
 		UWorld* W = NeedWorld(E); if (!W) return nullptr;
 		TArray<FBayRec> Bays; Collect(W, Bays);
-		int32 Removed = 0;
+		int32 Removed = 0, KeptLevel = 0;
 		for (const FBayRec& R : Bays)
 		{
 			if (!R.bLevel && R.Actor) { R.Actor->Destroy(); ++Removed; }
+			else if (R.bLevel) { ++KeptLevel; }
 		}
 		TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 		Root->SetNumberField(TEXT("deletedCount"), Removed);
+		Root->SetNumberField(TEXT("cleared"), Removed);
+		Root->SetNumberField(TEXT("changed"), Removed);
+		// 레벨에 구워진 면은 지우지 않는다(bay.delete level:… 로만) — 조용히 남기지 않고 개수를 알린다(보드 #1100 ⑦).
+		Root->SetNumberField(TEXT("keptLevelBays"), KeptLevel);
 		return RpcDto::MakeObject(Root);
 	});
 
@@ -1537,7 +1543,8 @@ void FBayRpcModule::Register(URpcDispatcher& Dispatcher)
 		FString Path;
 		if (!BayResolvePresetWritePath(P, Path, E)) return nullptr;
 		const bool bExisted = IFileManager::Get().FileExists(*Path);
-		if (bExisted && !RpcParam::GetBool(P, TEXT("overwrite"), false))
+		const bool bOverwrite = RpcParam::GetBool(P, TEXT("overwrite"), false);   // 조건 밖에서 읽는다 — 새 파일일 때도 받은 키다(#1099 경고)
+		if (bExisted && !bOverwrite)
 		{
 			E.FailDomain(FString::Printf(TEXT("이미 있는 파일: %s — overwrite:true 로 덮어쓴다"), *FPaths::GetCleanFilename(Path)));
 			return nullptr;
@@ -1547,6 +1554,7 @@ void FBayRpcModule::Register(URpcDispatcher& Dispatcher)
 		TArray<FBayRec> Bays;
 		TArray<const FBayRec*> Chosen;
 		const TArray<TSharedPtr<FJsonValue>>* Raw = nullptr;
+		RpcParam::MarkRead(P, TEXT("bays"));
 		if (P.IsValid() && P->TryGetArrayField(TEXT("bays"), Raw) && Raw)
 		{
 			if (Raw->Num() == 0) { E.FailDomain(TEXT("bays[] 가 비어 있습니다")); return nullptr; }

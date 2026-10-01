@@ -39,8 +39,14 @@ public:
 	/** 리스너/워커 정지 및 모든 클라이언트 정리. */
 	void StopServer();
 
-	/** 게임스레드가 최신 JPEG 프레임을 설정(복사). */
-	void UpdateFrame(const TArray<uint8>& Jpeg);
+	/**
+	 * 게임스레드가 최신 JPEG 프레임을 설정(복사). FrameId>=0 이면 파트 헤더에 X-Frame-Id 로 싣는다
+	 * (= 이 그림을 그릴 때의 장면 순번, Park3DRpc::SceneSeq — 보드 #1101).
+	 */
+	void UpdateFrame(const TArray<uint8>& Jpeg, int64 FrameId = -1);
+
+	/** 마지막으로 공개한 프레임의 장면 순번(없으면 -1). view.waitFrame 이 본다. */
+	int64 GetLatestFrameId() const;
 
 	/** 연결(또는 대기) 클라이언트가 있는지 — 게임스레드가 캡처 여부 판단에 사용. */
 	bool HasClients() const;
@@ -84,7 +90,8 @@ private:
 	TArray<uint8> LatestFrame;
 	/** UpdateFrame() 마다 증가 — 워커가 "새 프레임인가"를 판별하는 기준. FrameLock 으로 보호. */
 	uint64 FrameSeq = 0;
-	FCriticalSection FrameLock;
+	int64 LatestFrameId = -1;
+	mutable FCriticalSection FrameLock;
 
 	/** 새 프레임 도착(또는 정지) 시 워커를 깨우는 auto-reset 이벤트. */
 	FEvent* NewFrameEvent = nullptr;

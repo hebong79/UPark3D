@@ -151,6 +151,12 @@ namespace
 		return Out.Num() > 0;
 	}
 
+	/** 바닥 번호 글자 회전을 0..360 으로 접는다(-90 → 270, 450 → 90). */
+	float NormalizeNumberRot(double Deg)
+	{
+		return static_cast<float>(FRotator::ClampAxis(Deg));
+	}
+
 	/** 전달된 키만 프리셋 필드에 반영(update/setSize 공용). */
 	void ApplyOptionalFields(const TSharedPtr<FJsonObject>& P, FParkingPreset& Pr)
 	{
@@ -164,6 +170,7 @@ namespace
 		if (RpcParam::Has(P, TEXT("dirType")))      Pr.DirType = static_cast<EFaceDirType>(FMath::Clamp(RpcParam::GetInt(P, TEXT("dirType"), 0), 0, 1));
 		if (RpcParam::Has(P, TEXT("presetName")))   Pr.PresetName = RpcParam::GetString(P, TEXT("presetName"), Pr.PresetName);
 		if (RpcParam::Has(P, TEXT("offset")))       Pr.Offset = RpcParam::GetVec3(P, TEXT("offset"), Pr.Offset);
+		if (RpcParam::Has(P, TEXT("numberRot")))    Pr.NumberRotate = NormalizeNumberRot(RpcParam::GetFloat(P, TEXT("numberRot"), Pr.NumberRotate));
 	}
 }
 
@@ -236,9 +243,12 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 			O->SetStringField(TEXT("source"), S.bFromPreset ? TEXT("preset") : TEXT("level"));
 			O->SetObjectField(TEXT("pos"), RpcDto::Vec3(S.Center.X / U, S.Center.Y / U, S.Center.Z / U));
 			O->SetNumberField(TEXT("rotY"), FMath::RadiansToDegrees(FMath::Atan2(S.AxisDir.Y, S.AxisDir.X)));
+			// textRotY = 바닥 글자의 **위쪽**이 향하는 방향(도, UE yaw). 실제로 그려지는 방향이다(rotY 는 면 축).
+			O->SetNumberField(TEXT("textRotY"), FRotator::ClampAxis(FMath::RadiansToDegrees(FMath::Atan2(-S.TextAxis.Y, -S.TextAxis.X))));
 			O->SetNumberField(TEXT("widthCm"), S.WidthCm);
 			if (S.bFromPreset)
 			{
+				O->SetNumberField(TEXT("numberRot"), S.NumberRotDeg);
 				O->SetNumberField(TEXT("presetId"), S.PresetIdx);
 				O->SetNumberField(TEXT("faceSlot"), S.SlotId); // car.list 의 faceSlot 과 같은 공간
 				++PresetCount;
@@ -368,6 +378,7 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 		Pr.bIsBaseWidth = RpcParam::GetBool(P, TEXT("useBaseWidth"), true);
 		Pr.BoxSizeX = RpcParam::GetFloat(P, TEXT("xSize"), 2.5);
 		Pr.BoxSizeZ = RpcParam::GetFloat(P, TEXT("zSize"), 5.0);
+		Pr.NumberRotate = NormalizeNumberRot(RpcParam::GetFloat(P, TEXT("numberRot"), 0.0));
 
 		const int32 NewIdx = Mgr->AddPreset(Pr);
 		// 방금 추가한 것은 배열의 끝이다. FindPresetByIdx 는 첫 일치를 돌려주므로
@@ -451,6 +462,8 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 		if (!Pr) { E.FailDomain(FString::Printf(TEXT("프리셋 없음: idx=%d"), Idx)); return nullptr; }
 		Pr->FaceRotate += static_cast<float>(RpcParam::GetFloat(P, TEXT("deltaFaceRot"), 0.0));
 		Pr->GroupFaceRotate += static_cast<float>(RpcParam::GetFloat(P, TEXT("deltaGroupRot"), 0.0));
+		// 바닥 번호 글자만 돌린다(면 기하 불변) — faceRot/groupRot 은 글자 방향을 바꾸지 못한다(보드 #1086).
+		Pr->NumberRotate = NormalizeNumberRot(Pr->NumberRotate + RpcParam::GetFloat(P, TEXT("deltaNumberRot"), 0.0));
 		Mgr->RefreshView();
 		return RpcDto::PresetToDtoValue(*Pr);
 	});

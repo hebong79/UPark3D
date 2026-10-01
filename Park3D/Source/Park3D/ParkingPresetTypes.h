@@ -59,6 +59,14 @@ struct FParkingPreset
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Preset")
 	bool bUse3D = false;
+
+	/**
+	 * 바닥 번호 글자 추가 회전(deg, UE yaw 부호, 0..360). 0 = 자동(가장 가까운 카메라에서 바로 읽히는 방향).
+	 * 자동 방향 위에 더한다 — faceRot/groupRot 은 자동 규칙이 다시 접어 버려 글자를 못 돌린다(보드 #1086).
+	 * UPROPERTY 가 아닌 이유: 쿠킹된 WBP·BP 가 이 구조체를 참조하므로 반사 레이아웃을 건드리지 않는다.
+	 * JSON 은 DTO(numberRot)가 나른다.
+	 */
+	float NumberRotate = 0.f;
 };
 
 /** 프리셋 목록 JSON 루트 (Unity SDPresetDatas { datas }). 저장/열기 직렬화 단위. */
@@ -104,6 +112,7 @@ struct FParkingPresetDTO
 	UPROPERTY() bool useBaseWidth = true;
 	UPROPERTY() int32 camIdx = 1;
 	UPROPERTY() bool use3D = false;     // Unity 파일엔 없음 → 없으면 기본값(false)으로 로드
+	UPROPERTY() float numberRot = 0.f;  // 바닥 번호 글자 추가 회전(deg). Unity 파일엔 없음 → 0(자동)
 };
 
 /** Unity SDPresetDatas 직렬화 DTO 루트({ datas }). */

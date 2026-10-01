@@ -634,46 +634,83 @@ UTextRenderComponent* AParkingPresetManager::AcquireNumber(int32 Index)
 	return T;
 }
 
-void AParkingPresetManager::PlaceNumber(UTextRenderComponent* T, const FVector& Center, const FVector& AxisDir, float SlotWidthCm, int32 Number, const FVector& RowDir)
+void AParkingPresetManager::ComputeTextAxes(TArray<FParkingSlotNumberInfo>& Slots) const
 {
-	if (!T) return;
+	// 가장 가까운 카메라 탐색에 쓸 카메라 위치(매니저가 없으면 비어 있고 부호 보정을 건너뛴다).
+	TArray<FVector> CamLocs;
+	if (UWorld* World = GetWorld())
+	{
+		for (TActorIterator<ACameraControlManager> It(World); It; ++It)
+		{
+			for (int32 i = 0; i < It->GetCameraCount(); ++i)
+			{
+				if (const APTZCameraActor* C = It->GetCamera(i)) CamLocs.Add(C->GetActorLocation());
+			}
+			break;
+		}
+	}
 
-	// 글자 축 = 면의 두 축(길이·폭) 중 **열 방향(이웃 면 쪽)에 수직인 축**. 수직주차는 열 방향이 폭 축이라
+	for (int32 i = 0; i < Slots.Num(); ++i)
+	{
+		FParkingSlotNumberInfo& S = Slots[i];
+
+		// 열 방향 = 가장 가까운 다른 면 중심 쪽(면이 하나뿐이면 없음 → 길이축).
+		FVector RowDir = FVector::ZeroVector;
+		float BestSq = TNumericLimits<float>::Max();
+		for (int32 k = 0; k < Slots.Num(); ++k)
+		{
+			if (k == i) continue;
+			const FVector D = Slots[k].Center - S.Center;
+			const float Sq = static_cast<float>(D.SizeSquared2D());
+			if (Sq > 1.f && Sq < BestSq) { BestSq = Sq; RowDir = D.GetSafeNormal2D(); }
+		}
+
+		// 글자 축 = 면의 두 축(길이·폭) 중 **열 방향(이웃 면 쪽)에 수직인 축**. 수직주차는 열 방향이 폭 축이라
 	// 길이축이 되고, 객리단길 같은 평행주차는 열 방향이 길이축이라 폭 축이 된다 — 어느 쪽이든 글자가
 	// 면 안에 세로로 눕고 번호가 열을 따라 나란히 읽힌다.
 	// (버린 규칙 둘: ① 길이축 고정 → 평행주차에서 옆으로 누움 ② "가장 가까운 카메라와 나란한 축" →
 	//  객리단 카메라가 폴대 끝(도로 쪽 2~4m)에 있어 카메라 벡터가 열 방향 성분이 더 커 ①과 같아진다. 둘 다 캡처로 확인.)
-	FVector TextAxis = AxisDir.GetSafeNormal2D();
-	if (TextAxis.IsNearlyZero()) TextAxis = FVector::ForwardVector;
-	if (!RowDir.IsNearlyZero())
-	{
-		const FVector Perp(-TextAxis.Y, TextAxis.X, 0.f); // 폭 축
-		if (FMath::Abs(FVector::DotProduct(Perp, RowDir)) < FMath::Abs(FVector::DotProduct(TextAxis, RowDir)))
+		FVector TextAxis = S.AxisDir.GetSafeNormal2D();
+		if (TextAxis.IsNearlyZero()) TextAxis = FVector::ForwardVector;
+		if (!RowDir.IsNearlyZero())
 		{
-			TextAxis = Perp;
+			const FVector Perp(-TextAxis.Y, TextAxis.X, 0.f); // 폭 축
+			if (FMath::Abs(FVector::DotProduct(Perp, RowDir)) < FMath::Abs(FVector::DotProduct(TextAxis, RowDir)))
+			{
+				TextAxis = Perp;
+			}
 		}
+		// 부호: 축이 **가장 가까운 카메라를 향하게** 둔다. 반대로 두면 카메라 화면에서 숫자가 거꾸로 나온다 —
+		// `MakeFromXZ` 의 로컬 +Z 는 글자 위쪽이 아니라 아래쪽이기 때문이다(엔진 정점 Z = −Top).
+		// 감시 카메라 화면이 이 앱의 판정 화면이므로 그쪽에서 바로 읽히는 것을 기준으로 삼는다. 캡처로 확정.
+		if (CamLocs.Num() > 0)
+		{
+			float CamSq = TNumericLimits<float>::Max();
+			FVector ToCam = FVector::ZeroVector;
+			for (const FVector& L : CamLocs)
+			{
+				const FVector D = L - S.Center;
+				const float Sq = static_cast<float>(D.SizeSquared2D());
+				if (Sq < CamSq) { CamSq = Sq; ToCam = D; }
+			}
+			if (FVector::DotProduct(TextAxis, ToCam) < 0.f)
+			{
+				TextAxis = -TextAxis;
+			}
+		}
+		// 사용자 보정(프리셋 numberRot) — 자동 방향 위에 더한다. 자동 규칙이 부호를 다시 접으므로 faceRot 으로는
+		// 글자를 못 돌린다(보드 #1086: faceRot 180 · groupRot 180 · dirType 1 모두 글자 불변).
+		if (!FMath::IsNearlyZero(S.NumberRotDeg))
+		{
+			TextAxis = FRotator(0.f, S.NumberRotDeg, 0.f).RotateVector(TextAxis);
+		}
+		S.TextAxis = TextAxis;
 	}
-	// 부호: 축이 **가장 가까운 카메라를 향하게** 둔다. 반대로 두면 카메라 화면에서 숫자가 거꾸로 나온다 —
-	// `MakeFromXZ` 의 로컬 +Z 는 글자 위쪽이 아니라 아래쪽이기 때문이다(엔진 정점 Z = −Top).
-	// 감시 카메라 화면이 이 앱의 판정 화면이므로 그쪽에서 바로 읽히는 것을 기준으로 삼는다. 캡처로 확정.
-	for (TActorIterator<ACameraControlManager> It(GetWorld()); It; ++It)
-	{
-		float BestSq = TNumericLimits<float>::Max();
-		FVector ToCam = FVector::ZeroVector;
-		for (int32 i = 0; i < It->GetCameraCount(); ++i)
-		{
-			const APTZCameraActor* C = It->GetCamera(i);
-			if (!C) continue;
-			const FVector D = C->GetActorLocation() - Center;
-			const float Sq = static_cast<float>(D.SizeSquared2D());
-			if (Sq < BestSq) { BestSq = Sq; ToCam = D; }
-		}
-		if (FVector::DotProduct(TextAxis, ToCam) < 0.f)
-		{
-			TextAxis = -TextAxis;
-		}
-		break;
-	}
+}
+
+void AParkingPresetManager::PlaceNumber(UTextRenderComponent* T, const FVector& Center, const FVector& TextAxis, float SlotWidthCm, int32 Number)
+{
+	if (!T) return;
 
 	// TextRender 메시는 로컬 YZ 평면(법선 +X) — 법선을 월드 위로 눕히고 로컬 +Z 를 TextAxis 에 맞춘다.
 	const FRotator Rot = FRotationMatrix::MakeFromXZ(FVector::UpVector, TextAxis).Rotator();
@@ -716,6 +753,7 @@ void AParkingPresetManager::CollectSlotNumbers(const TArray<FParkingPreset>& Pre
 			Info.bFromPreset = true;
 			Info.PresetIdx = P.PresetIdx;
 			Info.SlotId = j + 1;
+			Info.NumberRotDeg = P.NumberRotate;
 			Out.Add(Info);
 		}
 	}
@@ -740,6 +778,7 @@ void AParkingPresetManager::CollectSlotNumbers(const TArray<FParkingPreset>& Pre
 	}
 
 	ApplyNumberAnchors(Out);
+	ComputeTextAxes(Out);
 }
 
 void AParkingPresetManager::ApplyNumberAnchors(TArray<FParkingSlotNumberInfo>& Slots) const
@@ -842,19 +881,9 @@ void AParkingPresetManager::RebuildSlotNumbers(const TArray<FParkingPreset>& Pre
 		if (S.bFromPreset) ++PresetCount;
 	}
 
-	// 열 방향 = 가장 가까운 다른 면 중심 쪽(면이 하나뿐이면 없음 → 길이축).
 	for (int32 i = 0; i < Slots.Num(); ++i)
 	{
-		FVector RowDir = FVector::ZeroVector;
-		float BestSq = TNumericLimits<float>::Max();
-		for (int32 k = 0; k < Slots.Num(); ++k)
-		{
-			if (k == i) continue;
-			const FVector D = Slots[k].Center - Slots[i].Center;
-			const float Sq = static_cast<float>(D.SizeSquared2D());
-			if (Sq > 1.f && Sq < BestSq) { BestSq = Sq; RowDir = D.GetSafeNormal2D(); }
-		}
-		PlaceNumber(AcquireNumber(i), Slots[i].Center, Slots[i].AxisDir, Slots[i].WidthCm, Slots[i].Number, RowDir);
+		PlaceNumber(AcquireNumber(i), Slots[i].Center, Slots[i].TextAxis, Slots[i].WidthCm, Slots[i].Number);
 	}
 
 	for (int32 idx = Slots.Num(); idx < NumberPool.Num(); ++idx)

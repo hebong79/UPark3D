@@ -43,6 +43,14 @@ struct FParkingSlotNumberInfo
 	FString LevelActor;
 	int32 LevelInstance = -1;
 
+	/** 프리셋 면일 때 그 프리셋의 NumberRotate(deg). 레벨 면은 0. */
+	float NumberRotDeg = 0.f;
+	/**
+	 * 글자 배치 축(수평 단위 벡터) — TextRender 로컬 +Z 를 여기에 맞춘다. 로컬 +Z 는 글자 **아래쪽**이라
+	 * 글자 위쪽 = −TextAxis. CollectSlotNumbers 가 자동 규칙(열 방향·가까운 카메라) + NumberRotDeg 로 채운다.
+	 */
+	FVector TextAxis = FVector::ForwardVector;
+
 	/**
 	 * 면을 다시 찾는 문자열 키 — "preset:<PresetIdx>#<SlotId>" / "level:<액터이름>#<인스턴스>".
 	 * 순번(BaseNumber)이 아니라 이 키로 기준점을 저장한다: 순번은 프리셋을 만들거나 지우면 밀린다.
@@ -309,8 +317,10 @@ private:
 	void ApplyNumberAnchors(TArray<FParkingSlotNumberInfo>& Slots) const;
 	UTextRenderComponent* AcquireNumber(int32 Index);
 	/**
-	 * 면 중심에 번호를 눕혀 놓는다. AxisDir 은 면 길이축(수평), RowDir 은 열 방향(이웃 면 쪽, 없으면 0).
-	 * 글자 위쪽은 길이·폭 두 축 중 RowDir 에 수직인 축을 가장 가까운 카메라 반대쪽으로 둔다(도로 쪽에서 똑바로 읽힘).
+	 * CollectSlotNumbers 의 마지막 단계 — 면마다 TextAxis 를 채운다. 글자 축은 길이·폭 두 축 중 열 방향(가장 가까운
+	 * 이웃 면 쪽)에 수직인 축이고, 부호는 가장 가까운 카메라에서 바로 읽히는 쪽, 그 위에 NumberRotDeg 를 더한다.
 	 */
-	void PlaceNumber(UTextRenderComponent* T, const FVector& Center, const FVector& AxisDir, float SlotWidthCm, int32 Number, const FVector& RowDir);
+	void ComputeTextAxes(TArray<FParkingSlotNumberInfo>& Slots) const;
+	/** 면 중심에 번호를 눕혀 놓는다(TextAxis 는 ComputeTextAxes 결과). */
+	void PlaceNumber(UTextRenderComponent* T, const FVector& Center, const FVector& TextAxis, float SlotWidthCm, int32 Number);
 };

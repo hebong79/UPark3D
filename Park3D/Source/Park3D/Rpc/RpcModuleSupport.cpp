@@ -175,6 +175,7 @@ namespace RpcDto
 		O->SetNumberField(TEXT("dirType"), static_cast<int32>(P.DirType));
 		O->SetBoolField(TEXT("useBaseWidth"), P.bIsBaseWidth);
 		O->SetNumberField(TEXT("camIdx"), P.CameraIdx);
+		O->SetNumberField(TEXT("numberRot"), P.NumberRotate);
 		return O;
 	}
 

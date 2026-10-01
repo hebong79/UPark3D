@@ -55,6 +55,20 @@ void ULightControlLibrary::ClampSettings(FLightSettings& S)
 	S.SunColor.A = 1.0f;
 }
 
+TArray<ULightControlLibrary::FKeyMeta> ULightControlLibrary::GetKeyMeta()
+{
+	const FLightSettings D;
+	return {
+		{ TEXT("exposureEV100"),       ExposureMin, ExposureMax, 0.05f, TEXT("EV100"), D.ExposureEV100 },
+		{ TEXT("sunIntensity"),        0.0f, SunIntensityMax,    0.5f,  TEXT("lux"),   D.SunIntensity },
+		{ TEXT("sunAltitudeDeg"),      0.0f, 90.0f,              0.5f,  TEXT("deg"),   D.SunAltitudeDeg },
+		{ TEXT("sunAzimuthDeg"),       0.0f, 360.0f,             1.0f,  TEXT("deg"),   D.SunAzimuthDeg },
+		{ TEXT("skyIntensity"),        0.0f, SkyIntensityMax,    0.05f, TEXT("x"),     D.SkyIntensity },
+		{ TEXT("shadowFillIntensity"), 0.0f, FillIntensityMax,   0.1f,  TEXT("lux"),   D.ShadowFillIntensity },
+		{ TEXT("carFillIntensity"),    0.0f, FillIntensityMax,   0.1f,  TEXT("lux"),   D.CarFillIntensity },
+	};
+}
+
 FString ULightControlLibrary::ToJson(const FLightSettings& S)
 {
 	const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
@@ -166,6 +180,17 @@ bool ULightControlLibrary::SetDefaultFile(const FString& SettingsPath)
 	}
 	return FFileHelper::SaveStringToFile(SettingsPath, *GetDefaultPointerPath(),
 		FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+}
+
+FString ULightControlLibrary::GetDefaultFileName()
+{
+	FString Pointer;
+	if (!FFileHelper::LoadFileToString(Pointer, *GetDefaultPointerPath()))
+	{
+		return FString();
+	}
+	Pointer.TrimStartAndEndInline();
+	return FPaths::GetCleanFilename(Pointer);
 }
 
 bool ULightControlLibrary::LoadDefaultSettings(FLightSettings& Out)

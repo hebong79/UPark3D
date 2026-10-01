@@ -40,6 +40,27 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Light")
 	const FLightSettings& GetLastApplied() const { return LastApplied; }
 
+	/** 레벨이 자체 하늘 시스템(UDS 등)을 가져 태양·하늘빛·노출 적용이 생략되는가. */
+	bool UsesExternalSkySystem() const { return HasExternalSkySystem(); }
+
+	/**
+	 * 지금 화면의 조명(월드에서 되읽은 값 + 노출 볼륨 override 상태)을 "되돌릴 기준"으로 저장한다.
+	 * 기동 시 시작 조명을 적용한 직후에 부른다 - light.reset 이 돌아가는 곳이 그 상태다.
+	 * 부르지 않았으면 첫 ApplySettings 직전 상태가 기준이 된다.
+	 */
+	void CaptureBaseline();
+
+	/** 기준 상태로 되돌린다. 기준이 없으면(한 번도 적용한 적 없음) 아무것도 하지 않고 false. */
+	bool ResetToBaseline();
+
+	/** 값의 출처: "world"(레벨 그대로) | "override"(RPC 로 바꿈) | "file"(파일 적용). */
+	const FString& GetSourceKind() const { return SourceKind; }
+	void SetSourceKind(const FString& InKind) { SourceKind = InKind; }
+
+	/** 마지막으로 적용·저장한 조명 파일 이름(없으면 빈 문자열). */
+	const FString& GetCurrentFileName() const { return CurrentFileName; }
+	void SetCurrentFileName(const FString& InName) { CurrentFileName = InName; }
+
 private:
 	/**
 	 * 태양·하늘빛은 액터가 아니라 컴포넌트로 찾는다. 조명을 ADirectionalLight/ASkyLight 액터로만
@@ -86,4 +107,13 @@ private:
 
 	UPROPERTY()
 	FLightSettings LastApplied;
+
+	// light.reset 기준. 런타임 상태일 뿐이라 UPROPERTY 로 만들지 않는다.
+	bool bBaselineTaken = false;
+	FLightSettings BaseSettings;
+	bool bBaseOverrideMin = false, bBaseOverrideMax = false;
+	float BaseExposureMin = 0.f, BaseExposureMax = 0.f;
+
+	FString SourceKind = TEXT("world");
+	FString CurrentFileName;
 };

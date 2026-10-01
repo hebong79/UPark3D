@@ -485,6 +485,7 @@ void APark3DGameMode::ApplyStartupLighting()
 	// 그래서 레벨을 정하는 config 가 조명 파일도 정하게 한다 — 없으면 종전대로 _default.txt 를 따른다.
 	FLightSettings Settings;
 	FString Source;
+	FString StartupFile;
 	FPark3DAppConfig AppConfig;
 	const bool bLoaded = UPark3DAppConfigLibrary::Load(AppConfig);
 	if (bLoaded)
@@ -495,6 +496,7 @@ void APark3DGameMode::ApplyStartupLighting()
 		&& ULightControlLibrary::LoadFromFile(Park3DDataPaths::GetDataFilePath(TEXT("Light"), *AppConfig.LightFile), Settings))
 	{
 		Source = FString::Printf(TEXT("config_pmaker.json light_file=%s"), *AppConfig.LightFile);
+		StartupFile = FPaths::GetCleanFilename(AppConfig.LightFile);
 	}
 	else
 	{
@@ -502,9 +504,21 @@ void APark3DGameMode::ApplyStartupLighting()
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[Light] config 의 light_file(%s) 을 읽지 못해 기본값으로 넘어갑니다."), *AppConfig.LightFile);
 		}
-		Source = ULightControlLibrary::LoadDefaultSettings(Settings) ? TEXT("_default.txt") : TEXT("내장 기본값");
+		const bool bDefaultLoaded = ULightControlLibrary::LoadDefaultSettings(Settings);
+		Source = bDefaultLoaded ? TEXT("_default.txt") : TEXT("내장 기본값");
+		if (bDefaultLoaded)
+		{
+			StartupFile = ULightControlLibrary::GetDefaultFileName();
+		}
 	}
 	LightMgr->ApplySettings(Settings);
+	// light.reset 이 돌아갈 곳 = 시작 조명이 적용된 이 화면.
+	LightMgr->CaptureBaseline();
+	if (!StartupFile.IsEmpty())
+	{
+		LightMgr->SetSourceKind(TEXT("file"));
+		LightMgr->SetCurrentFileName(StartupFile);
+	}
 	UE_LOG(LogTemp, Log, TEXT("[Light] 시작 조명 적용 — %s (노출 %.2f, 태양 %.1f lux, 고도 %.1f°)"),
 		*Source, Settings.ExposureEV100, Settings.SunIntensity, Settings.SunAltitudeDeg);
 }

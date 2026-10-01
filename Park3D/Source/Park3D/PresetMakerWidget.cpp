@@ -465,6 +465,7 @@ void UPresetMakerWidget::UpdateSelectedPreset()
 	}
 
 	FParkingPreset Edited = GatherFromFields();
+	Edited.NumberRotate = Presets[SelectedIndex].NumberRotate; // 패널에 칸이 없는 값 — '수정' 이 0 으로 되돌리지 않게
 
 	// 인덱스를 바꾸는 경우 다른 프리셋과 중복되면 거부(Unity 중복 검사)
 	const int32 CurIdx = Presets[SelectedIndex].PresetIdx;
@@ -1014,6 +1015,7 @@ FParkingPresetDTO UPresetMakerWidget::ToDTO(const FParkingPreset& P)
 	D.useBaseWidth = P.bIsBaseWidth;
 	D.camIdx       = P.CameraIdx;
 	D.use3D        = P.bUse3D;
+	D.numberRot    = P.NumberRotate;
 	return D;
 }
 
@@ -1033,6 +1035,7 @@ FParkingPreset UPresetMakerWidget::FromDTO(const FParkingPresetDTO& D, bool bSou
 	P.bIsBaseWidth    = D.useBaseWidth;
 	P.CameraIdx       = D.camIdx;
 	P.bUse3D          = D.use3D;
+	P.NumberRotate    = D.numberRot;
 	return P;
 }
 

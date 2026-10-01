@@ -7,6 +7,7 @@
 #include "Misc/AutomationTest.h"
 #include "../ParkingPresetManager.h"
 #include "../ParkingPresetTypes.h"
+#include "../PresetMakerWidget.h"
 #include "Components/DecalComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Engine/World.h"
@@ -661,6 +662,47 @@ bool FParkingSlotNumberTest::RunTest(const FString& Parameters)
 		}
 
 		Mgr->SetNumberAnchors({});
+	}
+
+	// TN-10: 글자 회전(프리셋 NumberRotate, 보드 #1086). 180 → 프리셋 면 글자 축만 뒤집히고 레벨 면은 그대로,
+	// 그린 TextRender 의 로컬 +Z(글자 아래쪽) 도 그 축을 따른다. 저장 왕복(DTO numberRot)에서도 값이 유지된다.
+	{
+		TArray<FParkingSlotNumberInfo> Before;
+		Mgr->CollectSlotNumbers(Presets, Before);
+
+		TArray<FParkingPreset> Rotated = Presets;
+		Rotated[0].NumberRotate = 180.f;
+		Mgr->StoredPresets = Rotated;
+		TArray<FParkingSlotNumberInfo> After;
+		Mgr->CollectSlotNumbers(Rotated, After);
+		TestEqual(TEXT("TN-10 목록 수 불변"), After.Num(), Before.Num());
+		for (int32 i = 0; i < FMath::Min(Before.Num(), After.Num()); ++i)
+		{
+			const FVector Want = Before[i].bFromPreset ? -Before[i].TextAxis : Before[i].TextAxis;
+			TestTrue(*FString::Printf(TEXT("TN-10 면 %d(%s) 글자 축"), i, Before[i].bFromPreset ? TEXT("preset") : TEXT("level")),
+				After[i].TextAxis.Equals(Want, 1e-3));
+			TestTrue(TEXT("TN-10 면 기하(중심) 불변"), After[i].Center.Equals(Before[i].Center, 1e-3));
+		}
+
+		Mgr->RebuildSlotNumbers(Rotated);
+		TArray<UTextRenderComponent*> Texts;
+		Mgr->GetComponents<UTextRenderComponent>(Texts);
+		const FParkingSlotNumberInfo* First = After.FindByPredicate([](const FParkingSlotNumberInfo& S) { return S.bFromPreset; });
+		bool bFound = false;
+		for (UTextRenderComponent* T : Texts)
+		{
+			if (!T || !T->GetVisibleFlag() || !First) continue;
+			if (!T->GetComponentLocation().Equals(FVector(First->Center.X, First->Center.Y, First->Center.Z + Mgr->SlotNumberZ), 1e-2)) continue;
+			bFound = true;
+			TestTrue(TEXT("TN-10 그린 글자의 로컬 +Z = TextAxis"), T->GetUpVector().Equals(First->TextAxis, 1e-3));
+		}
+		TestTrue(TEXT("TN-10 첫 프리셋 면 글자 찾음"), bFound);
+
+		const FParkingPreset RoundTrip = UPresetMakerWidget::FromDTO(UPresetMakerWidget::ToDTO(Rotated[0]), true);
+		TestEqual(TEXT("TN-10 DTO 왕복 numberRot"), RoundTrip.NumberRotate, 180.f);
+
+		Mgr->StoredPresets = Presets;
+		Mgr->RebuildSlotNumbers(Presets);
 	}
 
 	Mgr->Destroy();

@@ -372,6 +372,123 @@ bool FRpcPresetModuleTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// ===== 계약 정직성(보드 #1099): 안 읽은 키 경고 · changed · 오류 kind =====
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRpcContractHonestyTest,
+	"Park3D.Rpc.ContractHonesty",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FRpcContractHonestyTest::RunTest(const FString& Parameters)
+{
+	// 오류 분류 — 핸들러를 거치지 않는 부분부터.
+	{
+		FRpcError A; A.Fail(Park3DRpc::MethodNotFound, TEXT("미등록 method: x"));
+		TestEqual(TEXT("미등록 → unsupported"), FString(Park3DRpc::ErrorKindName(Park3DRpc::ClassifyErrorKind(A))), FString(TEXT("unsupported")));
+		FRpcError B; B.FailDomain(TEXT("프리셋 없음: idx=5"));
+		TestEqual(TEXT("없음 → not_found"), FString(Park3DRpc::ErrorKindName(Park3DRpc::ClassifyErrorKind(B))), FString(TEXT("not_found")));
+		FRpcError C; C.FailDomain(TEXT("월드 없음(맵 미로드)"));
+		TestEqual(TEXT("월드 없음 → busy"), FString(Park3DRpc::ErrorKindName(Park3DRpc::ClassifyErrorKind(C))), FString(TEXT("busy")));
+		int32 Dummy = 0; FRpcError Dm;
+		RpcParam::RequireInt(MakeShared<FJsonObject>(), TEXT("idx"), Dummy, Dm);
+		TestEqual(TEXT("Require 누락 → bad_params"), FString(Park3DRpc::ErrorKindName(Park3DRpc::ClassifyErrorKind(Dm))), FString(TEXT("bad_params")));
+	}
+
+	UWorld* World = (GEngine && GEngine->GetWorldContexts().Num() > 0) ? GWorld : nullptr;
+	if (!World)
+	{
+		AddWarning(TEXT("에디터 월드 없음 — 핸들러 부분 건너뜀."));
+		return true;
+	}
+	if (AParkingPresetManager* Old = Cast<AParkingPresetManager>(
+		UGameplayStatics::GetActorOfClass(World, AParkingPresetManager::StaticClass())))
+	{
+		Old->ClearPresets(); Old->Destroy();
+	}
+
+	URpcDispatcher* D = NewObject<URpcDispatcher>();
+	FPresetRpcModule Preset([World]() -> UWorld* { return World; });
+	Preset.Register(*D);
+	FRandomRpcModule Random([World]() -> UWorld* { return World; });
+	Random.Register(*D);
+
+	auto Call = [&](const FString& M, const TSharedPtr<FJsonObject>& P, TArray<FString>& Unread) -> TSharedPtr<FJsonObject>
+	{
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		D->Dispatch(M, P, R, E, &Unread);
+		return (R.IsValid() && R->Type == EJson::Object) ? R->AsObject() : nullptr;
+	};
+	auto Num = [](const TSharedPtr<FJsonObject>& O, const TCHAR* K) { double V = -999; if (O.IsValid()) O->TryGetNumberField(K, V); return V; };
+
+	TArray<FString> U;
+	TSharedPtr<FJsonObject> CreateP = MakeShared<FJsonObject>();
+	CreateP->SetObjectField(TEXT("offset"), Vec3Param(0, 0, 5));
+	CreateP->SetNumberField(TEXT("faceCount"), 3);
+	const int32 Idx = (int32)Num(Call(TEXT("preset.create"), CreateP, U), TEXT("idx"));
+	TestTrue(TEXT("create idx"), Idx >= 1);
+	TestEqual(TEXT("create 는 다 읽음"), U.Num(), 0);
+
+	// 모르는 키 — 조회도 경고한다.
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>(); P->SetNumberField(TEXT("bogusKey"), 1);
+		TSharedPtr<FJsonValue> R; FRpcError E; TArray<FString> Ul;
+		TestTrue(TEXT("preset.list 성공"), D->Dispatch(TEXT("preset.list"), P, R, E, &Ul));
+		TestEqual(TEXT("bogusKey 경고"), Ul.Num() == 1 ? Ul[0] : FString(), FString(TEXT("bogusKey")));
+	}
+
+	// preset.rotate {angle} — 실제 키가 아니다: 경고 + changed 0 (전에는 정상 응답만 와서 채팅이 '회전했다' 고 했다).
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>(); P->SetNumberField(TEXT("idx"), Idx); P->SetNumberField(TEXT("angle"), 90);
+		TArray<FString> Ur; TSharedPtr<FJsonObject> O = Call(TEXT("preset.rotate"), P, Ur);
+		TestTrue(TEXT("angle 경고"), Ur.Contains(TEXT("angle")));
+		TestEqual(TEXT("angle → changed 0"), Num(O, TEXT("changed")), 0.0);
+	}
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>(); P->SetNumberField(TEXT("idx"), Idx); P->SetNumberField(TEXT("deltaGroupRot"), 90);
+		TArray<FString> Ur; TSharedPtr<FJsonObject> O = Call(TEXT("preset.rotate"), P, Ur);
+		TestEqual(TEXT("deltaGroupRot 경고 없음"), Ur.Num(), 0);
+		TestEqual(TEXT("groupRot 90"), Num(O, TEXT("groupRot")), 90.0, 1e-4);
+		TestEqual(TEXT("changed 1"), Num(O, TEXT("changed")), 1.0);
+	}
+	// preset.groupRotate {angle} — 옛날엔 rotated:1 이었다. 이제 changed 0 + notFound.
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> Ids; Ids.Add(MakeShared<FJsonValueNumber>(Idx)); Ids.Add(MakeShared<FJsonValueNumber>(999));
+		P->SetArrayField(TEXT("idxs"), Ids); P->SetNumberField(TEXT("angle"), 90);
+		TArray<FString> Ur; TSharedPtr<FJsonObject> O = Call(TEXT("preset.groupRotate"), P, Ur);
+		TestTrue(TEXT("groupRotate angle 경고"), Ur.Contains(TEXT("angle")) && !Ur.Contains(TEXT("idxs")));
+		TestEqual(TEXT("groupRotate changed 0"), Num(O, TEXT("changed")), 0.0);
+		const TArray<TSharedPtr<FJsonValue>>* NF = nullptr;
+		TestTrue(TEXT("notFound [999]"), O.IsValid() && O->TryGetArrayField(TEXT("notFound"), NF) && NF->Num() == 1);
+	}
+	// preset.move delta y — 돌려준 상태와 changed.
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>(); P->SetNumberField(TEXT("idx"), Idx);
+		TSharedPtr<FJsonObject> Dl = MakeShared<FJsonObject>(); Dl->SetNumberField(TEXT("x"), 0); Dl->SetNumberField(TEXT("y"), 1);
+		P->SetObjectField(TEXT("delta"), Dl);
+		TArray<FString> Ur; TSharedPtr<FJsonObject> O = Call(TEXT("preset.move"), P, Ur);
+		TestEqual(TEXT("move 경고 없음"), Ur.Num(), 0);
+		TestEqual(TEXT("move changed 1"), Num(O, TEXT("changed")), 1.0);
+	}
+	// 등록됐지만 동작 안 하는 method — 정상 결과가 아니라 -32004 unsupported.
+	{
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestFalse(TEXT("placeInView 실패"), D->Dispatch(TEXT("random.placeInView"), nullptr, R, E));
+		TestEqual(TEXT("placeInView -32004"), E.Code, Park3DRpc::NotImplemented);
+		TestEqual(TEXT("placeInView unsupported"), FString(Park3DRpc::ErrorKindName(Park3DRpc::ClassifyErrorKind(E))), FString(TEXT("unsupported")));
+	}
+	// preset.delete — 없는 idx 는 changed 0.
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>(); P->SetNumberField(TEXT("idx"), 999);
+		TArray<FString> Ur; TestEqual(TEXT("없는 delete changed 0"), Num(Call(TEXT("preset.delete"), P, Ur), TEXT("changed")), 0.0);
+	}
+
+	if (AParkingPresetManager* M = Cast<AParkingPresetManager>(
+		UGameplayStatics::GetActorOfClass(World, AParkingPresetManager::StaticClass())))
+	{
+		M->ClearPresets(); M->Destroy();
+	}
+	return true;
+}
+
 // ===== map.* 핸들러 =====
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRpcMapModuleTest,
 	"Park3D.Rpc.MapModule",

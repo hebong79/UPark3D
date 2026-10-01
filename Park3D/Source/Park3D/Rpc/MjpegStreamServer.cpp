@@ -102,17 +102,24 @@ bool FMjpegStreamServer::HandleConnection(FSocket* Socket, const FIPv4Endpoint& 
 	return true; // 소유권 인수
 }
 
-void FMjpegStreamServer::UpdateFrame(const TArray<uint8>& Jpeg)
+void FMjpegStreamServer::UpdateFrame(const TArray<uint8>& Jpeg, int64 FrameId)
 {
 	{
 		FScopeLock F(&FrameLock);
 		LatestFrame = Jpeg;
+		LatestFrameId = FrameId;
 		++FrameSeq;
 	}
 	if (NewFrameEvent)
 	{
 		NewFrameEvent->Trigger();
 	}
+}
+
+int64 FMjpegStreamServer::GetLatestFrameId() const
+{
+	FScopeLock F(&FrameLock);
+	return LatestFrameId;
 }
 
 int32 FMjpegStreamServer::GetClientCount() const
@@ -212,10 +219,12 @@ uint32 FMjpegStreamServer::Run()
 		// 2) 최신 프레임 + 시퀀스 스냅샷
 		TArray<uint8> Frame;
 		uint64 Seq = 0;
+		int64 FrameId = -1;
 		{
 			FScopeLock F(&FrameLock);
 			Frame = LatestFrame;
 			Seq = FrameSeq;
+			FrameId = LatestFrameId;
 		}
 
 		// 3) 이 시퀀스를 아직 못 받은 클라이언트에만 송신 (중복 재전송 없음 —
@@ -226,9 +235,11 @@ uint32 FMjpegStreamServer::Run()
 		//    접근/변경 순간만 잡으면 HasClients()/CloseAllClients() 와 안전하다.
 		if (Frame.Num() > 0)
 		{
-			const FString PartHdr = FString::Printf(
-				TEXT("--%s\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n"),
-				kBoundary, Frame.Num());
+			const FString PartHdr = FrameId >= 0
+				? FString::Printf(TEXT("--%s\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\nX-Frame-Id: %lld\r\n\r\n"),
+					kBoundary, Frame.Num(), FrameId)
+				: FString::Printf(TEXT("--%s\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n"),
+					kBoundary, Frame.Num());
 
 			int32 Count = 0;
 			{

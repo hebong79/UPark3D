@@ -171,6 +171,18 @@ namespace
 	TSharedPtr<FJsonValue> DoCapture(APTZCameraActor* Cam, int32 CamId, bool bPng, int32 Quality, const TSharedPtr<FJsonObject>& P, FRpcError& E)
 	{
 		if (!Cam->RenderTarget) { E.FailDomain(TEXT("렌더타깃 없음(InitRenderTarget 미호출)")); return nullptr; }
+		// 이 캡처는 지금 동기로 렌더한다 → 지금까지의 RPC 변경이 전부 들어간다. frameId = 지금 장면 순번(보드 #1101).
+		// afterFrame 은 그래서 기다릴 필요가 없다 — 단 아직 오지 않은 순번을 달라고 하면 거절한다(조용히 옛 그림을 주지 않게).
+		const int64 FrameId = Park3DRpc::SceneSeq();
+		if (RpcParam::Has(P, TEXT("afterFrame")))
+		{
+			const int64 After = static_cast<int64>(RpcParam::GetFloat(P, TEXT("afterFrame"), 0.0));
+			if (After > FrameId)
+			{
+				E.FailDomain(FString::Printf(TEXT("afterFrame=%lld 은 아직 없는 장면 순번입니다(현재 %lld)"), After, FrameId), ERpcErrorKind::BadParams);
+				return nullptr;
+			}
+		}
 		int32 W = 0, H = 0;
 		ResolveCaptureSize(P, Cam->RenderTarget, W, H);
 		const double T0 = FPlatformTime::Seconds();
@@ -203,6 +215,7 @@ namespace
 		O->SetStringField(TEXT("format"), bPng ? TEXT("png") : TEXT("jpg"));
 		O->SetNumberField(TEXT("camId"), CamId);
 		O->SetNumberField(TEXT("renderMs"), FMath::RoundToDouble(RenderMs * 10.0) / 10.0);
+		O->SetNumberField(TEXT("frameId"), static_cast<double>(FrameId));
 		return RpcDto::MakeObject(O);
 	}
 
@@ -473,11 +486,25 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 		int32 CamId = 0;
 		if (!RpcParam::RequireInt(P, TEXT("camId"), CamId, E)) return nullptr;
 		APTZCameraActor* Cam = GetCamById(Mgr, CamId, E); if (!Cam) return nullptr;
-		Cam->SetPanTilt(RpcParam::GetFloat(P, TEXT("pan"), 0.0), RpcParam::GetFloat(P, TEXT("tilt"), 0.0));
-		Cam->SetZoom(RpcParam::GetFloat(P, TEXT("zoom"), 1.0));
+		// 주지 않은 축은 현재 값을 유지한다 — 전에는 0/0/1 로 덮여 {camId, zoom} 만 보내면 pan·tilt 가 조용히 0 이 됐다(보드 #1099).
+		float CurPan = 0.f, CurTilt = 0.f;
+		Cam->GetPanTilt(CurPan, CurTilt);
+		const float CurZoom = Cam->GetZoom();
+		Cam->SetPanTilt(RpcParam::GetFloat(P, TEXT("pan"), CurPan), RpcParam::GetFloat(P, TEXT("tilt"), CurTilt));
+		Cam->SetZoom(RpcParam::GetFloat(P, TEXT("zoom"), CurZoom));
 		// 조작 중인 카메라는 스트림 슬롯을 우선 배정받는다(화면이 안 움직이면 제어가 불가능하다).
 		if (UCamStreamSubsystem* S = GetStreamSubsystem(GetWorldPtr())) { S->NotifyPtzCommand(CamId); }
-		return RpcDto::OkTrue();
+		float NewPan = 0.f, NewTilt = 0.f;
+		Cam->GetPanTilt(NewPan, NewTilt);
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetNumberField(TEXT("camId"), CamId);
+		O->SetNumberField(TEXT("pan"), NewPan);
+		O->SetNumberField(TEXT("tilt"), NewTilt);
+		O->SetNumberField(TEXT("zoom"), Cam->GetZoom());
+		O->SetNumberField(TEXT("changed"), (FMath::IsNearlyEqual(NewPan, CurPan, 1e-3f) && FMath::IsNearlyEqual(NewTilt, CurTilt, 1e-3f)
+			&& FMath::IsNearlyEqual(Cam->GetZoom(), CurZoom, 1e-3f)) ? 0 : 1);
+		return RpcDto::MakeObject(O);
 	});
 
 	// 주차면 한 칸을 겨냥하도록 pan/tilt/zoom 을 계산해 적용한다.
@@ -1014,6 +1041,7 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 		if (!SanitizePosFileName(RawName, Name, E)) return nullptr;
 
 		TSharedPtr<FJsonValue> Raw;
+		RpcParam::MarkRead(P, TEXT("content"));
 		if (P.IsValid()) { Raw = P->TryGetField(TEXT("content")); }
 		TSharedPtr<FJsonObject> Obj;
 		if (Raw.IsValid() && Raw->Type == EJson::String)
@@ -1056,7 +1084,8 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 
 		const FString Path = PosFilePath(Name);
 		const bool bExisted = IFileManager::Get().FileExists(*Path);
-		if (bExisted && !RpcParam::GetBool(P, TEXT("overwrite"), false))
+		const bool bOverwrite = RpcParam::GetBool(P, TEXT("overwrite"), false);   // 조건 밖에서 읽는다 — 새 파일일 때도 받은 키다(#1099 경고)
+		if (bExisted && !bOverwrite)
 		{
 			E.FailDomain(FString::Printf(TEXT("이미 있는 파일: %s — overwrite:true 로 덮어쓴다"), *FPaths::GetCleanFilename(Path)));
 			return nullptr;
@@ -1119,7 +1148,8 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 		const FString Path = PosFilePath(Name);
 		const FString Current = DefaultPosFileName().IsEmpty() ? FString() : PosFilePath(DefaultPosFileName());
 		const bool bExisted = IFileManager::Get().FileExists(*Path);
-		if (bExisted && !Path.Equals(Current, ESearchCase::IgnoreCase) && !RpcParam::GetBool(P, TEXT("overwrite"), false))
+		const bool bOverwrite = RpcParam::GetBool(P, TEXT("overwrite"), false);   // 조건 밖에서 읽는다 — 새 파일일 때도 받은 키다(#1099 경고)
+		if (bExisted && !Path.Equals(Current, ESearchCase::IgnoreCase) && !bOverwrite)
 		{
 			E.FailDomain(FString::Printf(TEXT("이미 있는 파일: %s — overwrite:true 로 덮어쓴다"), *FPaths::GetCleanFilename(Path)));
 			return nullptr;

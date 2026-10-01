@@ -102,6 +102,9 @@ struct FCamStreamMainReadback
 	/** row pitch 를 걷어낸 뒤의 조밀한 W*H 픽셀(BGRA = FColor 메모리 배치와 동일). */
 	TArray<FColor> Pixels;
 
+	/** CaptureScene 을 건 순간의 장면 순번(Park3DRpc::SceneSeq) — 공개할 때 X-Frame-Id 가 된다. 게임 스레드 전용. */
+	int64 SceneSeq = -1;
+
 	/** 렌더 스레드에서만 생성·사용·파괴한다(Lock 이 즉시 커맨드리스트를 만지기 때문). */
 	FRHIGPUTextureReadback* Readback = nullptr;
 
@@ -351,6 +354,12 @@ public:
 	bool GetMainStreamPort(int32& OutPort) const;
 
 	/**
+	 * 채널이 마지막으로 공개한 프레임의 장면 순번(보드 #1101). CamId 0 = 메인 뷰. 채널이 없으면 -1.
+	 * OutHasClients — 보는 사람이 없으면 그 채널은 그리지 않으므로 기다려도 새 프레임이 오지 않는다.
+	 */
+	int64 GetLatestFrameId(int32 CamId, bool& OutHasClients) const;
+
+	/**
 	 * 카메라 CamCount 대를 담도록 포트 대역 상한을 보장한다. 늘렸으면 true.
 	 * 대역이 모자라면 상한을 CamCount 에 맞춰 올리고, config 파일이 있으면 cam_port_max 도 기록한다.
 	 * 채널 개설 자체는 기존대로 Tick 의 SyncChannels 가 한다 — 이 함수는 상한만 올린다.
@@ -434,7 +443,7 @@ private:
 	 * 링의 "가장 오래된" 슬롯이 끝났으면 JPEG 으로 인코딩해 true. 한 틱에 최대 1장만 수거한다.
 	 * 아직이면 false(실패가 아니라 "이번 틱은 없음").
 	 */
-	bool TryTakeMainFrame(TArray<uint8>& OutJpeg);
+	bool TryTakeMainFrame(TArray<uint8>& OutJpeg, int64* OutFrameId = nullptr);
 
 	/** 진행 중인 리드백을 슬롯 전부 안전하게 버린다(채널 정지·해상도 변경·클라이언트 이탈). */
 	void ReleaseMainReadback();

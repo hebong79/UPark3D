@@ -55,18 +55,35 @@ public:
 	 * 단건 디스패치.
 	 * @return true=성공(OutResult 유효, null이면 호출부가 {}로 직렬화), false=실패(OutError 참조).
 	 * 미등록 method 는 -32601 MethodNotFound.
+	 * @param OutUnreadKeys 주면 params 최상위 키 중 핸들러가 한 번도 읽지 않은 키를 채운다(RpcParam::FReadTracker, 보드 #1099).
 	 */
 	bool Dispatch(const FString& Method, const TSharedPtr<FJsonObject>& Params,
-		TSharedPtr<FJsonValue>& OutResult, FRpcError& OutError);
+		TSharedPtr<FJsonValue>& OutResult, FRpcError& OutError, TArray<FString>* OutUnreadKeys = nullptr);
 
 	/** 등록된 method 이름 목록(정렬). system.catalog / /rpc/catalog 용. */
 	TArray<FString> GetMethods() const;
 
 	bool HasMethod(const FString& Method) const { return Handlers.Contains(Method); }
+
+	/**
+	 * 상태를 바꾸는 method 인가. 메타가 있으면 그 값, 없으면 이름의 동사로 판정한다(list·get*·catalog·…=조회).
+	 * 옛 기본값(비영속이면 무조건 mutating)은 car.list 같은 조회 19개를 mutating 으로 냈다(보드 #1098).
+	 */
+	bool IsMutating(const FString& Method) const;
+
+	/**
+	 * 변경 카운터(보드 #1100) — 성공한 mutating 호출마다 그 도메인과 total 이 오른다.
+	 * cars(car·random·plate·sim) · presets(preset·bay) · cameras(cam) · view(view·preview) · env(env·light·map),
+	 * scene.load·scenario.*·state.restore 는 cars/presets/cameras 를 함께 올린다. 값이 바뀌지 않은 호출도 올린다(보수적).
+	 */
+	TSharedPtr<FJsonObject> RevisionJson() const;
 	int32 NumMethods() const { return Handlers.Num(); }
 
 private:
 	TMap<FString, FRpcHandler> Handlers;
 	TSet<FString> PersistentMethods;
 	TMap<FString, FRpcMethodMeta> MethodMeta;
+	TMap<FString, int64> Revisions;
+
+	void BumpRevision(const FString& Method);
 };

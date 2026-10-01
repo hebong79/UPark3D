@@ -24,6 +24,8 @@
 #include "Modules/SceneRpcModule.h"
 #include "Modules/PlateRpcModule.h"
 #include "Modules/FileRpcModule.h"
+#include "Modules/OverlayRpcModule.h"
+#include "Modules/StateRpcModule.h"
 #include "MjpegStreamManager.h"
 #include "RpcServerSubsystem.generated.h"
 
@@ -72,6 +74,9 @@ private:
 	 */
 	TSharedPtr<FJsonObject> ProcessSingle(const TSharedPtr<FJsonObject>& RequestObj, const FString& Peer);
 
+	/** view.waitFrame 단건 — 응답을 미루고 틱마다 확인한다. after 가 없으면 false(일반 경로가 오류로 답한다). */
+	bool TryBeginWaitFrame(const TSharedPtr<FJsonObject>& Req, const FHttpResultCallback& OnComplete);
+
 	// ---- 인증 게이트 ----
 	/**
 	 * 인증을 판정하고, 실패면 401 응답까지 완결한다. 본문은 파싱하지 않는다(미인증 입력을 파서에 먹이지 않음).
@@ -118,6 +123,21 @@ private:
 	TUniquePtr<FSceneRpcModule> SceneModule;
 	TUniquePtr<FPlateRpcModule> PlateModule;
 	TUniquePtr<FFileRpcModule> FileModule;
+	TUniquePtr<FOverlayRpcModule> OverlayModule;   // car/preset.highlight · view.setLabels · preview.* (보드 #1102)
+	TUniquePtr<FStateRpcModule> StateModule;       // state.* · car.setAll/createMany/setVisible · preset.setAll (보드 #1100)
+
+	/** requestId 중복 제거(보드 #1100) — 같은 method+requestId 가 60초 안에 다시 오면 첫 응답을 그대로 돌려준다. */
+	struct FCachedRpcResponse
+	{
+		TSharedPtr<FJsonObject> Response;
+		double Time = 0.0;
+	};
+	TMap<FString, FCachedRpcResponse> RequestIdCache;
+
+	/** 지금 처리 중인 요청의 피어(system.batch 가 안쪽 호출 로그에 같은 피어를 찍게). 게임 스레드 전용. */
+	FString CurrentPeer;
+	/** system.batch 안인가(배치 중첩 금지). */
+	bool bInBatch = false;
 
 	TSharedPtr<IHttpRouter> Router;
 	TArray<FHttpRouteHandle> RouteHandles;

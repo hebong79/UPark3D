@@ -13,9 +13,43 @@
 #include "JsonObjectConverter.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonReader.h"
+#include "Policies/CondensedJsonPrintPolicy.h"
 
 namespace
 {
+	/** preset.setView / preset.getView 공용 — 지금 표시 설정. */
+	TSharedPtr<FJsonObject> PresetViewState(const AParkingPresetManager* Mgr)
+	{
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetBoolField(TEXT("useDecal"), Mgr->bUseDecalView);
+		O->SetBoolField(TEXT("show3D"), Mgr->bShow3DView);
+		O->SetNumberField(TEXT("lineThickness"), Mgr->LineThickness);
+		O->SetNumberField(TEXT("decalThickness"), Mgr->DecalLineThicknessCm);
+		O->SetBoolField(TEXT("showNumbers"), Mgr->bShowSlotNumbers);
+		O->SetNumberField(TEXT("numberSize"), Mgr->SlotNumberSizeCm);
+		O->SetNumberField(TEXT("numberZ"), Mgr->SlotNumberZ);
+		O->SetBoolField(TEXT("global"), true);
+		return O;
+	}
+
+	/** 프리셋의 비교용 서명 — DTO 를 한 줄로. 변경 메서드가 실제로 바뀌었는지(changed)를 일반적으로 판정한다(보드 #1099). */
+	FString PresetSignature(const FParkingPreset& Pr)
+	{
+		FString Out;
+		TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> W = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Out);
+		FJsonSerializer::Serialize(RpcDto::PresetToDto(Pr).ToSharedRef(), W);
+		return Out;
+	}
+
+	/** 변경 후 프리셋 DTO + changed(0|1). 값이 그대로면 changed:0 — "회전했다" 가 거짓이 되지 않게. */
+	TSharedPtr<FJsonValue> PresetAfterValue(const FParkingPreset& Pr, const FString& BeforeSig)
+	{
+		TSharedPtr<FJsonObject> O = RpcDto::PresetToDto(Pr);
+		O->SetNumberField(TEXT("changed"), PresetSignature(Pr) != BeforeSig ? 1 : 0);
+		return MakeShared<FJsonValueObject>(O);
+	}
+
 	FString ResolvePresetPath(const TSharedPtr<FJsonObject>& P)
 	{
 		FString FullPath = RpcParam::GetString(P, TEXT("fullPath"));
@@ -90,6 +124,7 @@ namespace
 	bool PresetsFromContent(const TSharedPtr<FJsonObject>& P, TArray<FParkingPreset>& Out, FRpcError& OutError)
 	{
 		TSharedPtr<FJsonObject> Doc;
+		RpcParam::MarkRead(P, TEXT("content"));
 		const TSharedPtr<FJsonValue> Raw = (P.IsValid() && P->Values.Contains(TEXT("content"))) ? P->Values[TEXT("content")] : nullptr;
 		if (Raw.IsValid() && Raw->Type == EJson::String)
 		{
@@ -204,18 +239,17 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 		if (RpcParam::Has(P, TEXT("numberSize")))     { Mgr->SlotNumberSizeCm = RpcParam::GetFloat(P, TEXT("numberSize"), Mgr->SlotNumberSizeCm); }
 		if (RpcParam::Has(P, TEXT("numberZ")))        { Mgr->SlotNumberZ = RpcParam::GetFloat(P, TEXT("numberZ"), Mgr->SlotNumberZ); }
 		Mgr->RefreshView();
-
-		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
-		O->SetBoolField(TEXT("ok"), true);
-		O->SetBoolField(TEXT("useDecal"), Mgr->bUseDecalView);
-		O->SetBoolField(TEXT("show3D"), Mgr->bShow3DView);
-		O->SetNumberField(TEXT("lineThickness"), Mgr->LineThickness);
-		O->SetNumberField(TEXT("decalThickness"), Mgr->DecalLineThicknessCm);
-		O->SetBoolField(TEXT("showNumbers"), Mgr->bShowSlotNumbers);
-		O->SetNumberField(TEXT("numberSize"), Mgr->SlotNumberSizeCm);
-		O->SetNumberField(TEXT("numberZ"), Mgr->SlotNumberZ);
-		return RpcDto::MakeObject(O);
+		return RpcDto::MakeObject(PresetViewState(Mgr));
 	});
+
+	// preset.getView — setView 의 짝(보드 #1101 ⑤: 모든 표시 set 에 get). 표시 설정은 월드에 한 벌이라 모든 시청자에게 같다.
+	Dispatcher.Register(TEXT("preset.getView"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		AParkingPresetManager* Mgr = GetPresetManager(E); if (!Mgr) return nullptr;
+		return RpcDto::MakeObject(PresetViewState(Mgr));
+	});
+	Dispatcher.SetMethodMeta(TEXT("preset.getView"), { false, false, TEXT(""),
+		TEXT("{useDecal, show3D, lineThickness, decalThickness, showNumbers, numberSize, numberZ, selectedIdx, global:true}") });
 
 	/**
 	 * 바닥에 붙는 주차면 번호 목록. 표시가 꺼져 있어도 계산해서 돌려준다(번호 체계는 표시와 무관하다).
@@ -330,7 +364,8 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 		if (!PresetsFromContent(P, Loaded, E)) return nullptr;
 
 		const bool bExisted = IFileManager::Get().FileExists(*Path);
-		if (bExisted && !RpcParam::GetBool(P, TEXT("overwrite"), false))
+		const bool bOverwrite = RpcParam::GetBool(P, TEXT("overwrite"), false);   // 조건 밖에서 읽는다 — 새 파일일 때도 받은 키다(#1099 경고)
+		if (bExisted && !bOverwrite)
 		{
 			E.FailDomain(FString::Printf(TEXT("이미 있는 파일: %s — overwrite:true 로 덮어쓴다"), *FPaths::GetCleanFilename(Path)));
 			return nullptr;
@@ -399,9 +434,10 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 		if (!RpcParam::RequireInt(P, TEXT("idx"), Idx, E)) return nullptr;
 		FParkingPreset* Pr = Mgr->FindPresetByIdx(Idx);
 		if (!Pr) { E.FailDomain(FString::Printf(TEXT("프리셋 없음: idx=%d"), Idx)); return nullptr; }
+		const FString Before = PresetSignature(*Pr);
 		ApplyOptionalFields(P, *Pr);
 		Mgr->RefreshView();
-		return RpcDto::PresetToDtoValue(*Pr);
+		return PresetAfterValue(*Pr, Before);
 	});
 
 	Dispatcher.Register(TEXT("preset.delete"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
@@ -409,19 +445,27 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 		AParkingPresetManager* Mgr = GetPresetManager(E); if (!Mgr) return nullptr;
 		int32 Idx = 0;
 		if (!RpcParam::RequireInt(P, TEXT("idx"), Idx, E)) return nullptr;
-		Mgr->RemovePresetByIdx(Idx); // 없어도 예외 없음(Unity 동일)
+		const bool bExisted = Mgr->RemovePresetByIdx(Idx); // 없어도 예외 없음(Unity 동일) — 대신 existed/changed 로 알린다
 		Mgr->RefreshView();
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetBoolField(TEXT("ok"), true);
 		O->SetNumberField(TEXT("idx"), Idx);
+		O->SetBoolField(TEXT("existed"), bExisted);
+		O->SetNumberField(TEXT("changed"), bExisted ? 1 : 0);
+		O->SetNumberField(TEXT("remaining"), Mgr->StoredPresets.Num());
 		return RpcDto::MakeObject(O);
 	});
 
 	Dispatcher.Register(TEXT("preset.clear"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		AParkingPresetManager* Mgr = GetPresetManager(E); if (!Mgr) return nullptr;
+		const int32 Cleared = Mgr->StoredPresets.Num();
 		Mgr->ClearPresets();
-		return RpcDto::OkTrue();
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetNumberField(TEXT("cleared"), Cleared);
+		O->SetNumberField(TEXT("changed"), Cleared);
+		return RpcDto::MakeObject(O);
 	});
 
 	// ---- 이동/회전/크기 ----
@@ -432,6 +476,7 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 		if (!RpcParam::RequireInt(P, TEXT("idx"), Idx, E)) return nullptr;
 		FParkingPreset* Pr = Mgr->FindPresetByIdx(Idx);
 		if (!Pr) { E.FailDomain(FString::Printf(TEXT("프리셋 없음: idx=%d"), Idx)); return nullptr; }
+		const FVector Before = Pr->Offset;
 
 		if (RpcParam::Has(P, TEXT("to")))
 		{
@@ -450,6 +495,7 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetNumberField(TEXT("x"), Pr->Offset.X);
 		O->SetNumberField(TEXT("y"), Pr->Offset.Y);
 		O->SetNumberField(TEXT("z"), Pr->Offset.Z);
+		O->SetNumberField(TEXT("changed"), Pr->Offset.Equals(Before, 1e-6) ? 0 : 1);
 		return RpcDto::MakeObject(O);
 	});
 
@@ -460,32 +506,45 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 		if (!RpcParam::RequireInt(P, TEXT("idx"), Idx, E)) return nullptr;
 		FParkingPreset* Pr = Mgr->FindPresetByIdx(Idx);
 		if (!Pr) { E.FailDomain(FString::Printf(TEXT("프리셋 없음: idx=%d"), Idx)); return nullptr; }
+		const FString Before = PresetSignature(*Pr);
 		Pr->FaceRotate += static_cast<float>(RpcParam::GetFloat(P, TEXT("deltaFaceRot"), 0.0));
 		Pr->GroupFaceRotate += static_cast<float>(RpcParam::GetFloat(P, TEXT("deltaGroupRot"), 0.0));
 		// 바닥 번호 글자만 돌린다(면 기하 불변) — faceRot/groupRot 은 글자 방향을 바꾸지 못한다(보드 #1086).
 		Pr->NumberRotate = NormalizeNumberRot(Pr->NumberRotate + RpcParam::GetFloat(P, TEXT("deltaNumberRot"), 0.0));
 		Mgr->RefreshView();
-		return RpcDto::PresetToDtoValue(*Pr);
+		return PresetAfterValue(*Pr, Before);
 	});
 
 	Dispatcher.Register(TEXT("preset.groupMove"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		AParkingPresetManager* Mgr = GetPresetManager(E); if (!Mgr) return nullptr;
 		const TArray<TSharedPtr<FJsonValue>>* Idxs = nullptr;
+		RpcParam::MarkRead(P, TEXT("idxs"));
 		if (!P.IsValid() || !P->TryGetArrayField(TEXT("idxs"), Idxs)) { E.FailDomain(TEXT("idxs 필수")); return nullptr; }
 		const FVector D = RpcParam::GetVec3(P, TEXT("delta"));
-		int32 Moved = 0;
+		int32 Moved = 0, Changed = 0;
+		TArray<TSharedPtr<FJsonValue>> After, NotFound;
 		for (const TSharedPtr<FJsonValue>& V : *Idxs)
 		{
 			if (FParkingPreset* Pr = Mgr->FindPresetByIdx(static_cast<int32>(V->AsNumber())))
 			{
+				const FVector Before = Pr->Offset;
 				Pr->Offset.X += D.X; Pr->Offset.Y += D.Y; Pr->Offset.Z += D.Z; ++Moved;
+				if (!Pr->Offset.Equals(Before, 1e-6)) { ++Changed; }
+				After.Add(RpcDto::PresetToDtoValue(*Pr));
+			}
+			else
+			{
+				NotFound.Add(MakeShared<FJsonValueNumber>(V->AsNumber()));
 			}
 		}
 		Mgr->RefreshView();
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetBoolField(TEXT("ok"), true);
-		O->SetNumberField(TEXT("moved"), Moved);
+		O->SetNumberField(TEXT("moved"), Moved);   // 찾은 프리셋 수(옛 키). 실제로 바뀐 수는 changed
+		O->SetNumberField(TEXT("changed"), Changed);
+		O->SetArrayField(TEXT("presets"), After);
+		O->SetArrayField(TEXT("notFound"), NotFound);
 		return RpcDto::MakeObject(O);
 	});
 
@@ -493,21 +552,33 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 	{
 		AParkingPresetManager* Mgr = GetPresetManager(E); if (!Mgr) return nullptr;
 		const TArray<TSharedPtr<FJsonValue>>* Idxs = nullptr;
+		RpcParam::MarkRead(P, TEXT("idxs"));
 		if (!P.IsValid() || !P->TryGetArrayField(TEXT("idxs"), Idxs)) { E.FailDomain(TEXT("idxs 필수")); return nullptr; }
 		const float DFace = static_cast<float>(RpcParam::GetFloat(P, TEXT("deltaFaceRot"), 0.0));
 		const float DGroup = static_cast<float>(RpcParam::GetFloat(P, TEXT("deltaGroupRot"), 0.0));
-		int32 Rotated = 0;
+		int32 Rotated = 0, Changed = 0;
+		TArray<TSharedPtr<FJsonValue>> After, NotFound;
 		for (const TSharedPtr<FJsonValue>& V : *Idxs)
 		{
 			if (FParkingPreset* Pr = Mgr->FindPresetByIdx(static_cast<int32>(V->AsNumber())))
 			{
+				const FString Before = PresetSignature(*Pr);
 				Pr->FaceRotate += DFace; Pr->GroupFaceRotate += DGroup; ++Rotated;
+				if (PresetSignature(*Pr) != Before) { ++Changed; }
+				After.Add(RpcDto::PresetToDtoValue(*Pr));
+			}
+			else
+			{
+				NotFound.Add(MakeShared<FJsonValueNumber>(V->AsNumber()));
 			}
 		}
 		Mgr->RefreshView();
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetBoolField(TEXT("ok"), true);
-		O->SetNumberField(TEXT("rotated"), Rotated);
+		O->SetNumberField(TEXT("rotated"), Rotated);   // 찾은 프리셋 수(옛 키). 실제로 돈 수는 changed
+		O->SetNumberField(TEXT("changed"), Changed);
+		O->SetArrayField(TEXT("presets"), After);
+		O->SetArrayField(TEXT("notFound"), NotFound);
 		return RpcDto::MakeObject(O);
 	});
 
@@ -518,11 +589,12 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 		if (!RpcParam::RequireInt(P, TEXT("idx"), Idx, E)) return nullptr;
 		FParkingPreset* Pr = Mgr->FindPresetByIdx(Idx);
 		if (!Pr) { E.FailDomain(FString::Printf(TEXT("프리셋 없음: idx=%d"), Idx)); return nullptr; }
+		const FString Before = PresetSignature(*Pr);
 		if (RpcParam::Has(P, TEXT("xSize")))        Pr->BoxSizeX = RpcParam::GetFloat(P, TEXT("xSize"), Pr->BoxSizeX);
 		if (RpcParam::Has(P, TEXT("zSize")))        Pr->BoxSizeZ = RpcParam::GetFloat(P, TEXT("zSize"), Pr->BoxSizeZ);
 		if (RpcParam::Has(P, TEXT("useBaseWidth"))) Pr->bIsBaseWidth = RpcParam::GetBool(P, TEXT("useBaseWidth"), Pr->bIsBaseWidth);
 		Mgr->RefreshView();
-		return RpcDto::PresetToDtoValue(*Pr);
+		return PresetAfterValue(*Pr, Before);
 	});
 
 	Dispatcher.Register(TEXT("preset.setDirType"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
@@ -533,9 +605,10 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 		if (!RpcParam::RequireInt(P, TEXT("dirType"), DirType, E)) return nullptr;
 		FParkingPreset* Pr = Mgr->FindPresetByIdx(Idx);
 		if (!Pr) { E.FailDomain(FString::Printf(TEXT("프리셋 없음: idx=%d"), Idx)); return nullptr; }
+		const FString Before = PresetSignature(*Pr);
 		Pr->DirType = static_cast<EFaceDirType>(FMath::Clamp(DirType, 0, 1));
 		Mgr->RefreshView();
-		return RpcDto::PresetToDtoValue(*Pr);
+		return PresetAfterValue(*Pr, Before);
 	});
 
 	// ---- 선택/표시/재빌드 ----
@@ -543,6 +616,7 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 	{
 		AParkingPresetManager* Mgr = GetPresetManager(E); if (!Mgr) return nullptr;
 		const TArray<TSharedPtr<FJsonValue>>* Idxs = nullptr;
+		RpcParam::MarkRead(P, TEXT("idxs"));
 		if (P.IsValid() && P->TryGetArrayField(TEXT("idxs"), Idxs))
 		{
 			// 다중: 렌더러는 단일 강조만 지원 → primary(또는 첫 항목)만 선택.

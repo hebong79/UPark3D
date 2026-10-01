@@ -4,6 +4,7 @@
 #include "RpcDispatcher.h"
 #include "Park3DRpcTypes.h"
 #include "RpcAuth.h"
+#include "RpcParamUtil.h"
 #include "Modules/CarRpcModule.h"
 #include "Modules/RandomRpcModule.h"
 #include "../CarPlacementManager.h"
@@ -15,6 +16,7 @@
 #include "EngineUtils.h"          // system.stats 의 액터 세기(TActorIterator — 매니저를 스폰하지 않는다).
 #include "Kismet/GameplayStatics.h"
 #include "Misc/App.h"
+#include "Containers/Ticker.h"   // view.waitFrame 미룬 응답
 
 #include "HttpServerModule.h"
 #include "IHttpRouter.h"
@@ -104,12 +106,18 @@ namespace
 		return O;
 	}
 
-	TSharedPtr<FJsonObject> MakeErrorResponse(const TSharedPtr<FJsonValue>& Id, int32 Code, const FString& Message)
+	TSharedPtr<FJsonObject> MakeErrorResponse(const TSharedPtr<FJsonValue>& Id, int32 Code, const FString& Message,
+		ERpcErrorKind Kind = ERpcErrorKind::None)
 	{
 		TSharedPtr<FJsonObject> Err = MakeShared<FJsonObject>();
 		Err->SetNumberField(TEXT("code"), Code);
 		Err->SetStringField(TEXT("message"), Message);
-		Err->SetField(TEXT("data"), MakeShared<FJsonValueNull>());
+		// data.kind — 안정 분류(보드 #1099). 클라이언트는 message 문구 대신 이것으로 갈린다.
+		FRpcError Probe;
+		Probe.Fail(Code, Message, Kind);
+		TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+		Data->SetStringField(TEXT("kind"), Park3DRpc::ErrorKindName(Park3DRpc::ClassifyErrorKind(Probe)));
+		Err->SetObjectField(TEXT("data"), Data);
 
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetStringField(TEXT("jsonrpc"), TEXT("2.0"));
@@ -140,6 +148,30 @@ namespace
 		CompleteJsonWithCode(OnComplete, Body, EHttpServerResponseCodes::Ok);
 	}
 
+	/** view.waitFrame 판정 — 채널이 공개한 마지막 프레임의 장면 순번이 After 이상인가. */
+	TSharedPtr<FJsonObject> WaitFrameState(UWorld* World, int32 CamId, int64 After, bool& bOutDone)
+	{
+		bool bHasClients = false;
+		int64 Latest = -1;
+		const UCamStreamSubsystem* Stream = World ? World->GetSubsystem<UCamStreamSubsystem>() : nullptr;
+		if (Stream) { Latest = Stream->GetLatestFrameId(CamId, bHasClients); }
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetNumberField(TEXT("camId"), CamId);
+		O->SetNumberField(TEXT("after"), static_cast<double>(After));
+		O->SetNumberField(TEXT("frameId"), static_cast<double>(Latest));
+		O->SetNumberField(TEXT("sceneFrameId"), static_cast<double>(Park3DRpc::SceneSeq()));
+		O->SetBoolField(TEXT("streaming"), bHasClients);
+		const bool bReached = Latest >= After;
+		O->SetBoolField(TEXT("reached"), bReached);
+		// 보는 사람이 없는 채널은 그리지 않는다 → 기다려도 오지 않는다. cam.captureJPG 는 늘 그 자리에서 새로 그린다.
+		bOutDone = bReached || !bHasClients || !Stream;
+		if (!bReached && !bHasClients)
+		{
+			O->SetStringField(TEXT("reason"), Stream ? TEXT("noClients") : TEXT("noStream"));
+		}
+		return O;
+	}
+
 	/**
 	 * 언리얼 원래 계약(120 + cam.setSlotNumber·cam.slotNumbers·preset.numbers) 밖에서 OmiPark3D 가 먼저 만들고
 	 * 2026-09-21 에 이쪽으로 이식한 method 이름(53개) + plate.setDefault/getDefault(#919, 2026-09-22 양쪽 동시 신설)
@@ -164,6 +196,12 @@ namespace
 			TEXT("preset.importFile"),
 			TEXT("scene.list"), TEXT("scene.load"),
 			TEXT("system.describe"), TEXT("system.stats"),
+			// 2026-10-01 SettingManager AI 채팅 요청(보드 #1102) — 언리얼 쪽 신설.
+			TEXT("car.highlight"), TEXT("preset.highlight"), TEXT("view.setLabels"), TEXT("view.getLabels"), TEXT("view.topDown"),
+			TEXT("preview.show"), TEXT("preview.clear"), TEXT("preview.list"),
+			// 보드 #1100 — 일괄·되돌리기.
+			TEXT("system.batch"), TEXT("state.snapshot"), TEXT("state.restore"), TEXT("state.drop"), TEXT("state.list"),
+			TEXT("car.setAll"), TEXT("car.createMany"), TEXT("car.setVisible"), TEXT("preset.setAll"),
 		};
 		TArray<FString> Out;
 		for (const TCHAR* N : Names) { Out.Add(N); }
@@ -271,6 +309,8 @@ void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	SceneModule = MakeUnique<FSceneRpcModule>(WorldGetter);
 	PlateModule = MakeUnique<FPlateRpcModule>(WorldGetter);
 	FileModule = MakeUnique<FFileRpcModule>(WorldGetter);
+	OverlayModule = MakeUnique<FOverlayRpcModule>(WorldGetter);
+	StateModule = MakeUnique<FStateRpcModule>(WorldGetter);
 
 	// 차량 카탈로그 주입. DT_CarCatalog 가 없으면 CatalogFromTable 이 car_catalog.json 으로 폴백하므로
 	// 로드 실패(nullptr)를 그대로 넘긴다.
@@ -284,6 +324,7 @@ void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		SimModule->SetCatalog(Catalog);      // sim.start 의 prefabName → prefabId 해석에 필요하다.
 		PlateModule->SetCatalog(Catalog);    // plate.* 의 차종별 번호판 자리 해석용(안 써도 무해).
 		BayModule->SetCatalog(Catalog);      // bay.* 의 차량 배치 보조용(안 써도 무해).
+		StateModule->SetCatalog(Catalog);    // state.restore · car.setAll 의 차량 재생성에 필요하다.
 	}
 	else
 	{
@@ -306,6 +347,8 @@ void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	SceneModule->Register(*Dispatcher);      // 비영속(scene.*) — OmiPark3D 이식
 	PlateModule->Register(*Dispatcher);      // 비영속(plate.*) — OmiPark3D 이식
 	FileModule->Register(*Dispatcher);       // 비영속(file.*) — OmiPark3D 이식, Save/3D 폴더 읽기
+	OverlayModule->Register(*Dispatcher);    // 비영속(car/preset.highlight · view.setLabels · preview.*) — 보드 #1102
+	StateModule->Register(*Dispatcher);      // 비영속(state.* · car.setAll/createMany/setVisible · preset.setAll) — 보드 #1100
 
 	StartServer();
 }
@@ -329,6 +372,8 @@ void URpcServerSubsystem::Deinitialize()
 	SceneModule.Reset();
 	PlateModule.Reset();
 	FileModule.Reset();
+	OverlayModule.Reset();
+	StateModule.Reset();
 	Dispatcher = nullptr;
 	Super::Deinitialize();
 }
@@ -338,6 +383,7 @@ void URpcServerSubsystem::RegisterSystemMethods()
 	// system.ping — params 에코(null이면 {}).
 	Dispatcher->RegisterPersistent(TEXT("system.ping"), [](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
+		if (P.IsValid()) { for (const auto& KV : P->Values) { RpcParam::MarkRead(P, FString(KV.Key)); } }   // 에코는 모든 키를 쓴다
 		return MakeShared<FJsonValueObject>(P.IsValid() ? P : MakeShared<FJsonObject>());
 	});
 
@@ -427,6 +473,7 @@ void URpcServerSubsystem::RegisterSystemMethods()
 		O->SetNumberField(TEXT("frameMs"), DeltaSec * 1000.0);
 		O->SetNumberField(TEXT("uptimeSec"), FPlatformTime::Seconds() - GStartTime);
 		O->SetNumberField(TEXT("methods"), D ? D->NumMethods() : 0);
+		if (D) { O->SetObjectField(TEXT("revision"), D->RevisionJson()); }   // 보드 #1100 — 누가 그 사이에 바꿨는지
 
 		// stream — 파이썬 build_status_json 의 main/basePort/maxCameras 만(채널별 상세는 스트림 서브시스템이 내지 않는다).
 		TSharedPtr<FJsonObject> Stream = MakeShared<FJsonObject>();
@@ -446,7 +493,86 @@ void URpcServerSubsystem::RegisterSystemMethods()
 	Dispatcher->SetMethodMeta(TEXT("system.health"),   { false, false, TEXT(""), TEXT("{ok, port, ports{rpc,mainView,camMin,camMax}}") });
 	Dispatcher->SetMethodMeta(TEXT("system.catalog"),  { false, false, TEXT(""), TEXT("{methods:[name…]}") });
 	Dispatcher->SetMethodMeta(TEXT("system.describe"), { false, false, TEXT(""), TEXT("카탈로그 메타(mutating/destructive/params/doc/unreal) + extensions[] — MCP 도구용 가산 확장") });
-	Dispatcher->SetMethodMeta(TEXT("system.stats"),    { false, false, TEXT(""), TEXT("월드·프레임·스트림 요약 {carCount, visibleCarCount, presetCount, cameraCount, backend, level, fps, stepMs, frameMs, uptimeSec, methods, stream}") });
+	Dispatcher->SetMethodMeta(TEXT("system.stats"),    { false, false, TEXT(""), TEXT("월드·프레임·스트림 요약 {carCount, visibleCarCount, presetCount, cameraCount, backend, level, fps, stepMs, frameMs, uptimeSec, methods, revision{cars,presets,cameras,view,env,total}, stream}") });
+
+	// view.waitFrame — 일반 경로(배치 안 등)는 기다리지 않고 지금 상태만 답한다. 단건 요청은 HandleRpc 가 미뤄 답한다.
+	Dispatcher->RegisterPersistent(TEXT("view.waitFrame"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		double After = 0.0;
+		if (!RpcParam::RequireFloat(P, TEXT("after"), After, E)) return nullptr;
+		RpcParam::GetFloat(P, TEXT("timeoutMs"), 0.0);   // 단건 경로에서만 쓰인다(여기서는 읽은 것으로 친다)
+		bool bDone = false;
+		TSharedPtr<FJsonObject> O = WaitFrameState(GetWorld(), RpcParam::GetInt(P, TEXT("camId"), 0), static_cast<int64>(After), bDone);
+		O->SetBoolField(TEXT("timedOut"), false);
+		O->SetNumberField(TEXT("waitedMs"), 0);
+		return MakeShared<FJsonValueObject>(O);
+	});
+	Dispatcher->SetMethodMeta(TEXT("view.waitFrame"), { false, false, TEXT("{after:frameId, camId?:0(메인 뷰)|n, timeoutMs?=3000(최대 30000)}"),
+		TEXT("그 채널 MJPEG 가 frameId ≥ after 인 프레임을 내보낼 때까지 응답을 미룬다(단건 요청만 — system.batch 안에서는 즉시 답). {reached, frameId, sceneFrameId, streaming, timedOut, waitedMs, reason?}. 보는 사람이 없는 채널은 그리지 않으므로 즉시 reason=noClients — 그때는 cam.captureJPG(항상 새로 그림)를 쓴다") });
+
+	// system.batch {calls:[{method, params?}], atomic?:false} — 한 HTTP 요청·한 게임 스레드 콜백 안에서 차례로 돈다
+	// (= 중간 상태가 스트림 프레임에 그려지지 않는다). atomic=true 면 시작 전에 state 스냅샷(all)을 떠 두고 하나라도 실패하면
+	// 되돌린다. 응답 {ok, results:[JSON-RPC 응답 객체…], failedAt?, rolledBack?, revision}.
+	Dispatcher->RegisterPersistent(TEXT("system.batch"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		if (bInBatch) { E.FailDomain(TEXT("system.batch 안에서 system.batch 를 부를 수 없습니다"), ERpcErrorKind::BadParams); return nullptr; }
+		const TArray<TSharedPtr<FJsonValue>>* Calls = nullptr;
+		RpcParam::MarkRead(P, TEXT("calls"));
+		if (!P.IsValid() || !P->TryGetArrayField(TEXT("calls"), Calls))
+		{
+			E.FailDomain(TEXT("필수 파라미터 누락: calls ([{method, params?}])"), ERpcErrorKind::BadParams);
+			return nullptr;
+		}
+		const bool bAtomic = RpcParam::GetBool(P, TEXT("atomic"), false);
+		FString Token;
+		if (bAtomic)
+		{
+			if (!StateModule) { E.FailDomain(TEXT("state 모듈 없음"), ERpcErrorKind::Internal); return nullptr; }
+			Token = StateModule->TakeSnapshot(FStateRpcModule::ScopeAll, E);
+			if (Token.IsEmpty()) return nullptr;
+		}
+		TGuardValue<bool> Guard(bInBatch, true);
+		const FString Peer = CurrentPeer;
+		TArray<TSharedPtr<FJsonValue>> Results;
+		int32 FailedAt = -1;
+		for (int32 i = 0; i < Calls->Num(); ++i)
+		{
+			const TSharedPtr<FJsonObject>* CallObj = nullptr;
+			TSharedPtr<FJsonObject> Req = MakeShared<FJsonObject>();
+			if ((*Calls)[i]->TryGetObject(CallObj) && CallObj)
+			{
+				Req->Values = (*CallObj)->Values;
+			}
+			Req->SetNumberField(TEXT("id"), i);
+			TSharedPtr<FJsonObject> Resp = ProcessSingle(Req, Peer);
+			Results.Add(MakeShared<FJsonValueObject>(Resp));
+			if (Resp->HasField(TEXT("error")))
+			{
+				FailedAt = i;
+				if (bAtomic) break;
+			}
+		}
+		bool bRolledBack = false;
+		if (bAtomic)
+		{
+			if (FailedAt >= 0)
+			{
+				TSharedPtr<FJsonObject> Summary;
+				FRpcError Er;
+				bRolledBack = StateModule->RestoreSnapshot(Token, Summary, Er);
+			}
+			StateModule->DropSnapshot(Token);
+		}
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), FailedAt < 0);
+		O->SetArrayField(TEXT("results"), Results);
+		if (FailedAt >= 0) { O->SetNumberField(TEXT("failedAt"), FailedAt); }
+		O->SetBoolField(TEXT("rolledBack"), bRolledBack);
+		if (Dispatcher) { O->SetObjectField(TEXT("revision"), Dispatcher->RevisionJson()); }
+		return MakeShared<FJsonValueObject>(O);
+	});
+	Dispatcher->SetMethodMeta(TEXT("system.batch"), { true, false, TEXT("{calls:[{method, params?}], atomic?:bool=false}"),
+		TEXT("여러 호출을 한 프레임에. atomic=true 면 실패 시 state 스냅샷으로 되돌린다(cars·presets·cameras·view — env/light 는 되돌리지 않는다). {ok, results[], failedAt?, rolledBack, revision}. 중첩 불가") });
 }
 
 void URpcServerSubsystem::EnsureListenerBindOverride()
@@ -699,9 +825,38 @@ TSharedPtr<FJsonObject> URpcServerSubsystem::ProcessSingle(const TSharedPtr<FJso
 		return MakeErrorResponse(Id, Park3DRpc::Domain, TEXT("디스패처 없음"));
 	}
 
+	// requestId — 시간 초과 뒤 재시도가 차를 두 번 만들지 않게(보드 #1100). 성공 응답만 60초 기억한다.
+	FString RequestKey;
+	const bool bMutating = Dispatcher->IsMutating(Method);
+	if (bMutating && Params.IsValid() && Params->HasField(TEXT("requestId")))
+	{
+		const TSharedPtr<FJsonValue> Rid = Params->TryGetField(TEXT("requestId"));
+		FString RidStr;
+		if (Rid.IsValid() && Rid->Type == EJson::Number) { RidStr = FString::Printf(TEXT("%.0f"), Rid->AsNumber()); }
+		else if (Rid.IsValid()) { Rid->TryGetString(RidStr); }
+		if (!RidStr.IsEmpty())
+		{
+			RequestKey = Method + TEXT("#") + RidStr;
+			const double Now = FPlatformTime::Seconds();
+			for (auto It = RequestIdCache.CreateIterator(); It; ++It) { if (Now - It.Value().Time > 60.0) It.RemoveCurrent(); }
+			if (const FCachedRpcResponse* Hit = RequestIdCache.Find(RequestKey))
+			{
+				TSharedPtr<FJsonObject> Dup = MakeShared<FJsonObject>();
+				Dup->Values = Hit->Response->Values;
+				Dup->SetField(TEXT("id"), Id);
+				Dup->SetBoolField(TEXT("duplicate"), true);
+				UE_LOG(LogTemp, Log, TEXT("[RPC] %s %s requestId=%s 중복 — 첫 응답을 돌려준다(실행 안 함)"), *Peer, *Method, *RidStr);
+				return Dup;
+			}
+		}
+	}
+
 	TSharedPtr<FJsonValue> Result;
 	FRpcError Err;
-	const bool bOk = Dispatcher->Dispatch(Method, Params, Result, Err);
+	TArray<FString> Unread;
+	CurrentPeer = Peer;
+	const bool bOk = Dispatcher->Dispatch(Method, Params, Result, Err, &Unread);
+	Unread.Remove(TEXT("requestId"));   // 디스패처 층에서 쓰는 키(핸들러는 안 읽는다)
 
 	// 호출 한 줄 로그(누가·무엇을·어떤 인자로). 상태를 바꾸는 호출이 화면에만 흔적을 남기면 나중에 원인을 못 찾는다.
 	if (ShouldLogRpcCall(Method))
@@ -718,9 +873,39 @@ TSharedPtr<FJsonObject> URpcServerSubsystem::ProcessSingle(const TSharedPtr<FJso
 
 	if (bOk)
 	{
-		return MakeResultResponse(Id, Result);
+		TSharedPtr<FJsonObject> Resp = MakeResultResponse(Id, Result);
+		// 바꾸는 호출은 변경 카운터를 같이 낸다(result 가 배열일 때도 있어 result 옆에, 보드 #1100).
+		if (bMutating)
+		{
+			Resp->SetObjectField(TEXT("revision"), Dispatcher->RevisionJson());
+			// frameId = 이 변경까지 들어간 장면 순번 — 캡처/스트림 프레임의 frameId 가 이 값 이상이면 변경이 보인다(보드 #1101).
+			Resp->SetNumberField(TEXT("frameId"), static_cast<double>(Park3DRpc::SceneSeq()));
+		}
+		// 모르는/무시된 키를 조용히 삼키지 않는다(보드 #1099 1단계 — 경고). result 가 배열일 때도 있어 result 옆에 둔다.
+		// 실패 응답에는 붙이지 않는다: 필수 키 누락으로 일찍 끝나면 뒤에서 읽혔을 정상 키까지 '안 읽음' 이 된다.
+		if (Unread.Num() > 0)
+		{
+			TArray<TSharedPtr<FJsonValue>> Warnings;
+			for (const FString& K : Unread)
+			{
+				TSharedPtr<FJsonObject> W = MakeShared<FJsonObject>();
+				W->SetStringField(TEXT("kind"), TEXT("unknownParam"));
+				W->SetStringField(TEXT("key"), K);
+				Warnings.Add(MakeShared<FJsonValueObject>(W));
+			}
+			Resp->SetArrayField(TEXT("warnings"), Warnings);
+			if (ShouldLogRpcCall(Method))
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[RPC] %s 이 읽지 않은 params 키: %s"), *Method, *FString::Join(Unread, TEXT(", ")));
+			}
+		}
+		if (!RequestKey.IsEmpty())
+		{
+			RequestIdCache.Add(RequestKey, { Resp, FPlatformTime::Seconds() });
+		}
+		return Resp;
 	}
-	return MakeErrorResponse(Id, Err.Code, Err.Message);
+	return MakeErrorResponse(Id, Err.Code, Err.Message, Err.Kind);
 }
 
 bool URpcServerSubsystem::HandleRpc(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete)
@@ -755,11 +940,68 @@ bool URpcServerSubsystem::HandleRpc(const FHttpServerRequest& Request, const FHt
 
 	if (Root->Type == EJson::Object)
 	{
-		CompleteJson(OnComplete, SerializeObject(ProcessSingle(Root->AsObject(), Peer)));
+		// view.waitFrame 은 스트림이 그 장면을 실제로 내보낼 때까지 응답을 미룬다(게임 스레드를 막지 않고 틱마다 확인).
+		const TSharedPtr<FJsonObject>& Req = Root->AsObject();
+		FString Method;
+		if (Req->TryGetStringField(TEXT("method"), Method) && Method == TEXT("view.waitFrame") && TryBeginWaitFrame(Req, OnComplete))
+		{
+			return true;
+		}
+		CompleteJson(OnComplete, SerializeObject(ProcessSingle(Req, Peer)));
 		return true;
 	}
 
 	CompleteJson(OnComplete, SerializeObject(MakeErrorResponse(MakeShared<FJsonValueNull>(), Park3DRpc::ParseError, TEXT("잘못된 요청 형식"))));
+	return true;
+}
+
+bool URpcServerSubsystem::TryBeginWaitFrame(const TSharedPtr<FJsonObject>& Req, const FHttpResultCallback& OnComplete)
+{
+	const TSharedPtr<FJsonValue> Id = Req->Values.Contains(TEXT("id")) ? Req->Values[TEXT("id")] : MakeShared<FJsonValueNull>();
+	const TSharedPtr<FJsonObject>* ParamsPtr = nullptr;
+	TSharedPtr<FJsonObject> Params = Req->TryGetObjectField(TEXT("params"), ParamsPtr) && ParamsPtr ? *ParamsPtr : MakeShared<FJsonObject>();
+	double AfterD = 0.0;
+	if (!Params->TryGetNumberField(TEXT("after"), AfterD))
+	{
+		return false;   // 일반 경로가 "필수 파라미터 누락: after" 로 답한다
+	}
+	const int64 After = static_cast<int64>(AfterD);
+	const int32 CamId = RpcParam::GetInt(Params, TEXT("camId"), 0);
+	const double TimeoutSec = FMath::Clamp(RpcParam::GetFloat(Params, TEXT("timeoutMs"), 3000.0), 0.0, 30000.0) / 1000.0;
+	const double Start = FPlatformTime::Seconds();
+
+	TWeakObjectPtr<URpcServerSubsystem> WeakThis(this);
+	FHttpResultCallback Done = OnComplete;
+	auto Finish = [Id, Done, Start](TSharedPtr<FJsonObject> State, bool bTimedOut)
+	{
+		State->SetBoolField(TEXT("timedOut"), bTimedOut);
+		State->SetNumberField(TEXT("waitedMs"), FMath::RoundToDouble((FPlatformTime::Seconds() - Start) * 1000.0));
+		CompleteJson(Done, SerializeObject(MakeResultResponse(Id, MakeShared<FJsonValueObject>(State))));
+	};
+
+	bool bDone = false;
+	TSharedPtr<FJsonObject> State = WaitFrameState(GetWorld(), CamId, After, bDone);
+	if (bDone || TimeoutSec <= 0.0)
+	{
+		Finish(State, !bDone);
+		return true;
+	}
+	FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([WeakThis, CamId, After, TimeoutSec, Start, Finish](float) -> bool
+	{
+		if (!WeakThis.IsValid())
+		{
+			return false;   // 서브시스템이 내려갔다 — 연결은 서버 종료와 함께 닫힌다
+		}
+		bool bNowDone = false;
+		TSharedPtr<FJsonObject> Now = WaitFrameState(WeakThis->GetWorld(), CamId, After, bNowDone);
+		const bool bTimedOut = FPlatformTime::Seconds() - Start >= TimeoutSec;
+		if (bNowDone || bTimedOut)
+		{
+			Finish(Now, !bNowDone && bTimedOut);
+			return false;
+		}
+		return true;
+	}));
 	return true;
 }
 

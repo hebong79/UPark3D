@@ -1189,6 +1189,7 @@ void FScenarioRpcModule::Register(URpcDispatcher& Dispatcher)
 	{
 		TArray<FString> Names;
 		const TArray<TSharedPtr<FJsonValue>>* NameArr = nullptr;
+		RpcParam::MarkRead(P, TEXT("names"));
 		if (P.IsValid() && P->TryGetArrayField(TEXT("names"), NameArr))
 		{
 			for (const TSharedPtr<FJsonValue>& V : *NameArr) { Names.Add(V->AsString()); }

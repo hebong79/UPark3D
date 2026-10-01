@@ -109,6 +109,7 @@ namespace
 		Out.Reset();
 		if (!RpcParam::Has(P, TEXT("colors"))) { return true; }
 		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+		RpcParam::MarkRead(P, TEXT("colors"));
 		if (!P->TryGetArrayField(TEXT("colors"), Arr))
 		{
 			E.FailDomain(TEXT("colors 는 배열이어야 합니다 (ECarColor 정수 또는 이름: white/black/silver/gray/red/...)"));
@@ -140,6 +141,7 @@ namespace
 		TArray<int32>& OutIdx, TArray<TSharedPtr<FJsonValue>>& OutNotFound, FRpcError& E)
 	{
 		const TArray<TSharedPtr<FJsonValue>>* IdArr = nullptr;
+		RpcParam::MarkRead(P, TEXT("carNameIds"));
 		const bool bIds = P.IsValid() && P->TryGetArrayField(TEXT("carNameIds"), IdArr);
 		const bool bSelected = RpcParam::GetBool(P, TEXT("selected"), false);
 		if (bIds && bSelected)
@@ -446,6 +448,7 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
 		// 한 대(carNameId, 기존 계약) 또는 여러 대(carNameIds, 빈 배열 = 선택 해제). additive 는 기존 선택에 더한다.
 		const TArray<TSharedPtr<FJsonValue>>* IdArr = nullptr;
+		RpcParam::MarkRead(P, TEXT("carNameIds"));
 		const bool bMulti = P.IsValid() && P->TryGetArrayField(TEXT("carNameIds"), IdArr);
 		TArray<int32> Sel;
 		TArray<TSharedPtr<FJsonValue>> NotFound;
@@ -547,6 +550,7 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		if (!Car) { E.FailDomain(FString::Printf(TEXT("차량 없음: %s"), *Id)); return nullptr; }
 
 		const TArray<TSharedPtr<FJsonValue>>* PathArr = nullptr;
+		RpcParam::MarkRead(P, TEXT("path"));
 		if (!P->TryGetArrayField(TEXT("path"), PathArr) || PathArr->Num() == 0)
 		{
 			E.FailDomain(TEXT("필수 파라미터 누락: path ([{x,y},...] UE 미터, 지면)"));
@@ -566,6 +570,7 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		}
 
 		double Speed = 4.0;
+		RpcParam::MarkRead(P, TEXT("speedMps"));
 		P->TryGetNumberField(TEXT("speedMps"), Speed);
 		if (!(Speed > 0.0 && Speed <= 40.0))
 		{
@@ -576,6 +581,7 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		// rotY: 생략 또는 "follow" = 진행 방향, 숫자 = 그 방향으로 고정(옆으로 미끄러지듯 이동).
 		bool bFollow = true;
 		double FixedRotY = 0.0;
+		RpcParam::MarkRead(P, TEXT("rotY"));
 		if (P->HasField(TEXT("rotY")))
 		{
 			FString RotStr;
@@ -734,6 +740,7 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 	{
 		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
 		const TSharedPtr<FJsonObject>* DeltaObj = nullptr;
+		RpcParam::MarkRead(P, TEXT("delta"));
 		if (!P.IsValid() || !P->TryGetObjectField(TEXT("delta"), DeltaObj))
 		{
 			E.FailDomain(TEXT("필수 파라미터 누락: delta ({x,y,z?} UE 미터)"));
@@ -789,7 +796,11 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		ACarActor* Car = Mgr->FindByNameId(Id);
 		if (!Car) { E.FailDomain(FString::Printf(TEXT("차량 없음: %s"), *Id)); return nullptr; }
 		if (Car->ColorComp) { Car->ColorComp->SetColor(FLinearColor(R, G, B, 1.f)); }
-		return RpcDto::OkTrue();
+		// 변경 후 상태(rgb·colorName)를 돌려준다(보드 #1099). 도색 컴포넌트가 없으면 applied:false.
+		TSharedPtr<FJsonObject> O = RpcDto::CarToDto(Car);
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetBoolField(TEXT("applied"), Car->ColorComp != nullptr);
+		return RpcDto::MakeObject(O);
 	});
 
 	// colors 로 팔레트를 좁힌다(없으면 10종). carNameId/carNameIds 가 없으면 가시 차량 전부.
@@ -804,6 +815,7 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		TArray<FString> Ids;
 		if (RpcParam::Has(P, TEXT("carNameId"))) { Ids.Add(RpcParam::GetString(P, TEXT("carNameId"))); }
 		const TArray<TSharedPtr<FJsonValue>>* IdArr = nullptr;
+		RpcParam::MarkRead(P, TEXT("carNameIds"));
 		if (P.IsValid() && P->TryGetArrayField(TEXT("carNameIds"), IdArr))
 		{
 			for (const TSharedPtr<FJsonValue>& V : *IdArr)
@@ -885,9 +897,13 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		if (!RpcParam::RequireBool(P, TEXT("visible"), bVisible, E)) return nullptr;
 		ACarActor* Car = Mgr->FindByNameId(Id);
 		if (!Car) { E.FailDomain(FString::Printf(TEXT("차량 없음: %s"), *Id)); return nullptr; }
+		const bool bWasVisible = !Car->IsHidden();
 		Car->SetActorHiddenInGame(!bVisible);
 		Car->SetActorEnableCollision(bVisible);
-		return RpcDto::OkTrue();
+		TSharedPtr<FJsonObject> O = RpcDto::CarToDto(Car);   // 변경 후 상태(보드 #1099)
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetNumberField(TEXT("changed"), bWasVisible != bVisible ? 1 : 0);
+		return RpcDto::MakeObject(O);
 	});
 
 	// 전체 차량 표시/숨김. UI 의 "차량 숨기기" 체크박스와 같은 백엔드(SetAllCarsHidden)를 쓴다 —
@@ -1193,6 +1209,7 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 
 		TArray<int32> Wanted;
 		const TArray<TSharedPtr<FJsonValue>>* NumArr = nullptr;
+		RpcParam::MarkRead(P, TEXT("numbers"));
 		if (P.IsValid() && P->TryGetArrayField(TEXT("numbers"), NumArr))
 		{
 			for (const TSharedPtr<FJsonValue>& V : *NumArr)

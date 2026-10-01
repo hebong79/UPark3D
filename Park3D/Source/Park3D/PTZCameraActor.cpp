@@ -19,7 +19,7 @@ APTZCameraActor::APTZCameraActor()
 	// 캡처 컴포넌트: 선택 카메라만 매 프레임 캡처(설계 §12-B). FOVAngle 은 수평 화각(설계 §7.3).
 	Capture = CreateDefaultSubobject<USceneCaptureComponent2D>(TEXT("Capture"));
 	Capture->SetupAttachment(Root);
-	Capture->bCaptureEveryFrame = false;   // 선택 시에만 SetCaptureEnabled(true)
+	Capture->bCaptureEveryFrame = false;   // 늘 false — 뷰어가 보일 때만 CaptureForViewer 가 프레임당 1장
 	Capture->bCaptureOnMovement = false;
 	Capture->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;  // 톤매핑된 색(UI 프리뷰용)
 	// 비선택 카메라도 FSceneViewState 를 유지한다. 이게 없으면 bCaptureEveryFrame=false 인 캡처마다
@@ -130,9 +130,10 @@ void APTZCameraActor::UpdatePolePosition()
 
 void APTZCameraActor::SetCaptureEnabled(bool bEnabled)
 {
+	bViewerTarget = bEnabled;
 	if (Capture)
 	{
-		Capture->bCaptureEveryFrame = bEnabled;
+		Capture->bCaptureEveryFrame = false;   // 뷰어 갱신은 CaptureForViewer 가 맡는다(헤더 주석)
 	}
 }
 
@@ -141,6 +142,15 @@ void APTZCameraActor::CaptureOnce()
 	if (Capture)
 	{
 		Capture->CaptureScene();
+		LastCaptureFrame = GFrameCounter;
+	}
+}
+
+void APTZCameraActor::CaptureForViewer()
+{
+	if (LastCaptureFrame != GFrameCounter)
+	{
+		CaptureOnce();
 	}
 }
 

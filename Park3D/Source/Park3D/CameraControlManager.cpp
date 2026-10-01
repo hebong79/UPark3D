@@ -162,7 +162,7 @@ void ACameraControlManager::SelectCamera(int32 Index)
 	}
 	SelectedIndex = Index;
 
-	// 선택 카메라만 매 프레임 캡처(성능, 설계 §12-B).
+	// 선택 카메라만 뷰어 대상(성능, 설계 §12-B). 실제 갱신은 뷰어가 보일 때 RequestViewerFrame 이 한다.
 	for (int32 i = 0; i < Cameras.Num(); ++i)
 	{
 		if (Cameras[i])
@@ -174,6 +174,14 @@ void ACameraControlManager::SelectCamera(int32 Index)
 	if (Cameras[Index])
 	{
 		Cameras[Index]->CaptureOnce();
+	}
+}
+
+void ACameraControlManager::RequestViewerFrame()
+{
+	if (Cameras.IsValidIndex(SelectedIndex) && Cameras[SelectedIndex])
+	{
+		Cameras[SelectedIndex]->CaptureForViewer();
 	}
 }
 

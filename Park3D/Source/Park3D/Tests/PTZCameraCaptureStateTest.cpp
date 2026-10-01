@@ -39,13 +39,15 @@ bool FPTZCameraCapturePersistStateTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("생성 직후 bCaptureEveryFrame=false"), Cam->Capture->bCaptureEveryFrame);
 	TestTrue(TEXT("생성 직후 bAlwaysPersistRenderingState=true"), Cam->Capture->bAlwaysPersistRenderingState);
 
-	// 2) 선택 → 매 프레임 캡처 on. 유지 플래그는 그대로.
+	// 2) 선택 → 뷰어 대상. 매 프레임 자동 캡처는 켜지 않는다(뷰어가 보일 때 CaptureForViewer — 스트림과 중복 렌더 방지).
 	Cam->SetCaptureEnabled(true);
-	TestTrue(TEXT("선택 시 bCaptureEveryFrame=true"), Cam->Capture->bCaptureEveryFrame);
+	TestTrue(TEXT("선택 시 뷰어 대상"), Cam->IsViewerTarget());
+	TestFalse(TEXT("선택 시에도 bCaptureEveryFrame=false"), Cam->Capture->bCaptureEveryFrame);
 	TestTrue(TEXT("선택 시에도 bAlwaysPersistRenderingState=true"), Cam->Capture->bAlwaysPersistRenderingState);
 
-	// 3) 선택 해제 → 매 프레임 캡처 off. 유지 플래그가 여기서 꺼지면 /stream 이 다시 어두워진다.
+	// 3) 선택 해제 → 뷰어 대상 아님. 유지 플래그가 여기서 꺼지면 /stream 이 다시 어두워진다.
 	Cam->SetCaptureEnabled(false);
+	TestFalse(TEXT("비선택 시 뷰어 대상 아님"), Cam->IsViewerTarget());
 	TestFalse(TEXT("비선택 시 bCaptureEveryFrame=false"), Cam->Capture->bCaptureEveryFrame);
 	TestTrue(TEXT("비선택 시에도 bAlwaysPersistRenderingState=true"), Cam->Capture->bAlwaysPersistRenderingState);
 

@@ -115,6 +115,11 @@ void UCameraViewerWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaT
 	{
 		SetRenderTarget(RT); // 바뀐 경우에만 브러시 재생성.
 	}
+	// 이 틱은 뷰어가 화면에 그려질 때만 온다 → 그때만 선택 카메라를 갱신한다(매 프레임 자동 캡처 대체).
+	if (Mgr && RT && Img_View && Img_View->IsVisible())
+	{
+		Mgr->RequestViewerFrame();
+	}
 }
 
 float UCameraViewerWidget::ComputeCorrectedViewWidth(float CurrentWidth, float CurrentRenderedRatio,

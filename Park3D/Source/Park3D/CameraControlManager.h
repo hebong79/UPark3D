@@ -87,7 +87,7 @@ public:
 
 	/**
 	 * 카메라가 0대면 1대 생성 + DefaultCameraDir 반영. 이후 항상 현재 인덱스를 재선택한다.
-	 * 선택은 캡처 on + 즉시 1회 캡처이므로, 이 호출 뒤에는 GetSelectedRenderTarget() 이 유효한 RT 를 준다
+	 * 선택은 뷰어 대상 지정 + 즉시 1회 캡처이므로, 이 호출 뒤에는 GetSelectedRenderTarget() 이 유효한 RT 를 준다
 	 * (= 컨트롤 패널을 열지 않아도 뷰어가 첫 프레임부터 화면을 낸다).
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Camera")
@@ -126,6 +126,12 @@ public:
 	/** 선택 카메라의 렌더타겟(뷰어 UImage 바인딩용). */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Camera")
 	UTextureRenderTarget2D* GetSelectedRenderTarget() const;
+
+	/**
+	 * 뷰어가 이번 프레임에 그려진다 — 선택 카메라를 (아직 안 찍혔으면) 1장 찍는다. 뷰어 위젯의 NativeTick 이 부른다.
+	 * Slate 는 화면에 그려지는 위젯만 틱하므로 뷰어를 숨기면 호출이 끊기고 렌더도 0 이 된다. C++ 전용.
+	 */
+	void RequestViewerFrame();
 
 	// ---- 데이터 ↔ 월드 ----
 

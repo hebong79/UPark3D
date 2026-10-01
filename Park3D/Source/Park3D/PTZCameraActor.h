@@ -101,13 +101,23 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "PTZ")
 	void UpdatePolePosition();
 
-	/** 매 프레임 캡처 토글(선택 카메라만 true → 성능, 설계 §12-B). */
+	/**
+	 * 뷰어 대상(선택 카메라) 표시. 이제 bCaptureEveryFrame 은 켜지 않는다 — 뷰어가 보일 때만 CaptureForViewer 로
+	 * 프레임당 1장을 요청한다. 매 프레임 자동 캡처에 스트림·cam.captureJPG 의 CaptureScene 이 겹치면 같은 장면을
+	 * 두 번 렌더하고 엔진이 "major inefficiency" 경고를 캡처마다 낸다(정본 하루 수십만 줄, 2026-10-01).
+	 */
 	UFUNCTION(BlueprintCallable, Category = "PTZ")
 	void SetCaptureEnabled(bool bEnabled);
 
-	/** 1회 즉시 캡처(선택 전환 stale 방지, 설계 §12-B). */
+	/** 1회 즉시 캡처(선택 전환 stale 방지, 설계 §12-B). 이번 프레임에 찍었다는 표시를 남긴다. */
 	UFUNCTION(BlueprintCallable, Category = "PTZ")
 	void CaptureOnce();
+
+	/** 뷰어용 — 이번 프레임에 아직 안 찍혔을 때만 CaptureOnce(스트림이 먼저 찍었으면 그 그림을 쓴다). C++ 전용. */
+	void CaptureForViewer();
+
+	/** 뷰어 대상(선택)인가 — SetCaptureEnabled 가 정한다. C++ 전용. */
+	bool IsViewerTarget() const { return bViewerTarget; }
 
 	/**
 	 * W×H 로 1프레임만 촬영해 그 타깃을 돌려준다(cam.captureJPG width/height, 보드 #991).
@@ -123,4 +133,9 @@ public:
 	/** 폴대 강조 토글(PoleHighlightMaterial 오버레이). */
 	UFUNCTION(BlueprintCallable, Category = "PTZ")
 	void SetPoleHighlight(bool bOn);
+
+private:
+	/** 마지막으로 RenderTarget 에 캡처한 GFrameCounter(같은 프레임 중복 캡처 방지). 비-UPROPERTY. */
+	uint64 LastCaptureFrame = MAX_uint64;
+	bool bViewerTarget = false;
 };

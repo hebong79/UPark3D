@@ -239,6 +239,12 @@ void UCameraControlWidget::NativeDestruct()
 void UCameraControlWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
+
+	// 패널 안 Img_Viewer(선택적 바인딩)가 보이면 선택 카메라 갱신을 요청한다 — 독립 뷰어를 숨겨도 패널 화면이 멈추지 않게.
+	if (Img_Viewer && Img_Viewer->IsVisible())
+	{
+		if (ACameraControlManager* ViewMgr = GetCameraManager()) { ViewMgr->RequestViewerFrame(); }
+	}
 	TickPtzMove(InDeltaTime);
 	FitPanelToContent(); // 레이아웃이 끝난 뒤 1회 성공한다.
 	// 열어 둔 상태를 복원하는 경우에 한해, NativeConstruct 타이밍으로 생성이 누락돼도 표시 tick에서 1회 재시도한다.

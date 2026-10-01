@@ -439,9 +439,9 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 		}
 		else if (RpcParam::Has(P, TEXT("delta")))
 		{
-			const FVector D = RpcParam::GetVec3(P, TEXT("delta")); // 상대(y 변경 안 함)
-			Pr->Offset.X += D.X;
-			Pr->Offset.Z += D.Z;
+			// 상대 — x·y 지면, z 높이(UE 축). 옛 "y 변경 안 함" 은 Unity(y=높이) 잔재라 y 를 조용히 버렸다(보드 #1096).
+			const FVector D = RpcParam::GetVec3(P, TEXT("delta"));
+			Pr->Offset += D;
 		}
 		Mgr->RefreshView();
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();

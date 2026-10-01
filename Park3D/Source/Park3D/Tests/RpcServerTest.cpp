@@ -319,6 +319,31 @@ bool FRpcPresetModuleTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("preset.update 성공"), Dispatch(TEXT("preset.update"), UpP, UpR));
 	if (UpR.IsValid() && UpR->Type == EJson::Object) { double V; UpR->AsObject()->TryGetNumberField(TEXT("faceCount"), V); TestEqual(TEXT("faceCount 8"), (int32)V, 8); }
 
+	// preset.move — to 로 (1,2,0) 에 둔 뒤 delta 는 x·y(지면)·z(높이) 모두 더한다(보드 #1096: y 를 버렸다).
+	{
+		TSharedPtr<FJsonObject> ToP = MakeShared<FJsonObject>();
+		ToP->SetNumberField(TEXT("idx"), NewIdx);
+		ToP->SetObjectField(TEXT("to"), Vec3Param(1, 2, 0));
+		TSharedPtr<FJsonValue> ToR;
+		TestTrue(TEXT("preset.move to 성공"), Dispatch(TEXT("preset.move"), ToP, ToR));
+
+		TSharedPtr<FJsonObject> DeltaP = MakeShared<FJsonObject>();
+		DeltaP->SetNumberField(TEXT("idx"), NewIdx);
+		DeltaP->SetObjectField(TEXT("delta"), Vec3Param(-0.69, -4.95, 0.5));
+		TSharedPtr<FJsonValue> MvR;
+		TestTrue(TEXT("preset.move delta 성공"), Dispatch(TEXT("preset.move"), DeltaP, MvR));
+		if (MvR.IsValid() && MvR->Type == EJson::Object)
+		{
+			double X = 0, Y = 0, Z = 0;
+			MvR->AsObject()->TryGetNumberField(TEXT("x"), X);
+			MvR->AsObject()->TryGetNumberField(TEXT("y"), Y);
+			MvR->AsObject()->TryGetNumberField(TEXT("z"), Z);
+			TestEqual(TEXT("move delta x"), X, 0.31, 1e-4);
+			TestEqual(TEXT("move delta y"), Y, -2.95, 1e-4);
+			TestEqual(TEXT("move delta z"), Z, 0.5, 1e-4);
+		}
+	}
+
 	// preset.renumber → 배열, 첫 항목 startFaceNum=1
 	TSharedPtr<FJsonValue> RnR;
 	TestTrue(TEXT("preset.renumber 성공"), Dispatch(TEXT("preset.renumber"), nullptr, RnR));

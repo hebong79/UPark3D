@@ -24,6 +24,17 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Light")
 	static float PitchToAltitude(float PitchDeg) { return -PitchDeg; }
 
+	// ---- 값 범위(ClampSettings 와 같은 상수) ----
+	/** 키 하나의 허용 범위·UI 권장 간격·단위·기본값. sunColor 는 채널별 0~1 이라 별도다. */
+	struct FKeyMeta
+	{
+		const TCHAR* Key;
+		float Min, Max, Step;
+		const TCHAR* Unit;
+		float Default;
+	};
+	static TArray<FKeyMeta> GetKeyMeta();
+
 	// ---- 값 검증 ----
 	/** 각 항목을 허용 범위로 고정한다. 방위는 0~360으로 정규화(래핑)한다. */
 	UFUNCTION(BlueprintCallable, Category = "Light")
@@ -49,6 +60,9 @@ public:
 	// ---- 기본값 포인터 ----
 	/** 마지막으로 저장·열기한 파일명을 담는 포인터 파일 경로. */
 	static FString GetDefaultPointerPath();
+
+	/** 포인터가 가리키는 파일의 이름만(없으면 빈 문자열). 파일 존재 여부는 보지 않는다. */
+	static FString GetDefaultFileName();
 
 	/** 포인터 파일에 대상 설정 파일 경로를 기록한다. */
 	static bool SetDefaultFile(const FString& SettingsPath);

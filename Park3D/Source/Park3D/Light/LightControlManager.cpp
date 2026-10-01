@@ -241,6 +241,11 @@ void ALightControlManager::ApplySettings(const FLightSettings& Settings)
 	// 레벨이 조명을 갖고 있지 않으면 여기서 만들어 둔다(빈 부트 맵 대비). 이미 있으면 그대로 쓴다.
 	EnsureLightingActors();
 
+	if (!bBaselineTaken)
+	{
+		CaptureBaseline();
+	}
+
 	FLightSettings S = Settings;
 	ULightControlLibrary::ClampSettings(S);
 
@@ -261,12 +266,17 @@ void ALightControlManager::ApplySettings(const FLightSettings& Settings)
 		return;
 	}
 
+	// 하늘빛 재캡처는 비싸다 - 태양·하늘빛이 실제로 바뀐 호출에서만 한다(노출만 바꾸는 드래그 연타 대비).
+	bool bLightingChanged = false;
 	if (UDirectionalLightComponent* Sun = FindSun())
 	{
 		// roll 은 방향(+X)에 영향이 없으므로 원본을 보존한다.
 		const FRotator Cur = Sun->GetComponentRotation();
-		Sun->SetWorldRotation(FRotator(ULightControlLibrary::AltitudeToPitch(S.SunAltitudeDeg),
-			S.SunAzimuthDeg, Cur.Roll));
+		const FRotator Want(ULightControlLibrary::AltitudeToPitch(S.SunAltitudeDeg), S.SunAzimuthDeg, Cur.Roll);
+		bLightingChanged |= !Cur.Equals(Want, 0.01)
+			|| !FMath::IsNearlyEqual(Sun->Intensity, S.SunIntensity, 0.001f)
+			|| Sun->GetLightColor() != S.SunColor.ToFColor(true);
+		Sun->SetWorldRotation(Want);
 		Sun->SetIntensity(S.SunIntensity);
 		Sun->SetLightColor(S.SunColor);
 	}
@@ -277,9 +287,13 @@ void ALightControlManager::ApplySettings(const FLightSettings& Settings)
 
 	if (USkyLightComponent* Sky = FindSky())
 	{
+		bLightingChanged |= !FMath::IsNearlyEqual(Sky->Intensity, S.SkyIntensity, 0.001f);
 		Sky->SetIntensity(S.SkyIntensity);
-		// RealTimeCapture 가 꺼져 있는 레벨에서도 태양 변경이 하늘빛에 반영되도록 한 번 재캡처한다.
-		Sky->RecaptureSky();
+		// RealTimeCapture 가 꺼져 있는 레벨에서도 태양 변경이 하늘빛에 반영되도록 재캡처한다.
+		if (bLightingChanged)
+		{
+			Sky->RecaptureSky();
+		}
 	}
 	else
 	{
@@ -301,6 +315,47 @@ void ALightControlManager::ApplySettings(const FLightSettings& Settings)
 	}
 
 	LastApplied = S;
+}
+
+void ALightControlManager::CaptureBaseline()
+{
+	bBaselineTaken = true;
+	if (!CaptureCurrent(BaseSettings))
+	{
+		BaseSettings = FLightSettings();
+	}
+	if (const APostProcessVolume* V = FindExposureVolume())
+	{
+		bBaseOverrideMin = V->Settings.bOverride_AutoExposureMinBrightness;
+		bBaseOverrideMax = V->Settings.bOverride_AutoExposureMaxBrightness;
+		BaseExposureMin = V->Settings.AutoExposureMinBrightness;
+		BaseExposureMax = V->Settings.AutoExposureMaxBrightness;
+	}
+}
+
+bool ALightControlManager::ResetToBaseline()
+{
+	if (!bBaselineTaken)
+	{
+		return false;
+	}
+	ApplySettings(BaseSettings);
+
+	// 기준 시점에 노출이 override 되지 않았다면 그 상태(레벨 자체 노출)로 되돌린다 - 값만 넣으면
+	// "원래 override 가 없던 볼륨" 이 고정 노출 볼륨으로 바뀐 채 남는다.
+	if (!HasExternalSkySystem())
+	{
+		if (APostProcessVolume* V = FindExposureVolume())
+		{
+			V->Settings.bOverride_AutoExposureMinBrightness = bBaseOverrideMin;
+			V->Settings.bOverride_AutoExposureMaxBrightness = bBaseOverrideMax;
+			V->Settings.AutoExposureMinBrightness = BaseExposureMin;
+			V->Settings.AutoExposureMaxBrightness = BaseExposureMax;
+		}
+	}
+	SourceKind = TEXT("world");
+	CurrentFileName.Empty();
+	return true;
 }
 
 ADirectionalLight* ALightControlManager::EnsureFillLight(FName Tag, bool bCarOnly)

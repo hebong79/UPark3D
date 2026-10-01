@@ -5,6 +5,8 @@
 #include "../RpcDispatcher.h"
 #include "../RpcParamUtil.h"
 #include "../../Park3DDataPaths.h"
+#include "../../Light/LightControlLibrary.h"
+#include "../../Light/LightControlManager.h"
 #include "Misc/Paths.h"
 #include "Misc/FileHelper.h"
 #include "Misc/DateTime.h"
@@ -25,6 +27,13 @@ namespace
 		{ TEXT("camera"), TEXT("CameraPos") },
 		{ TEXT("preset"), TEXT("Preset") },
 	};
+	/**
+	 * 요청해야만 나오는 kind. 생략 시 출력(car·camera·preset 셋)은 기존 소비자가 있어 바꾸지 않는다.
+	 * 조명 파일은 데이터 폴더가 Save/3D/Light 라 같은 규칙으로 읽히지만 datas[] 가 없어 entries 는 null 이다.
+	 */
+	const FKindEntry OptInKinds[] = {
+		{ TEXT("light"),  TEXT("Light") },
+	};
 
 	/** kind 정규화(대소문자 무시 + 폴더 이름 별칭). 실패면 OutError(-32000). */
 	bool ResolveKind(const FString& Raw, FString& OutKind, FRpcError& OutError)
@@ -40,13 +49,25 @@ namespace
 				return true;
 			}
 		}
-		OutError.FailDomain(FString::Printf(TEXT("kind 가 잘못됐다 — car | camera | preset 중 하나: '%s'"), *Raw));
+		for (const FKindEntry& E : OptInKinds)
+		{
+			if (K == E.Kind)
+			{
+				OutKind = E.Kind;
+				return true;
+			}
+		}
+		OutError.FailDomain(FString::Printf(TEXT("kind 가 잘못됐다 — car | camera | preset | light 중 하나: '%s'"), *Raw));
 		return false;
 	}
 
 	const TCHAR* SubDirOf(const FString& Kind)
 	{
 		for (const FKindEntry& E : Kinds)
+		{
+			if (Kind == E.Kind) return E.SubDir;
+		}
+		for (const FKindEntry& E : OptInKinds)
 		{
 			if (Kind == E.Kind) return E.SubDir;
 		}
@@ -125,7 +146,7 @@ namespace
 		return Local.ToString(TEXT("%Y-%m-%dT%H:%M:%S"));
 	}
 
-	TSharedPtr<FJsonObject> FileRow(const FString& Path, bool bWithContent)
+	TSharedPtr<FJsonObject> FileRow(const FString& Path, bool bWithContent, bool bLight = false)
 	{
 		const TSharedPtr<FJsonObject> Doc = ReadJsonObject(Path);
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
@@ -134,6 +155,11 @@ namespace
 		O->SetNumberField(TEXT("sizeBytes"), static_cast<double>(IFileManager::Get().FileSize(*Path)));
 		O->SetStringField(TEXT("modified"), ModifiedIso(Path));
 		O->SetField(TEXT("entries"), EntryCount(Doc));
+		if (bLight)
+		{
+			// '_' 로 시작하는 파일은 도구가 만든 내부 파일이다(목록엔 두되 표시해 UI 가 거를 수 있게).
+			O->SetBoolField(TEXT("internal"), FPaths::GetCleanFilename(Path).StartsWith(TEXT("_")));
+		}
 		if (bWithContent)
 		{
 			if (Doc.IsValid()) O->SetObjectField(TEXT("content"), Doc);
@@ -152,7 +178,7 @@ namespace
 		TArray<TSharedPtr<FJsonValue>> Files;
 		for (const FString& N : Names)
 		{
-			Files.Add(MakeShared<FJsonValueObject>(FileRow(Dir / N, bWithContent)));
+			Files.Add(MakeShared<FJsonValueObject>(FileRow(Dir / N, bWithContent, Kind == TEXT("light"))));
 		}
 
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
@@ -167,7 +193,7 @@ namespace
 
 void FFileRpcModule::Register(URpcDispatcher& Dispatcher)
 {
-	Dispatcher.Register(TEXT("file.list"), [](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	Dispatcher.Register(TEXT("file.list"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		TArray<FString> Wanted;
 		const FString Raw = RpcParam::GetString(P, TEXT("kind"));
@@ -186,15 +212,27 @@ void FFileRpcModule::Register(URpcDispatcher& Dispatcher)
 		TSharedPtr<FJsonObject> KindsObj = MakeShared<FJsonObject>();
 		for (const FString& K : Wanted)
 		{
-			KindsObj->SetObjectField(K, KindBlock(K, bWithContent));
+			TSharedPtr<FJsonObject> Block = KindBlock(K, bWithContent);
+			if (K == TEXT("light"))
+			{
+				// current = 지금 화면에 적용된 파일(적용·저장한 적 없으면 빈 문자열), default = _default.txt 가 가리키는 파일.
+				FString Current;
+				if (UWorld* W = GetWorldPtr())
+				{
+					if (const ALightControlManager* Mgr = ALightControlManager::GetOrSpawn(W)) { Current = Mgr->GetCurrentFileName(); }
+				}
+				Block->SetStringField(TEXT("current"), Current);
+				Block->SetStringField(TEXT("default"), ULightControlLibrary::GetDefaultFileName());
+			}
+			KindsObj->SetObjectField(K, Block);
 		}
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetObjectField(TEXT("kinds"), KindsObj);
 		return RpcDto::MakeObject(O);
 	});
 	Dispatcher.SetMethodMeta(TEXT("file.list"), { /*bMutating=*/false, /*bDestructive=*/false,
-		TEXT("kind?(car|camera|preset) withContent?=false"),
-		TEXT("Save/3D/{CarPos,CameraPos,Preset} 폴더의 *.json 목록 — kind 를 비우면 셋 다. kinds.<kind> = {dir, current, files:[{fileName, path, sizeBytes, modified, entries(datas 길이)}]}. withContent:true 면 파일 JSON 을 content 로 함께 낸다. 읽기 전용") });
+		TEXT("kind?(car|camera|preset|light) withContent?=false"),
+		TEXT("Save/3D/{CarPos,CameraPos,Preset} 폴더의 *.json 목록 — kind 를 비우면 셋 다(light 는 요청해야 나온다: Save/3D/Light, kinds.light = {dir, current(지금 적용된 파일), default(_default.txt 대상), files:[… internal(_ 시작 도구 내부 파일)]}). kinds.<kind> = {dir, current, files:[{fileName, path, sizeBytes, modified, entries(datas 길이)}]}. withContent:true 면 파일 JSON 을 content 로 함께 낸다. 읽기 전용") });
 
 	Dispatcher.Register(TEXT("file.read"), [](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{

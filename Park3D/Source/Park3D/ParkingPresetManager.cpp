@@ -820,6 +820,7 @@ void AParkingPresetManager::ApplyNumberAnchors(TArray<FParkingSlotNumberInfo>& S
 		if (Remaining > 0)
 		{
 			S.Number = Next++;
+			S.bAnchored = true;
 			--Remaining;
 		}
 	}
@@ -876,23 +877,23 @@ void AParkingPresetManager::RebuildSlotNumbers(const TArray<FParkingPreset>& Pre
 	CollectSlotNumbers(Presets, Slots);
 
 	int32 PresetCount = 0;
+	int32 Drawn = 0;
 	for (const FParkingSlotNumberInfo& S : Slots)
 	{
 		if (S.bFromPreset) ++PresetCount;
+		if (!ShouldDrawNumber(S)) continue; // anchorsOnly — 기준점 없는 면은 글자만 뺀다
+		PlaceNumber(AcquireNumber(Drawn), S.Center, S.TextAxis, S.WidthCm, S.Number);
+		++Drawn;
 	}
 
-	for (int32 i = 0; i < Slots.Num(); ++i)
-	{
-		PlaceNumber(AcquireNumber(i), Slots[i].Center, Slots[i].TextAxis, Slots[i].WidthCm, Slots[i].Number);
-	}
-
-	for (int32 idx = Slots.Num(); idx < NumberPool.Num(); ++idx)
+	for (int32 idx = Drawn; idx < NumberPool.Num(); ++idx)
 	{
 		if (NumberPool[idx]) NumberPool[idx]->SetVisibility(false);
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("[ParkingManager] 주차면 번호 %d개 표시(프리셋 %d, 레벨 %d, 풀 %d)"),
-		Slots.Num(), PresetCount, Slots.Num() - PresetCount, NumberPool.Num());
+	UE_LOG(LogTemp, Log, TEXT("[ParkingManager] 주차면 번호 %d개 표시(면 %d: 프리셋 %d, 레벨 %d, 모드 %s, 풀 %d)"),
+		Drawn, Slots.Num(), PresetCount, Slots.Num() - PresetCount,
+		bNumbersAnchorsOnly ? TEXT("anchorsOnly") : TEXT("auto"), NumberPool.Num());
 }
 
 void AParkingPresetManager::ClearSlotNumbers()

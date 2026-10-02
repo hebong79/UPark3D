@@ -29,6 +29,7 @@ namespace
 		O->SetBoolField(TEXT("showNumbers"), Mgr->bShowSlotNumbers);
 		O->SetNumberField(TEXT("numberSize"), Mgr->SlotNumberSizeCm);
 		O->SetNumberField(TEXT("numberZ"), Mgr->SlotNumberZ);
+		O->SetStringField(TEXT("numberMode"), Mgr->bNumbersAnchorsOnly ? TEXT("anchorsOnly") : TEXT("auto"));
 		O->SetBoolField(TEXT("global"), true);
 		return O;
 	}
@@ -226,7 +227,23 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 	{
 		AParkingPresetManager* Mgr = GetPresetManager(E); if (!Mgr) return nullptr;
 
-		if (RpcParam::Has(P, TEXT("useDecal")))       { Mgr->bUseDecalView = RpcParam::GetBool(P, TEXT("useDecal"), Mgr->bUseDecalView); }
+		// numberMode(보드 #1146) — 모르는 값은 아무것도 바꾸기 전에 거절한다(오타가 "auto" 로 조용히 떨어지지 않게).
+		bool bAnchorsOnly = Mgr->bNumbersAnchorsOnly;
+		if (RpcParam::Has(P, TEXT("numberMode")))
+		{
+			const FString Mode = RpcParam::GetString(P, TEXT("numberMode"));
+			if (Mode == TEXT("auto"))             { bAnchorsOnly = false; }
+			else if (Mode == TEXT("anchorsOnly")) { bAnchorsOnly = true; }
+			else
+			{
+				E.Fail(Park3DRpc::InvalidParams, FString::Printf(TEXT("numberMode 는 \"auto\" | \"anchorsOnly\" 입니다: '%s'"), *Mode), ERpcErrorKind::BadParams);
+				return nullptr;
+			}
+		}
+		// anchorsOnly = 기준점(cam.setSlotNumber)이 매긴 면에만 번호 **글자**를 그린다. 면·조회·스냅은 그대로다.
+		Mgr->bNumbersAnchorsOnly = bAnchorsOnly;
+
+		if (RpcParam::Has(P, TEXT("useDecal")))      { Mgr->bUseDecalView = RpcParam::GetBool(P, TEXT("useDecal"), Mgr->bUseDecalView); }
 		if (RpcParam::Has(P, TEXT("show3D")))         { Mgr->bShow3DView = RpcParam::GetBool(P, TEXT("show3D"), Mgr->bShow3DView); }
 		if (RpcParam::Has(P, TEXT("lineThickness")))  { Mgr->LineThickness = RpcParam::GetFloat(P, TEXT("lineThickness"), Mgr->LineThickness); }
 		if (RpcParam::Has(P, TEXT("decalThickness"))) { Mgr->DecalLineThicknessCm = RpcParam::GetFloat(P, TEXT("decalThickness"), Mgr->DecalLineThicknessCm); }
@@ -249,7 +266,7 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 		return RpcDto::MakeObject(PresetViewState(Mgr));
 	});
 	Dispatcher.SetMethodMeta(TEXT("preset.getView"), { false, false, TEXT(""),
-		TEXT("{useDecal, show3D, lineThickness, decalThickness, showNumbers, numberSize, numberZ, selectedIdx, global:true}") });
+		TEXT("{useDecal, show3D, lineThickness, decalThickness, showNumbers, numberSize, numberZ, numberMode:auto|anchorsOnly, selectedIdx, global:true}") });
 
 	/**
 	 * 바닥에 붙는 주차면 번호 목록. 표시가 꺼져 있어도 계산해서 돌려준다(번호 체계는 표시와 무관하다).
@@ -274,6 +291,9 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 			// baseNumber 는 기준점(cam.savePreset startFace/startSlot)을 걸기 전 순번, faceKey 는 그 기준점에 넣는 키.
 			O->SetNumberField(TEXT("baseNumber"), S.BaseNumber);
 			O->SetStringField(TEXT("faceKey"), S.FaceKey());
+			// drawn = 바닥에 이 글자를 그리는 판정(numberMode anchorsOnly 에서 기준점 없는 면은 false). 표시 전체가 꺼져도(visible) 판정은 같다.
+			O->SetBoolField(TEXT("drawn"), Mgr->ShouldDrawNumber(S));
+			O->SetBoolField(TEXT("anchored"), S.bAnchored);
 			O->SetStringField(TEXT("source"), S.bFromPreset ? TEXT("preset") : TEXT("level"));
 			O->SetObjectField(TEXT("pos"), RpcDto::Vec3(S.Center.X / U, S.Center.Y / U, S.Center.Z / U));
 			O->SetNumberField(TEXT("rotY"), FMath::RadiansToDegrees(FMath::Atan2(S.AxisDir.Y, S.AxisDir.X)));
@@ -299,6 +319,7 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 		TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 		Root->SetBoolField(TEXT("ok"), true);
 		Root->SetBoolField(TEXT("visible"), Mgr->bShowSlotNumbers);
+		Root->SetStringField(TEXT("numberMode"), Mgr->bNumbersAnchorsOnly ? TEXT("anchorsOnly") : TEXT("auto"));
 		Root->SetNumberField(TEXT("count"), Slots.Num());
 		Root->SetNumberField(TEXT("presetCount"), PresetCount);
 		Root->SetNumberField(TEXT("levelCount"), Slots.Num() - PresetCount);

@@ -670,6 +670,35 @@ bool FRpcCamModuleTest::RunTest(const FString& Parameters)
 		TSharedPtr<FJsonValue> BadR; FRpcError BadE;
 		TSharedPtr<FJsonObject> BadP = MakeShared<FJsonObject>(); BadP->SetStringField(TEXT("face"), TEXT("  ")); BadP->SetNumberField(TEXT("slot"), 1);
 		TestFalse(TEXT("빈 face 거부"), D->Dispatch(TEXT("cam.setSlotNumber"), BadP, BadR, BadE));
+
+		// cam.setSlotNumbers(보드 #1146) — 목록 한 번에. 틀린 항목이 하나라도 있으면 아무것도 안 바꾼다, replace 는 갈아 끼운다.
+		auto Item = [](const TCHAR* Face, int32 Slot) -> TSharedPtr<FJsonValue>
+		{
+			TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+			O->SetStringField(TEXT("face"), Face);
+			O->SetNumberField(TEXT("slot"), Slot);
+			return MakeShared<FJsonValueObject>(O);
+		};
+		auto SetMany = [&](const TArray<TSharedPtr<FJsonValue>>& List, bool bReplace, TSharedPtr<FJsonValue>& R, FRpcError& Err) -> bool
+		{
+			TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+			P->SetArrayField(TEXT("list"), List);
+			P->SetBoolField(TEXT("replace"), bReplace);
+			return D->Dispatch(TEXT("cam.setSlotNumbers"), P, R, Err);
+		};
+		TSharedPtr<FJsonValue> MR; FRpcError ME;
+		TestTrue(TEXT("setSlotNumbers 2건"), SetMany({ Item(TEXT("level:_AutomationTest_A#0"), 1), Item(TEXT("level:_AutomationTest_A#1"), 2) }, false, MR, ME));
+		TestEqual(TEXT("setSlotNumbers → 2곳"), ListCount(), 2);
+		FRpcError BadME;
+		TestFalse(TEXT("setSlotNumbers 틀린 항목 거부"), SetMany({ Item(TEXT("level:_AutomationTest_C#0"), 3), Item(TEXT(" "), 4) }, false, MR, BadME));
+		TestEqual(TEXT("거부 시 -32602"), BadME.Code, Park3DRpc::InvalidParams);
+		TestEqual(TEXT("거부 시 목록 불변"), ListCount(), 2);
+		FRpcError RepE;
+		TestTrue(TEXT("setSlotNumbers replace"), SetMany({ Item(TEXT("level:_AutomationTest_B#0"), 7) }, true, MR, RepE));
+		TestEqual(TEXT("replace → 1곳"), ListCount(), 1);
+		FRpcError ClrE;
+		TestTrue(TEXT("setSlotNumbers replace 빈 목록 = 전부 해제"), SetMany({}, true, MR, ClrE));
+		TestEqual(TEXT("목록 비움(배치)"), ListCount(), 0);
 	}
 
 	// delete: 1대뿐이면 ok=false(최소 1 유지)

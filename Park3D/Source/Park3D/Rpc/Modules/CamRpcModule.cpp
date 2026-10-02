@@ -841,6 +841,86 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 		return RpcDto::MakeObject(O);
 	});
 
+	// cam.setSlotNumbers(보드 #1146) — cam.setSlotNumber 를 목록으로 한 번에. 면마다 부르면 매번 바닥 번호를 다시 그린다.
+	// list:[{face, slot, count?, auto?}] 를 먼저 전부 검사하고(하나라도 틀리면 아무것도 안 바꾼다) 순서대로 적용, 반영은 한 번.
+	// replace:true 면 기존 지정을 모두 지우고 목록으로 갈아 끼운다(기본 false = 목록의 face 만 덮는다). save 는 setSlotNumber 와 같다.
+	Dispatcher.Register(TEXT("cam.setSlotNumbers"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		RpcParam::MarkRead(P, TEXT("list"));
+		const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+		if (!P.IsValid() || !P->TryGetArrayField(TEXT("list"), List))
+		{
+			E.Fail(Park3DRpc::InvalidParams, TEXT("필수 파라미터 누락: list ([{face, slot, count?, auto?}])"), ERpcErrorKind::BadParams);
+			return nullptr;
+		}
+		TArray<FCamSlotNumber> Items;
+		for (int32 i = 0; i < List->Num(); ++i)
+		{
+			const TSharedPtr<FJsonObject> It = (*List)[i].IsValid() ? (*List)[i]->AsObject() : nullptr;
+			FString Face;
+			double Slot = 0.0;
+			if (!It.IsValid() || !It->TryGetStringField(TEXT("face"), Face) || !It->TryGetNumberField(TEXT("slot"), Slot)
+				|| Face.TrimStartAndEnd().IsEmpty())
+			{
+				E.Fail(Park3DRpc::InvalidParams, FString::Printf(TEXT("list[%d] 는 {face(문자열, preset.numbers 의 faceKey), slot(정수)} 가 필요합니다"), i), ERpcErrorKind::BadParams);
+				return nullptr;
+			}
+			FCamSlotNumber N;
+			N.face = Face.TrimStartAndEnd();
+			N.slot = static_cast<int32>(Slot);
+			double Count = 0.0;
+			N.count = It->TryGetNumberField(TEXT("count"), Count) ? FMath::Max(0, static_cast<int32>(Count)) : 0;
+			bool bAuto = false;
+			N.auto_renumber = It->TryGetBoolField(TEXT("auto"), bAuto) && bAuto;
+			Items.Add(N);
+		}
+		const bool bReplace = RpcParam::GetBool(P, TEXT("replace"), false);
+		const bool bSave = RpcParam::GetBool(P, TEXT("save"), false);
+		if (bSave && PresetMemory.datas.Num() == 0)
+		{
+			E.FailDomain(TEXT("메모리에 카메라가 없어 저장할 수 없습니다 — 먼저 cam.loadPreset 을 호출하세요"));
+			return nullptr;
+		}
+
+		const TArray<FCamSlotNumber> Before = PresetMemory.slot_numbers;
+		if (bReplace)
+		{
+			PresetMemory.slot_numbers.Reset();
+		}
+		for (const FCamSlotNumber& N : Items)
+		{
+			UCameraControlLibrary::SetSlotNumber(PresetMemory, N.face, N.slot, N.count, N.auto_renumber);
+		}
+		bool bChanged = Before.Num() != PresetMemory.slot_numbers.Num();
+		for (int32 i = 0; !bChanged && i < Before.Num(); ++i)
+		{
+			const FCamSlotNumber& A = Before[i];
+			const FCamSlotNumber& B = PresetMemory.slot_numbers[i];
+			bChanged = A.face != B.face || A.slot != B.slot || A.count != B.count || A.auto_renumber != B.auto_renumber;
+		}
+		if (bChanged)
+		{
+			PushCamNumberAnchors(GetWorldPtr(), PresetMemory);
+		}
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetBoolField(TEXT("changed"), bChanged);
+		O->SetNumberField(TEXT("applied"), Items.Num());
+		O->SetArrayField(TEXT("slotNumbers"), SlotNumbersJson(PresetMemory));
+		if (bSave)
+		{
+			const FString Path = ResolveCamPresetPath(P);
+			if (!UCameraControlLibrary::SaveToJson(Path, PresetMemory))
+			{
+				E.FailDomain(FString::Printf(TEXT("카메라 프리셋 저장 실패: %s"), *Path));
+				return nullptr;
+			}
+			O->SetStringField(TEXT("fileName"), FPaths::GetCleanFilename(Path));
+		}
+		return RpcDto::MakeObject(O);
+	});
+
 	Dispatcher.Register(TEXT("cam.slotNumbers"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();

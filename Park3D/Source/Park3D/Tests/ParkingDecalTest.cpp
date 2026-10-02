@@ -664,6 +664,33 @@ bool FParkingSlotNumberTest::RunTest(const FString& Parameters)
 		Mgr->SetNumberAnchors({});
 	}
 
+	// TN-11: numberMode anchorsOnly(보드 #1146) — 기준점이 매긴 면에만 글자. 면 목록·번호 체계는 그대로다.
+	{
+		Mgr->bNumbersAnchorsOnly = true;
+		Mgr->SetNumberAnchors({}); // 기준점 0 → 글자 0, 면 목록은 그대로
+		TestEqual(TEXT("TN-11 기준점 없음 → 가시 번호 0"), VisibleNumbers().Num(), 0);
+		TArray<FParkingSlotNumberInfo> Slots;
+		Mgr->CollectSlotNumbers(Presets, Slots);
+		TestEqual(TEXT("TN-11 면 목록 수 불변"), Slots.Num(), Shown.Num());
+
+		TArray<FSlotNumberAnchor> Anchors;
+		Anchors.Add(FSlotNumberAnchor{ TEXT("preset:3#3"), 10, 2, false }); // 3·4번 면 → 10·11
+		Mgr->SetNumberAnchors(Anchors);
+		TArray<FString> Drawn = VisibleNumbers();
+		TestEqual(TEXT("TN-11 기준점 면 2장만 표시"), Drawn.Num(), 2);
+		TestTrue(TEXT("TN-11 10·11 표시"), Drawn.Contains(TEXT("10")) && Drawn.Contains(TEXT("11")));
+		Mgr->CollectSlotNumbers(Presets, Slots);
+		int32 DrawFlags = 0;
+		for (const FParkingSlotNumberInfo& S : Slots) { if (Mgr->ShouldDrawNumber(S)) ++DrawFlags; }
+		TestEqual(TEXT("TN-11 drawn 판정 = 그린 수"), DrawFlags, 2);
+
+		// auto 로 돌리면 기준점이 있어도 모든 면이 다시 보인다.
+		Mgr->bNumbersAnchorsOnly = false;
+		Mgr->RebuildSlotNumbers(Presets);
+		TestEqual(TEXT("TN-11 auto 복귀 → 전부 표시"), VisibleNumbers().Num(), Shown.Num());
+		Mgr->SetNumberAnchors({});
+	}
+
 	// TN-10: 글자 회전(프리셋 NumberRotate, 보드 #1086). 180 → 프리셋 면 글자 축만 뒤집히고 레벨 면은 그대로,
 	// 그린 TextRender 의 로컬 +Z(글자 아래쪽) 도 그 축을 따른다. 저장 왕복(DTO numberRot)에서도 값이 유지된다.
 	{

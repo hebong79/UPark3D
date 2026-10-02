@@ -24,6 +24,8 @@ struct FParkingSlotNumberInfo
 	int32 Number = 0;
 	/** 기준점을 걸기 전의 순번(프리셋 면·레벨 면 각각 1부터). 사람이 면을 가리킬 때 쓰는 이름이다. */
 	int32 BaseNumber = 0;
+	/** 번호가 기준점에서 왔는가(기준 면 + 그 기준점이 이어 매긴 면). bNumbersAnchorsOnly 면 이것만 그린다. */
+	bool bAnchored = false;
 	/** 면 중심(월드 cm). */
 	FVector Center = FVector::ZeroVector;
 	/** 면 길이축(수평 단위 벡터). */
@@ -184,6 +186,16 @@ public:
 	 */
 	UPROPERTY(Transient, BlueprintReadWrite, Category = "Parking|Number")
 	bool bShowSlotNumbers = true;
+
+	/**
+	 * 번호 모드(보드 #1146, RPC preset.setView numberMode). false="auto"(기본) — 모든 면에 번호.
+	 * true="anchorsOnly" — 기준점이 매긴 면(bAnchored)에만 **글자**를 그린다. 면 자체(라인·데칼·조회·스냅·시뮬)는 그대로다.
+	 * 쿠킹 BP 참조가 없는 액터지만 다른 표시 플래그와 달리 패널에 없는 값이라 UPROPERTY 로 두지 않는다.
+	 */
+	bool bNumbersAnchorsOnly = false;
+
+	/** 이 면의 글자를 그리는가 — 렌더와 preset.numbers 의 drawn 이 같은 판정을 쓴다. */
+	bool ShouldDrawNumber(const FParkingSlotNumberInfo& S) const { return !bNumbersAnchorsOnly || S.bAnchored; }
 
 	/**
 	 * 주차면 번호를 바닥에 다시 그린다. 대상은 둘 —

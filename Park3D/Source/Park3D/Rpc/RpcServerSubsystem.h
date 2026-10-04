@@ -9,6 +9,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "HttpRouteHandle.h"
+#include "RpcHelp.h"
 #include "Modules/CarRpcModule.h"
 #include "Modules/RandomRpcModule.h"
 #include "Modules/PresetRpcModule.h"
@@ -61,6 +62,12 @@ private:
 	bool HandleHealth(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete);
 	bool HandleCatalog(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete);
 	bool HandleOptions(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete);
+
+	/** GET /help[/rpc[/<method>]|/units][?format=json] — 사람·에이전트용 도움말(보드 #1156). 인증 없음(문서다). */
+	bool HandleHelp(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete);
+
+	/** 도움말의 "이 인스턴스 지금" + 예시 자리표시자 실제 값. BaseUrl 이 비면 http://localhost:<port>. */
+	Park3DRpcHelp::FLiveContext BuildHelpContext(const FString& BaseUrl);
 
 	/**
 	 * GET /stream — MJPEG(multipart/x-mixed-replace). 응답을 완결하지 않고 스트림 매니저에 넘긴다.

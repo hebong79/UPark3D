@@ -17,6 +17,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Misc/App.h"
 #include "Containers/Ticker.h"   // view.waitFrame 미룬 응답
+#include "HAL/FileManager.h"     // /help 의 exe 빌드 시각
 
 #include "HttpServerModule.h"
 #include "IHttpRouter.h"
@@ -416,12 +417,17 @@ void URpcServerSubsystem::RegisterSystemMethods()
 		return MakeShared<FJsonValueObject>(O);
 	});
 
-	// system.catalog — {methods:[...]}.
+	// system.catalog — {methods:[...]}. detail:true 면 이름 대신 /help?format=json 의 methods[] 객체(보드 #1156).
 	URpcDispatcher* D = Dispatcher;
-	Dispatcher->RegisterPersistent(TEXT("system.catalog"), [D](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	Dispatcher->RegisterPersistent(TEXT("system.catalog"), [this, D](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		TArray<TSharedPtr<FJsonValue>> Methods;
-		if (D)
+		if (D && RpcParam::GetBool(P, TEXT("detail"), false))
+		{
+			const Park3DRpcHelp::FLiveContext Ctx = BuildHelpContext(FString());
+			for (const FString& M : D->GetMethods()) { Methods.Add(MakeShared<FJsonValueObject>(Park3DRpcHelp::MethodJson(*D, M, Ctx))); }
+		}
+		else if (D)
 		{
 			for (const FString& M : D->GetMethods()) { Methods.Add(MakeShared<FJsonValueString>(M)); }
 		}
@@ -486,6 +492,21 @@ void URpcServerSubsystem::RegisterSystemMethods()
 		Stream->SetNumberField(TEXT("maxCameras"), StreamSub ? StreamSub->GetCamPortMax() - StreamSub->GetCamPortMin() + 1 : 0);
 		O->SetObjectField(TEXT("stream"), Stream);
 		return MakeShared<FJsonValueObject>(O);
+	});
+
+	// system.help {method?} — /help?format=json 과 같은 본문(method 를 주면 그 하나). HTTP 를 못 쓰는 MCP 브리지용.
+	Dispatcher->RegisterPersistent(TEXT("system.help"), [this, D](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		if (!D) { E.FailDomain(TEXT("디스패처 없음"), ERpcErrorKind::Internal); return nullptr; }
+		const Park3DRpcHelp::FLiveContext Ctx = BuildHelpContext(FString());
+		const FString Method = RpcParam::GetString(P, TEXT("method"), FString());
+		if (Method.IsEmpty()) { return MakeShared<FJsonValueObject>(Park3DRpcHelp::IndexJson(*D, Ctx)); }
+		if (!D->HasMethod(Method))
+		{
+			E.FailDomain(FString::Printf(TEXT("미등록 method: %s"), *Method), ERpcErrorKind::NotFound);
+			return nullptr;
+		}
+		return MakeShared<FJsonValueObject>(Park3DRpcHelp::MethodJson(*D, Method, Ctx));
 	});
 
 	// system.* 자기 설명(system.describe 용). 파이썬 system.py 의 params/doc 과 같다.
@@ -647,6 +668,9 @@ void URpcServerSubsystem::StartServer()
 		FHttpRequestHandler::CreateUObject(this, &URpcServerSubsystem::HandleCatalog)));
 	RouteHandles.Add(Router->BindRoute(FHttpPath(TEXT("/stream")), EHttpServerRequestVerbs::VERB_GET,
 		FHttpRequestHandler::CreateUObject(this, &URpcServerSubsystem::HandleStream)));
+	// 라우터는 경로를 뒤에서부터 잘라 가며 찾으므로 /help 하나가 /help/rpc/<method>·/help/units 까지 받는다.
+	RouteHandles.Add(Router->BindRoute(FHttpPath(TEXT("/help")), EHttpServerRequestVerbs::VERB_GET,
+		FHttpRequestHandler::CreateUObject(this, &URpcServerSubsystem::HandleHelp)));
 
 	// 스트림 매니저는 라우터와 수명을 맞춘다(리스너 없이 티커만 도는 상태를 만들지 않는다).
 	StreamManager = MakeUnique<FMjpegStreamManager>([this]() -> UWorld* { return GetWorld(); });
@@ -1056,6 +1080,172 @@ bool URpcServerSubsystem::HandleStream(const FHttpServerRequest& Request, const 
 	}
 
 	// 성공 시 응답은 BeginStream 안에서 이미 시작됐다(이후 프레임은 매니저 티커가 공급).
+	return true;
+}
+
+Park3DRpcHelp::FLiveContext URpcServerSubsystem::BuildHelpContext(const FString& BaseUrl)
+{
+	Park3DRpcHelp::FLiveContext Ctx;
+	Ctx.BaseUrl = BaseUrl.IsEmpty() ? FString::Printf(TEXT("http://localhost:%d"), Port) : BaseUrl;
+	Ctx.RpcPort = Port;
+	Ctx.Auth = bAllowAnonymous ? TEXT("anonymous") : (AuthToken.IsEmpty() ? TEXT("loopback-only") : TEXT("token"));
+	const FDateTime Built = IFileManager::Get().GetTimeStamp(FPlatformProcess::ExecutablePath());
+	Ctx.ExeBuilt = Built == FDateTime::MinValue() ? FString() : Built.ToIso8601();
+
+	UWorld* World = GetWorld();
+	if (!World) return Ctx;
+
+	FPark3DAppConfig Config;
+	UPark3DAppConfigLibrary::Load(Config);
+	Ctx.Level = UPark3DAppConfigLibrary::GetCurrentLevelPath(World);
+	for (const FPark3DLevelOption& Opt : Config.Levels)
+	{
+		if (!Ctx.Level.IsEmpty() && UPark3DAppConfigLibrary::NormalizeLevelPath(Opt.Level).Equals(Ctx.Level, ESearchCase::IgnoreCase))
+		{
+			Ctx.LevelName = Opt.Name;
+			break;
+		}
+	}
+	if (Config.Levels.Num() > 0)
+	{
+		Ctx.Placeholders.Add(TEXT("<levelName>"), MakeShared<FJsonValueString>(Ctx.LevelName.IsEmpty() ? Config.Levels[0].Name : Ctx.LevelName));
+	}
+	if (const UCamStreamSubsystem* Stream = World->GetSubsystem<UCamStreamSubsystem>())
+	{
+		Ctx.MainViewPort = Stream->GetMainPort();
+		Ctx.CamPortMin = Stream->GetCamPortMin();
+		Ctx.CamPortMax = Stream->GetCamPortMax();
+	}
+
+	// 액터를 직접 센다 — 도움말이 매니저를 스폰하면 안 된다(system.stats 와 같은 규칙).
+	Ctx.Cars = Ctx.VisibleCars = 0;
+	for (TActorIterator<ACarActor> It(World); It; ++It)
+	{
+		++Ctx.Cars;
+		if (!It->IsHidden())
+		{
+			++Ctx.VisibleCars;
+			if (!Ctx.Placeholders.Contains(TEXT("<carNameId>")) && !It->CarData.id.IsEmpty())
+			{
+				Ctx.Placeholders.Add(TEXT("<carNameId>"), MakeShared<FJsonValueString>(It->CarData.id));
+			}
+		}
+	}
+	Ctx.Cameras = 0;
+	for (TActorIterator<APTZCameraActor> It(World); It; ++It) { ++Ctx.Cameras; }
+	if (Ctx.Cameras > 0) { Ctx.Placeholders.Add(TEXT("<camId>"), MakeShared<FJsonValueNumber>(1)); }   // camId = 매니저 순번 1..N
+
+	Ctx.Presets = 0;
+	if (AParkingPresetManager* PresetMgr = Cast<AParkingPresetManager>(UGameplayStatics::GetActorOfClass(World, AParkingPresetManager::StaticClass())))
+	{
+		Ctx.Presets = PresetMgr->GetPresets().Num();
+		if (Ctx.Presets > 0)
+		{
+			Ctx.Placeholders.Add(TEXT("<presetId>"), MakeShared<FJsonValueNumber>(PresetMgr->GetPresets()[0].PresetIdx));
+		}
+		// faceKey 는 preset.numbers 와 같은 목록에서(레벨 면 포함). 매니저가 있을 때만 부르므로 스폰하지 않는다.
+		if (Dispatcher && Dispatcher->HasMethod(TEXT("preset.numbers")))
+		{
+			TSharedPtr<FJsonValue> Res;
+			FRpcError Er;
+			if (Dispatcher->Dispatch(TEXT("preset.numbers"), MakeShared<FJsonObject>(), Res, Er) && Res.IsValid() && Res->Type == EJson::Object)
+			{
+				const TArray<TSharedPtr<FJsonValue>>* Nums = nullptr;
+				if (Res->AsObject()->TryGetArrayField(TEXT("numbers"), Nums) && Nums && Nums->Num() > 0)
+				{
+					FString Key;
+					if ((*Nums)[0]->AsObject()->TryGetStringField(TEXT("faceKey"), Key))
+					{
+						Ctx.Placeholders.Add(TEXT("<faceKey>"), MakeShared<FJsonValueString>(Key));
+					}
+				}
+			}
+		}
+	}
+	return Ctx;
+}
+
+bool URpcServerSubsystem::HandleHelp(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete)
+{
+	if (!Dispatcher)
+	{
+		CompleteJsonWithCode(OnComplete, TEXT("{\"error\":\"dispatcher not ready\"}"), EHttpServerResponseCodes::ServiceUnavail);
+		return true;
+	}
+	// 예시 curl 이 그대로 돌도록 호출자가 쓴 주소(Host 헤더)를 그대로 쓴다.
+	FString BaseUrl;
+	if (const TArray<FString>* Host = Request.Headers.Find(TEXT("host")); Host && Host->Num() > 0 && !(*Host)[0].IsEmpty())
+	{
+		BaseUrl = TEXT("http://") + (*Host)[0];
+	}
+	const Park3DRpcHelp::FLiveContext Ctx = BuildHelpContext(BaseUrl);
+
+	auto Query = [&Request](const TCHAR* Key) -> FString
+	{
+		const FString* V = Request.QueryParams.Find(Key);
+		if (!V) return FString();
+		// %XX(UTF-8)·'+' 디코드 — HTTP 모듈(FPlatformHttp::UrlDecode) 의존을 늘리지 않으려고 직접 푼다.
+		TArray<uint8> Bytes;
+		const FTCHARToUTF8 Raw(**V);
+		for (int32 i = 0; i < Raw.Length(); ++i)
+		{
+			const ANSICHAR C = Raw.Get()[i];
+			if (C == '+') { Bytes.Add(' '); }
+			else if (C == '%' && i + 2 < Raw.Length() && FChar::IsHexDigit(Raw.Get()[i + 1]) && FChar::IsHexDigit(Raw.Get()[i + 2]))
+			{
+				Bytes.Add(static_cast<uint8>(FParse::HexDigit(Raw.Get()[i + 1]) * 16 + FParse::HexDigit(Raw.Get()[i + 2])));
+				i += 2;
+			}
+			else { Bytes.Add(static_cast<uint8>(C)); }
+		}
+		const FUTF8ToTCHAR Decoded(reinterpret_cast<const ANSICHAR*>(Bytes.GetData()), Bytes.Num());
+		return FString(Decoded.Length(), Decoded.Get());
+	};
+	const bool bJson = Query(TEXT("format")).Equals(TEXT("json"), ESearchCase::IgnoreCase);
+
+	// RelativePath 는 라우터가 "/help" 를 떼어 낸 나머지("/", "/rpc", "/rpc/car.list", "/units").
+	FString Sub = Request.RelativePath.GetPath();
+	if (Sub.StartsWith(TEXT("/help"))) Sub.RightChopInline(5);
+	Sub.RemoveFromEnd(TEXT("/"));
+
+	auto Markdown = [&OnComplete](const FString& Body, EHttpServerResponseCodes Code)
+	{
+		TUniquePtr<FHttpServerResponse> Response = FHttpServerResponse::Create(Body, TEXT("text/markdown"));
+		Response->Code = Code;
+		AddCors(*Response);
+		OnComplete(MoveTemp(Response));
+	};
+
+	if (Sub.IsEmpty())
+	{
+		if (bJson) CompleteJson(OnComplete, SerializeObject(Park3DRpcHelp::IndexJson(*Dispatcher, Ctx)));
+		else Markdown(Park3DRpcHelp::IndexMarkdown(*Dispatcher, Ctx), EHttpServerResponseCodes::Ok);
+		return true;
+	}
+	if (Sub == TEXT("/units"))
+	{
+		Markdown(Park3DRpcHelp::UnitsMarkdown(), EHttpServerResponseCodes::Ok);
+		return true;
+	}
+	if (Sub == TEXT("/rpc"))
+	{
+		if (bJson) CompleteJson(OnComplete, SerializeObject(Park3DRpcHelp::IndexJson(*Dispatcher, Ctx)));
+		else Markdown(Park3DRpcHelp::RpcListMarkdown(*Dispatcher, Ctx, Query(TEXT("group")), Query(TEXT("q"))), EHttpServerResponseCodes::Ok);
+		return true;
+	}
+	if (Sub.StartsWith(TEXT("/rpc/")))
+	{
+		const FString Method = Sub.RightChop(5);
+		if (!Dispatcher->HasMethod(Method))
+		{
+			Markdown(FString::Printf(TEXT("# Unknown method `%s`\n\nNot registered on this server. See [/help/rpc](/help/rpc).\n"), *Method), EHttpServerResponseCodes::NotFound);
+			return true;
+		}
+		if (bJson) CompleteJson(OnComplete, SerializeObject(Park3DRpcHelp::MethodJson(*Dispatcher, Method, Ctx)));
+		else Markdown(Park3DRpcHelp::MethodMarkdown(*Dispatcher, Method, Ctx), EHttpServerResponseCodes::Ok);
+		return true;
+	}
+	Markdown(FString::Printf(TEXT("# Not found `/help%s`\n\nTopics: [/help](/help) · [/help/rpc](/help/rpc) · [/help/units](/help/units)\n"), *Sub), EHttpServerResponseCodes::NotFound);
 	return true;
 }
 

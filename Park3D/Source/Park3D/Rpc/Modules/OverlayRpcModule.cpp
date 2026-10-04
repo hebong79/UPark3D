@@ -9,6 +9,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
+#include "HAL/FileManager.h"
+#include "Misc/Paths.h"
 
 namespace
 {
@@ -70,6 +72,7 @@ namespace
 		for (const FString& S : Presets) { PIdx.Add(MakeShared<FJsonValueNumber>(FCString::Atoi(*S))); }
 		O->SetArrayField(TEXT("highlightedPresets"), PIdx);
 		O->SetArrayField(TEXT("previews"), OvStrings(Previews));
+		O->SetBoolField(TEXT("lot"), Ov && Ov->Lot.IsSet());
 		TSharedPtr<FJsonObject> L = MakeShared<FJsonObject>();
 		L->SetBoolField(TEXT("cars"), Ov && Ov->bLabelCars);
 		L->SetBoolField(TEXT("presets"), Ov && Ov->bLabelPresets);
@@ -83,6 +86,110 @@ namespace
 	FVector OvPoint(const TSharedPtr<FJsonObject>& O, float U)
 	{
 		return FVector(RpcParam::GetFloat(O, TEXT("x")) * U, RpcParam::GetFloat(O, TEXT("y")) * U, RpcParam::GetFloat(O, TEXT("z"), 0.03) * U);
+	}
+
+	/** 다각형 꼭짓점 상한 — 도면 영역은 ~500점. */
+	constexpr int32 OvMaxPolygonPoints = 2000;
+
+	/**
+	 * 다각형 바닥 높이(cm) — 꼭짓점(최대 64개 표본)마다 정적 오브젝트 질의로 노면을 찾아 중앙값 + 2 cm.
+	 * ECC_Visibility 가 아니라 정적 질의인 이유는 CarActor 접지와 같다(LV_Park_01 노면은 Visibility 를 무시하고,
+	 * 차량은 WorldDynamic 이라 걸러진다). 하나도 못 찾으면 false.
+	 */
+	bool OvGroundZ(UWorld* World, const TArray<FVector2D>& Pts, float& OutZ)
+	{
+		if (!World || Pts.Num() == 0) return false;
+		TArray<double> Hits;
+		const int32 Step = FMath::Max(1, Pts.Num() / 64);
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(LotGround), /*bTraceComplex=*/true);
+		for (int32 i = 0; i < Pts.Num(); i += Step)
+		{
+			FHitResult Hit;
+			if (World->LineTraceSingleByObjectType(Hit, FVector(Pts[i].X, Pts[i].Y, 300.0), FVector(Pts[i].X, Pts[i].Y, -1000.0),
+				FCollisionObjectQueryParams(FCollisionObjectQueryParams::AllStaticObjects), Params))
+			{
+				Hits.Add(Hit.ImpactPoint.Z);
+			}
+		}
+		if (Hits.Num() == 0) return false;
+		Hits.Sort();
+		OutZ = Hits[Hits.Num() / 2] + 2.0;
+		return true;
+	}
+
+	/**
+	 * 다각형 한 개 {points:[{x,y}], z?, fill?, opacity?, line?, lineWidth?, dashed?, color?} (m).
+	 * z 생략 = 노면 자동(OutZSource "ground", 못 찾으면 "default" 0.03 m). 점 3개 미만·상한 초과는 -32602.
+	 */
+	bool OvReadPolygon(const TSharedPtr<FJsonObject>& O, UWorld* World, const FLinearColor& DefaultColor,
+		FRpcPreviewPolygon& Out, FString& OutZSource, FRpcError& E)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+		RpcParam::MarkRead(O, TEXT("points"));
+		if (!O.IsValid() || !O->TryGetArrayField(TEXT("points"), Arr))
+		{
+			E.FailDomain(TEXT("points:[{x,y}] 가 필요합니다"), ERpcErrorKind::BadParams);
+			return false;
+		}
+		if (Arr->Num() > OvMaxPolygonPoints)
+		{
+			E.FailDomain(FString::Printf(TEXT("points 가 %d개 — 상한 %d"), Arr->Num(), OvMaxPolygonPoints), ERpcErrorKind::BadParams);
+			return false;
+		}
+		const float U = 100.f;
+		for (const TSharedPtr<FJsonValue>& V : *Arr)
+		{
+			const TSharedPtr<FJsonObject>* P = nullptr;
+			if (!V->TryGetObject(P) || !P) continue;
+			Out.Points.Add(FVector2D(RpcParam::GetFloat(*P, TEXT("x")) * U, RpcParam::GetFloat(*P, TEXT("y")) * U));
+		}
+		if (!OvReadColor(O, DefaultColor, Out.Color, E)) return false;
+		Out.bFill = RpcParam::GetBool(O, TEXT("fill"), true);
+		Out.Opacity = FMath::Clamp(RpcParam::GetFloat(O, TEXT("opacity"), 0.25), 0.0, 1.0);
+		Out.bLine = RpcParam::GetBool(O, TEXT("line"), true);
+		Out.LineWidthCm = FMath::Max(RpcParam::GetFloat(O, TEXT("lineWidth"), 0.3) * U, 1.0);
+		Out.bDashed = RpcParam::GetBool(O, TEXT("dashed"), false);
+		if (!Out.Prepare())
+		{
+			E.FailDomain(TEXT("서로 다른 점이 3개 이상 필요합니다"), ERpcErrorKind::BadParams);
+			return false;
+		}
+		if (RpcParam::Has(O, TEXT("z")))
+		{
+			Out.ZCm = RpcParam::GetFloat(O, TEXT("z")) * U;
+			OutZSource = TEXT("param");
+		}
+		else if (OvGroundZ(World, Out.Points, Out.ZCm))
+		{
+			OutZSource = TEXT("ground");
+		}
+		else
+		{
+			Out.ZCm = 3.f;
+			OutZSource = TEXT("default");
+		}
+		return true;
+	}
+
+	TSharedPtr<FJsonObject> OvLotState(const ARpcOverlayActor* Ov, UWorld* World)
+	{
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		if (Ov && Ov->Lot.IsSet())
+		{
+			const FRpcPreviewPolygon& L = Ov->Lot.GetValue();
+			TSharedPtr<FJsonObject> J = ARpcOverlayActor::PolygonToJson(L);
+			J->SetNumberField(TEXT("triangles"), L.Triangles.Num() / 3);
+			O->SetObjectField(TEXT("lot"), J);
+		}
+		else
+		{
+			O->SetField(TEXT("lot"), MakeShared<FJsonValueNull>());
+		}
+		const FString Path = ARpcOverlayActor::GetLotFilePath(World);
+		O->SetStringField(TEXT("file"), Path);
+		O->SetBoolField(TEXT("fileExists"), FPaths::FileExists(Path));
+		O->SetBoolField(TEXT("global"), true);
+		return O;
 	}
 }
 
@@ -248,9 +355,31 @@ void FOverlayRpcModule::Register(URpcDispatcher& Dispatcher)
 				Set.Boxes.Add(Box);
 			}
 		}
-		if (Set.Faces.Num() + Set.Boxes.Num() == 0)
+		// polygons — 바닥 다각형(채움+윤곽, 보드 #1168). 색 생략 = 묶음 color.
+		TArray<TSharedPtr<FJsonValue>> PolyInfo;
+		RpcParam::MarkRead(P, TEXT("polygons"));
+		if (P->TryGetArrayField(TEXT("polygons"), Arr))
 		{
-			E.FailDomain(TEXT("faces 또는 boxes 가 필요합니다"), ERpcErrorKind::BadParams);
+			for (const TSharedPtr<FJsonValue>& V : *Arr)
+			{
+				const TSharedPtr<FJsonObject>* G = nullptr;
+				if (!V->TryGetObject(G) || !G) continue;
+				FRpcPreviewPolygon Poly;
+				FString ZSource;
+				if (!OvReadPolygon(*G, GetWorldPtr(), Set.Color, Poly, ZSource, E)) return nullptr;
+				TSharedPtr<FJsonObject> Info = MakeShared<FJsonObject>();
+				Info->SetNumberField(TEXT("points"), Poly.Points.Num());
+				Info->SetNumberField(TEXT("triangles"), Poly.Triangles.Num() / 3);
+				Info->SetBoolField(TEXT("filled"), Poly.bFill && Poly.Triangles.Num() > 0);
+				Info->SetNumberField(TEXT("z"), Poly.ZCm / 100.0);
+				Info->SetStringField(TEXT("zSource"), ZSource);
+				PolyInfo.Add(MakeShared<FJsonValueObject>(Info));
+				Set.Polygons.Add(MoveTemp(Poly));
+			}
+		}
+		if (Set.Faces.Num() + Set.Boxes.Num() + Set.Polygons.Num() == 0)
+		{
+			E.FailDomain(TEXT("faces·boxes·polygons 중 하나가 필요합니다"), ERpcErrorKind::BadParams);
 			return nullptr;
 		}
 		Ov->Previews.Add(Id, Set);
@@ -259,11 +388,71 @@ void FOverlayRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetStringField(TEXT("id"), Id);
 		O->SetNumberField(TEXT("faces"), Set.Faces.Num());
 		O->SetNumberField(TEXT("boxes"), Set.Boxes.Num());
+		O->SetArrayField(TEXT("polygons"), PolyInfo);
 		return RpcDto::MakeObject(O);
 	});
 	Dispatcher.SetMethodMeta(TEXT("preview.show"), { true, false,
-		TEXT("{id:str, faces?:[{x,y,z?,rot,xSize,zSize}], boxes?:[{x,y,z?,rot,size:{x,y,z}|number}], color?}"),
-		TEXT("확인용 반투명 고스트(m, rot=길이축 yaw). car/preset 목록·저장에 안 들어간다. 같은 id 덮어씀, global") });
+		TEXT("{id:str, faces?:[{x,y,z?,rot,xSize,zSize}], boxes?:[{x,y,z?,rot,size:{x,y,z}|number}], polygons?:[{points:[{x,y}], z?, fill?=true, opacity?=0.25, line?=true, lineWidth?=0.3, dashed?, color?}], color?}"),
+		TEXT("확인용 반투명 고스트(m, rot=길이축 yaw). polygons = 바닥 다각형 채움+윤곽(z 생략 = 노면 자동). car/preset 목록·저장에 안 들어간다. 같은 id 덮어씀, global") });
+
+	// lot.set {points, z?, fill?, opacity?, line?, lineWidth?, dashed?, color?, save?=true} — 주차장 영역(보드 #1168).
+	// 미리보기와 달리 레벨별 파일(Save/3D/Lot/Lot_<레벨>.json)에 남아 재기동·레벨 전환 뒤 GameMode 가 다시 그린다.
+	Dispatcher.Register(TEXT("lot.set"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		UWorld* World = GetWorldPtr();
+		ARpcOverlayActor* Ov = ARpcOverlayActor::Get(World);
+		if (!Ov) { E.FailDomain(TEXT("월드 없음(맵 미로드)"), ERpcErrorKind::Busy); return nullptr; }
+		FRpcPreviewPolygon Poly;
+		FString ZSource;
+		if (!OvReadPolygon(P, World, Poly.Color, Poly, ZSource, E)) return nullptr;
+		const bool bSave = RpcParam::GetBool(P, TEXT("save"), true);
+		Ov->Lot = Poly;
+		Ov->Redraw();
+		FString Path;
+		const bool bSaved = bSave && Ov->SaveLot(Path);
+		if (bSave && !bSaved) { UE_LOG(LogTemp, Warning, TEXT("[Lot] 주차장 영역 저장 실패: %s"), *Path); }
+		TSharedPtr<FJsonObject> O = OvLotState(Ov, World);
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetBoolField(TEXT("saved"), bSaved);
+		O->SetStringField(TEXT("zSource"), ZSource);
+		O->SetBoolField(TEXT("filled"), Poly.bFill && Poly.Triangles.Num() > 0);
+		O->SetNumberField(TEXT("changed"), 1);
+		return RpcDto::MakeObject(O);
+	});
+	Dispatcher.SetMethodMeta(TEXT("lot.set"), { true, false,
+		TEXT("{points:[{x,y}], z?, fill?=true, opacity?=0.25, line?=true, lineWidth?=0.3, dashed?, color?='#ff9f1c', save?=true}"),
+		TEXT("주차장 영역 다각형(m) — 채움+윤곽, 레벨별 파일에 저장돼 재기동 후 복원. 하나만(덮어씀). 응답 {lot, file, saved, zSource, filled}") });
+
+	Dispatcher.Register(TEXT("lot.get"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		UWorld* World = GetWorldPtr();
+		return RpcDto::MakeObject(OvLotState(ARpcOverlayActor::Get(World, /*bCreate=*/false), World));
+	});
+	Dispatcher.SetMethodMeta(TEXT("lot.get"), { false, false, TEXT(""),
+		TEXT("주차장 영역 {lot:{points,z,fill,opacity,line,lineWidth,dashed,color,triangles}|null, file, fileExists}") });
+
+	Dispatcher.Register(TEXT("lot.clear"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		UWorld* World = GetWorldPtr();
+		ARpcOverlayActor* Ov = ARpcOverlayActor::Get(World, /*bCreate=*/false);
+		const bool bHad = Ov && Ov->Lot.IsSet();
+		const bool bKeepFile = RpcParam::GetBool(P, TEXT("keepFile"), false);
+		bool bFileRemoved = false;
+		if (Ov)
+		{
+			Ov->Lot.Reset();
+			Ov->Redraw();
+		}
+		const FString Path = ARpcOverlayActor::GetLotFilePath(World);
+		if (!bKeepFile && FPaths::FileExists(Path)) { bFileRemoved = IFileManager::Get().Delete(*Path); }
+		TSharedPtr<FJsonObject> O = OvLotState(Ov, World);
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetBoolField(TEXT("fileRemoved"), bFileRemoved);
+		O->SetNumberField(TEXT("changed"), (bHad || bFileRemoved) ? 1 : 0);
+		return RpcDto::MakeObject(O);
+	});
+	Dispatcher.SetMethodMeta(TEXT("lot.clear"), { true, false, TEXT("{keepFile?:bool=false}"),
+		TEXT("주차장 영역 지우기 — 화면과 레벨 파일(keepFile:true 면 화면만, 재기동 시 복원)") });
 
 	Dispatcher.Register(TEXT("preview.clear"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{

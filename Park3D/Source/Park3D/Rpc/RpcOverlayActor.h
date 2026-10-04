@@ -10,6 +10,7 @@
 #include "GameFramework/Actor.h"
 #include "RpcOverlayActor.generated.h"
 
+class FJsonObject;
 class ULineBatchComponent;
 class UTextRenderComponent;
 
@@ -29,10 +30,29 @@ struct FRpcPreviewBox
 	FVector HalfSizeCm = FVector(100.f);
 };
 
+/** 바닥 다각형(주차장 영역 — 보드 #1168). 꼭짓점은 월드 cm, 높이는 한 장(평면). */
+struct FRpcPreviewPolygon
+{
+	TArray<FVector2D> Points;
+	float ZCm = 3.f;
+	bool bFill = true;
+	float Opacity = 0.25f;
+	bool bLine = true;
+	float LineWidthCm = 30.f;
+	bool bDashed = false;
+	FLinearColor Color = FLinearColor(FColor(255, 159, 28));   // #ff9f1c — SettingManager 도면 영역 색
+	/** 채움 삼각형(Points 인덱스). 자기교차 등으로 귀 자르기가 못 끝나면 비어 있다. */
+	TArray<int32> Triangles;
+
+	/** 연속 중복·닫는 점을 걷어내고 Triangles 를 채운다. 점이 3개 미만이면 false. */
+	bool Prepare();
+};
+
 struct FRpcPreviewSet
 {
 	TArray<FRpcPreviewFace> Faces;
 	TArray<FRpcPreviewBox> Boxes;
+	TArray<FRpcPreviewPolygon> Polygons;
 	FLinearColor Color = FLinearColor(0.1f, 0.9f, 1.f, 1.f);
 };
 
@@ -61,6 +81,19 @@ public:
 	// ---- 미리보기 ----
 	TMap<FString, FRpcPreviewSet> Previews;
 
+	// ---- 주차장 영역(lot.*) — 미리보기와 달리 레벨별 파일(Save/3D/Lot/Lot_<레벨>.json)에 남는다 ----
+	TOptional<FRpcPreviewPolygon> Lot;
+
+	/** 이 월드(레벨)의 영역 파일 경로. */
+	static FString GetLotFilePath(const UWorld* World);
+	/** 파일이 있으면 읽어 그린다(GameMode BeginPlay — 재기동·레벨 전환 후 복원). 파일이 없으면 아무것도 스폰하지 않는다. */
+	static bool LoadLotForWorld(UWorld* World);
+	/** Lot 을 파일에 쓴다(없으면 파일 삭제). */
+	bool SaveLot(FString& OutPath) const;
+	/** 다각형 ↔ JSON(m) — lot 파일과 lot.get 응답이 같은 모양. */
+	static TSharedPtr<FJsonObject> PolygonToJson(const FRpcPreviewPolygon& Poly);
+	static bool PolygonFromJson(const TSharedPtr<FJsonObject>& O, FRpcPreviewPolygon& Out);
+
 	/** 지금 상태로 즉시 다시 그린다(RPC 가 바꾼 직후 — 다음 틱을 기다리지 않는다). */
 	void Redraw();
 
@@ -79,5 +112,6 @@ private:
 
 	void DrawOutlineBox(const FVector& Center, const FVector& HalfSize, const FQuat& Rot, const FLinearColor& Color, float Thickness);
 	void DrawFace(const FRpcPreviewFace& F, const FLinearColor& Color);
+	void DrawPolygon(const FRpcPreviewPolygon& Poly);
 	void PlaceLabel(const FVector& WorldLoc, const FString& Text, const FColor& Color, const FRotator& ViewRot);
 };

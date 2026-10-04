@@ -10,8 +10,15 @@
 #include "Camera/PlayerCameraManager.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "../Park3DDataPaths.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
+#include "Misc/FileHelper.h"
+#include "HAL/FileManager.h"
 
 namespace
 {
@@ -19,6 +26,71 @@ namespace
 	constexpr float OverlayThicknessCm = 6.f;
 	/** 다시 그리는 주기(초) — 강조된 차가 움직이면 따라간다(car.drive·시뮬). */
 	constexpr float OverlayRedrawSec = 0.1f;
+	/** 점선 — 선 길이·틈(cm). */
+	constexpr float PolyDashCm = 100.f;
+	constexpr float PolyGapCm = 60.f;
+
+	double PolyCross(const FVector2D& O, const FVector2D& A, const FVector2D& B)
+	{
+		return (A.X - O.X) * (B.Y - O.Y) - (A.Y - O.Y) * (B.X - O.X);
+	}
+}
+
+bool FRpcPreviewPolygon::Prepare()
+{
+	// 연속 중복(1 cm 이내)·닫는 점(첫 점 반복) 제거.
+	TArray<FVector2D> Clean;
+	for (const FVector2D& P : Points)
+	{
+		if (Clean.Num() > 0 && FVector2D::Distance(Clean.Last(), P) < 1.0) continue;
+		Clean.Add(P);
+	}
+	while (Clean.Num() > 1 && FVector2D::Distance(Clean[0], Clean.Last()) < 1.0) { Clean.Pop(); }
+	Points = MoveTemp(Clean);
+	Triangles.Reset();
+	if (Points.Num() < 3) return false;
+
+	// 귀 자르기 — 볼록/오목 단순 다각형. 방향(CW/CCW)은 부호 면적으로 맞춘다.
+	double Area2 = 0.0;
+	for (int32 i = 0; i < Points.Num(); ++i) { Area2 += PolyCross(FVector2D::ZeroVector, Points[i], Points[(i + 1) % Points.Num()]); }
+	const double Sign = Area2 >= 0.0 ? 1.0 : -1.0;
+
+	TArray<int32> V;
+	for (int32 i = 0; i < Points.Num(); ++i) { V.Add(i); }
+	while (V.Num() > 3)
+	{
+		bool bClipped = false;
+		for (int32 k = 0; k < V.Num(); ++k)
+		{
+			const int32 Ia = V[(k + V.Num() - 1) % V.Num()], Ib = V[k], Ic = V[(k + 1) % V.Num()];
+			const FVector2D &A = Points[Ia], &B = Points[Ib], &C = Points[Ic];
+			const double Cr = PolyCross(A, B, C) * Sign;
+			if (FMath::Abs(Cr) < 1e-6) { V.RemoveAt(k); bClipped = true; break; }   // 일직선 꼭짓점은 버린다
+			if (Cr < 0.0) continue;                                                   // 오목 꼭짓점
+			bool bInside = false;
+			for (const int32 Ip : V)
+			{
+				if (Ip == Ia || Ip == Ib || Ip == Ic) continue;
+				const FVector2D& P = Points[Ip];
+				if (PolyCross(A, B, P) * Sign >= 0.0 && PolyCross(B, C, P) * Sign >= 0.0 && PolyCross(C, A, P) * Sign >= 0.0) { bInside = true; break; }
+			}
+			if (bInside) continue;
+			Triangles.Append({ Ia, Ib, Ic });
+			V.RemoveAt(k);
+			bClipped = true;
+			break;
+		}
+		if (!bClipped) break;   // 자기교차 — 채움 포기(윤곽은 그린다)
+	}
+	if (V.Num() == 3)
+	{
+		Triangles.Append({ V[0], V[1], V[2] });
+	}
+	else
+	{
+		Triangles.Reset();
+	}
+	return true;
 }
 
 ARpcOverlayActor::ARpcOverlayActor()
@@ -46,7 +118,7 @@ ARpcOverlayActor* ARpcOverlayActor::Get(UWorld* World, bool bCreate)
 
 bool ARpcOverlayActor::IsEmpty() const
 {
-	return CarHighlights.Num() == 0 && PresetHighlights.Num() == 0 && Previews.Num() == 0
+	return CarHighlights.Num() == 0 && PresetHighlights.Num() == 0 && Previews.Num() == 0 && !Lot.IsSet()
 		&& !bLabelCars && !bLabelPresets && !bLabelCameras;
 }
 
@@ -79,6 +151,139 @@ void ARpcOverlayActor::DrawFace(const FRpcPreviewFace& F, const FLinearColor& Co
 	FColor Fill = Color.ToFColor(true);
 	Fill.A = 70;
 	Lines->DrawMesh({ C[0], C[1], C[2], C[3] }, { 0, 1, 2, 0, 2, 3 }, Fill, SDPG_World, /*LifeTime=*/0.f);
+}
+
+void ARpcOverlayActor::DrawPolygon(const FRpcPreviewPolygon& Poly)
+{
+	const int32 N = Poly.Points.Num();
+	if (N < 3) return;
+	if (Poly.bFill && Poly.Triangles.Num() >= 3)
+	{
+		TArray<FVector> Verts;
+		Verts.Reserve(N);
+		for (const FVector2D& P : Poly.Points) { Verts.Add(FVector(P.X, P.Y, Poly.ZCm)); }
+		// 앞뒷면 둘 다 — 감기 방향과 무관하게 위에서 보이게.
+		TArray<int32> Idx = Poly.Triangles;
+		for (int32 t = 0; t + 2 < Poly.Triangles.Num(); t += 3)
+		{
+			Idx.Append({ Poly.Triangles[t], Poly.Triangles[t + 2], Poly.Triangles[t + 1] });
+		}
+		FColor Fill = Poly.Color.ToFColor(true);
+		Fill.A = static_cast<uint8>(FMath::Clamp(Poly.Opacity, 0.f, 1.f) * 255.f);
+		Lines->DrawMesh(Verts, Idx, Fill, SDPG_World, /*LifeTime=*/0.f);
+	}
+	if (!Poly.bLine) return;
+	const float Z = Poly.ZCm + 1.f;   // 채움 위
+	float Phase = 0.f;                // 점선 위상 — 모서리를 건너 이어진다
+	for (int32 i = 0; i < N; ++i)
+	{
+		const FVector A(Poly.Points[i].X, Poly.Points[i].Y, Z);
+		const FVector B(Poly.Points[(i + 1) % N].X, Poly.Points[(i + 1) % N].Y, Z);
+		if (!Poly.bDashed)
+		{
+			Lines->DrawLine(A, B, Poly.Color, SDPG_World, Poly.LineWidthCm);
+			continue;
+		}
+		const float Len = FVector::Dist(A, B);
+		const FVector Dir = (B - A).GetSafeNormal();
+		float s = 0.f;
+		while (s < Len)
+		{
+			const bool bOn = Phase < PolyDashCm;
+			const float Step = FMath::Min(Len - s, bOn ? PolyDashCm - Phase : PolyDashCm + PolyGapCm - Phase);
+			if (bOn) { Lines->DrawLine(A + Dir * s, A + Dir * (s + Step), Poly.Color, SDPG_World, Poly.LineWidthCm); }
+			s += Step;
+			Phase = FMath::Fmod(Phase + Step, PolyDashCm + PolyGapCm);
+		}
+	}
+}
+
+FString ARpcOverlayActor::GetLotFilePath(const UWorld* World)
+{
+	const FString Level = World ? UWorld::RemovePIEPrefix(World->GetMapName()) : FString(TEXT("NoWorld"));
+	return Park3DDataPaths::GetDataFilePath(TEXT("Lot"), *FString::Printf(TEXT("Lot_%s.json"), *Level));
+}
+
+TSharedPtr<FJsonObject> ARpcOverlayActor::PolygonToJson(const FRpcPreviewPolygon& Poly)
+{
+	TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+	TArray<TSharedPtr<FJsonValue>> Pts;
+	for (const FVector2D& P : Poly.Points)
+	{
+		TSharedPtr<FJsonObject> J = MakeShared<FJsonObject>();
+		J->SetNumberField(TEXT("x"), P.X / 100.0);
+		J->SetNumberField(TEXT("y"), P.Y / 100.0);
+		Pts.Add(MakeShared<FJsonValueObject>(J));
+	}
+	O->SetArrayField(TEXT("points"), Pts);
+	O->SetNumberField(TEXT("z"), Poly.ZCm / 100.0);
+	O->SetBoolField(TEXT("fill"), Poly.bFill);
+	O->SetNumberField(TEXT("opacity"), Poly.Opacity);
+	O->SetBoolField(TEXT("line"), Poly.bLine);
+	O->SetNumberField(TEXT("lineWidth"), Poly.LineWidthCm / 100.0);
+	O->SetBoolField(TEXT("dashed"), Poly.bDashed);
+	O->SetStringField(TEXT("color"), TEXT("#") + Poly.Color.ToFColor(true).ToHex().Left(6));
+	return O;
+}
+
+bool ARpcOverlayActor::PolygonFromJson(const TSharedPtr<FJsonObject>& O, FRpcPreviewPolygon& Out)
+{
+	if (!O.IsValid()) return false;
+	const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+	if (!O->TryGetArrayField(TEXT("points"), Arr)) return false;
+	Out.Points.Reset();
+	for (const TSharedPtr<FJsonValue>& V : *Arr)
+	{
+		const TSharedPtr<FJsonObject>* P = nullptr;
+		if (!V->TryGetObject(P) || !P) continue;
+		Out.Points.Add(FVector2D((*P)->GetNumberField(TEXT("x")) * 100.0, (*P)->GetNumberField(TEXT("y")) * 100.0));
+	}
+	double D = 0.0;
+	bool B = false;
+	FString S;
+	if (O->TryGetNumberField(TEXT("z"), D)) { Out.ZCm = D * 100.0; }
+	if (O->TryGetBoolField(TEXT("fill"), B)) { Out.bFill = B; }
+	if (O->TryGetNumberField(TEXT("opacity"), D)) { Out.Opacity = FMath::Clamp(D, 0.0, 1.0); }
+	if (O->TryGetBoolField(TEXT("line"), B)) { Out.bLine = B; }
+	if (O->TryGetNumberField(TEXT("lineWidth"), D)) { Out.LineWidthCm = FMath::Max(D * 100.0, 1.0); }
+	if (O->TryGetBoolField(TEXT("dashed"), B)) { Out.bDashed = B; }
+	if (O->TryGetStringField(TEXT("color"), S) && S.StartsWith(TEXT("#")) && S.Len() == 7) { Out.Color = FLinearColor(FColor::FromHex(S)); }
+	return Out.Prepare();
+}
+
+bool ARpcOverlayActor::SaveLot(FString& OutPath) const
+{
+	OutPath = GetLotFilePath(GetWorld());
+	if (!Lot.IsSet())
+	{
+		return !IFileManager::Get().FileExists(*OutPath) || IFileManager::Get().Delete(*OutPath);
+	}
+	TSharedPtr<FJsonObject> O = PolygonToJson(Lot.GetValue());
+	O->SetStringField(TEXT("level"), UWorld::RemovePIEPrefix(GetWorld()->GetMapName()));
+	FString Text;
+	TSharedRef<TJsonWriter<>> W = TJsonWriterFactory<>::Create(&Text);
+	FJsonSerializer::Serialize(O.ToSharedRef(), W);
+	return FFileHelper::SaveStringToFile(Text, *OutPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+}
+
+bool ARpcOverlayActor::LoadLotForWorld(UWorld* World)
+{
+	const FString Path = GetLotFilePath(World);
+	FString Text;
+	if (!World || !FFileHelper::LoadFileToString(Text, *Path)) return false;
+	TSharedPtr<FJsonObject> O;
+	FRpcPreviewPolygon Poly;
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), O) || !PolygonFromJson(O, Poly))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Lot] 주차장 영역 파일을 읽지 못했습니다: %s"), *Path);
+		return false;
+	}
+	ARpcOverlayActor* Ov = Get(World);
+	if (!Ov) return false;
+	Ov->Lot = Poly;
+	Ov->Redraw();
+	UE_LOG(LogTemp, Log, TEXT("[Lot] 주차장 영역 %d점 복원 ← %s"), Poly.Points.Num(), *Path);
+	return true;
 }
 
 void ARpcOverlayActor::PlaceLabel(const FVector& WorldLoc, const FString& Text, const FColor& Color, const FRotator& ViewRot)
@@ -197,9 +402,13 @@ void ARpcOverlayActor::Redraw()
 		}
 	}
 
+	// 주차장 영역(가장 아래에 깔린다 — 먼저 그림).
+	if (Lot.IsSet()) { DrawPolygon(Lot.GetValue()); }
+
 	// 미리보기 고스트.
 	for (const TPair<FString, FRpcPreviewSet>& KV : Previews)
 	{
+		for (const FRpcPreviewPolygon& Poly : KV.Value.Polygons) { DrawPolygon(Poly); }
 		for (const FRpcPreviewFace& F : KV.Value.Faces) { DrawFace(F, KV.Value.Color); }
 		for (const FRpcPreviewBox& B : KV.Value.Boxes)
 		{

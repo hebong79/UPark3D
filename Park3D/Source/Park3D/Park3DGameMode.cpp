@@ -29,6 +29,7 @@
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Rpc/RpcOverlayActor.h"
 
 APark3DGameMode::APark3DGameMode()
 {
@@ -536,6 +537,9 @@ void APark3DGameMode::ApplyStartupConfig()
 				OrderNum, *UCarCatalogConfigLibrary::GetFilePath());
 		}
 	}
+
+	// 주차장 영역(lot.set 이 남긴 Save/3D/Lot/Lot_<레벨>.json, 보드 #1168) — config 와 무관하게 레벨마다 복원.
+	ARpcOverlayActor::LoadLotForWorld(GetWorld());
 
 	FPark3DAppConfig Config;
 	if (!UPark3DAppConfigLibrary::Load(Config))

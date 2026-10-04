@@ -107,6 +107,9 @@ bool URpcDispatcher::IsMutating(const FString& Method) const
 		TEXT("status"), TEXT("stats"), TEXT("marks"), TEXT("mapState"), TEXT("assets"), TEXT("kinds"), TEXT("plateKinds"),
 		TEXT("captureJPG"), TEXT("capturePNG"), TEXT("captureStats"), TEXT("streamStatus"), TEXT("driveStatus"),
 		TEXT("read"), TEXT("pick"), TEXT("slotNumbers"), TEXT("cameraHeight"), TEXT("distance"), TEXT("describe"),
+		// 계산만 하고 돌려주는 것(보드 #1156 /help 정리 때 핸들러 확인): measure.angles·preset.renumber·random.camXZ/pickCount·
+		// sim.entrance·plate.random/bake
+		TEXT("angles"), TEXT("renumber"), TEXT("camXZ"), TEXT("pickCount"), TEXT("entrance"), TEXT("random"), TEXT("bake"),
 	};
 	for (const TCHAR* R : ReadActions) { if (Action == R) return false; }
 	return !(Action.StartsWith(TEXT("get")) || Action.StartsWith(TEXT("list")));

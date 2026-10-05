@@ -26,6 +26,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "JsonObjectConverter.h"
+#include "Serialization/JsonSerializer.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "UObject/UObjectIterator.h"
@@ -1040,7 +1041,7 @@ FParkingPreset UPresetMakerWidget::FromDTO(const FParkingPresetDTO& D, bool bSou
 }
 
 // ===== Unity 스키마 JSON 저장/로드(순수, 테스트 가능) =====
-bool UPresetMakerWidget::SavePresetsToJson(const FString& Path, const TArray<FParkingPreset>& Presets)
+bool UPresetMakerWidget::SavePresetsToJson(const FString& Path, const TArray<FParkingPreset>& Presets, const TSharedPtr<FJsonObject>& Lot)
 {
 	FParkingPresetDTOList List;
 	List.isUnreal = true;
@@ -1050,8 +1051,19 @@ bool UPresetMakerWidget::SavePresetsToJson(const FString& Path, const TArray<FPa
 		List.datas.Add(ToDTO(P));
 	}
 
+	// 주차장 영역(lot)은 SettingManager 의 것이라 해석하지 않고 루트에 그대로 얹는다(보드 #1185). 없으면 키 자체를 안 쓴다.
+	TSharedPtr<FJsonObject> Root = FJsonObjectConverter::UStructToJsonObject(List);
+	if (!Root.IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[PresetMaker] JSON 직렬화 실패"));
+		return false;
+	}
+	if (Lot.IsValid())
+	{
+		Root->SetObjectField(TEXT("lot"), Lot);
+	}
 	FString Json;
-	if (!FJsonObjectConverter::UStructToJsonObjectString(List, Json))
+	if (!FJsonSerializer::Serialize(Root.ToSharedRef(), TJsonWriterFactory<>::Create(&Json)))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[PresetMaker] JSON 직렬화 실패"));
 		return false;
@@ -1065,7 +1077,7 @@ bool UPresetMakerWidget::SavePresetsToJson(const FString& Path, const TArray<FPa
 	return true;
 }
 
-bool UPresetMakerWidget::LoadPresetsFromJson(const FString& Path, TArray<FParkingPreset>& OutPresets)
+bool UPresetMakerWidget::LoadPresetsFromJson(const FString& Path, TArray<FParkingPreset>& OutPresets, TSharedPtr<FJsonObject>* OutLot)
 {
 	FString Json;
 	if (!FFileHelper::LoadFileToString(Json, *Path))
@@ -1074,11 +1086,18 @@ bool UPresetMakerWidget::LoadPresetsFromJson(const FString& Path, TArray<FParkin
 		return false;
 	}
 
+	TSharedPtr<FJsonObject> Root;
 	FParkingPresetDTOList List;
-	if (!FJsonObjectConverter::JsonObjectStringToUStruct(Json, &List, 0, 0))
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Root) || !Root.IsValid()
+		|| !FJsonObjectConverter::JsonObjectToUStruct(Root.ToSharedRef(), &List, 0, 0))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[PresetMaker] JSON 역직렬화 실패"));
 		return false;
+	}
+	if (OutLot)
+	{
+		const TSharedPtr<FJsonObject>* LotObj = nullptr;
+		*OutLot = Root->TryGetObjectField(TEXT("lot"), LotObj) ? *LotObj : nullptr;
 	}
 
 	OutPresets.Reset();

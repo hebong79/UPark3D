@@ -17,6 +17,10 @@
 1. `git status --short`, `git branch --show-current` 로 상태를 확인한다.
    - 지금 브랜치가 prompt 의 브랜치와 다르면 멈추고 보고한다.
    - main 에 직접 커밋하지 않는다.
+   - **예외: 문서 전용 배포 기록.** 다음 두 조건을 모두 만족하면 main 에 직접 커밋하고 `origin main` 으로 push 해도 된다(마스터 승인 2026-10-05).
+     - 커밋 파일이 `Docs/*.md` 와 `CLAUDE.md` 뿐이다. 코드·설정·스킬 파일이 하나라도 섞이면 예외가 아니다.
+     - prompt 의 할 일이 "배포 기록 커밋" 이고, "마스터 승인: 푸시=예" 다.
+     - 커밋 제목은 `docs: … 배포 기록` 꼴로 쓴다.
 2. prompt 에 적힌 파일만 `git add <경로>…` 한다.
    - 트리에는 남의 미커밋 파일(`_workspace/`, `Park3D.zip` 등)이 많다. 이것들을 섞지 않는다.
 3. 메시지는 heredoc 으로 넘긴다(`git commit -F - <<'EOF'`).

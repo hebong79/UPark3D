@@ -10,6 +10,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "HAL/PlatformFileManager.h"
+#include "Dom/JsonObject.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -104,6 +105,92 @@ bool FPresetMakerUnityJsonTest::RunTest(const FString& Parameters)
 	// ── 4) 정리 ──
 	PF.DeleteFile(*FixPath);
 	PF.DeleteFile(*RtPath);
+	return true;
+}
+
+// 보드 #1185 — 파일 루트 lot(주차장 영역)을 그대로 쓰고 되읽는다. lot 없이 저장하면 키가 없다.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPresetMakerFileLotTest,
+	"Park3D.PresetMaker.FileLot",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FPresetMakerFileLotTest::RunTest(const FString& Parameters)
+{
+	IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
+	const FString Path = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Test_PresetFileLot.json"));
+	PF.DeleteFile(*Path);
+
+	TArray<FParkingPreset> Presets;
+	Presets.AddDefaulted();
+	Presets[0].PresetIdx = 3;
+	Presets[0].FaceCount = 4;
+
+	TSharedPtr<FJsonObject> Lot = MakeShared<FJsonObject>();
+	TArray<TSharedPtr<FJsonValue>> Pts;
+	for (const FVector2D& V : { FVector2D(0, 0), FVector2D(20, 0), FVector2D(20, 12.5), FVector2D(0, 12.5) })
+	{
+		TSharedPtr<FJsonObject> Pt = MakeShared<FJsonObject>();
+		Pt->SetNumberField(TEXT("x"), V.X);
+		Pt->SetNumberField(TEXT("y"), V.Y);
+		Pts.Add(MakeShared<FJsonValueObject>(Pt));
+	}
+	Lot->SetArrayField(TEXT("points"), Pts);
+	Lot->SetStringField(TEXT("source"), TEXT("boundary"));
+
+	// 1) lot 과 함께 저장 → 프리셋 그대로 + lot 되읽기
+	TestTrue(TEXT("lot 저장"), UPresetMakerWidget::SavePresetsToJson(Path, Presets, Lot));
+	TArray<FParkingPreset> Back;
+	TSharedPtr<FJsonObject> BackLot;
+	TestTrue(TEXT("lot 파일 로드"), UPresetMakerWidget::LoadPresetsFromJson(Path, Back, &BackLot));
+	TestEqual(TEXT("프리셋 수"), Back.Num(), 1);
+	if (Back.Num() == 1)
+	{
+		TestEqual(TEXT("idx"), Back[0].PresetIdx, 3);
+		TestEqual(TEXT("faceCount"), Back[0].FaceCount, 4);
+	}
+	TestTrue(TEXT("lot 되읽음"), BackLot.IsValid());
+	if (BackLot.IsValid())
+	{
+		TestEqual(TEXT("source"), BackLot->GetStringField(TEXT("source")), FString(TEXT("boundary")));
+		const TArray<TSharedPtr<FJsonValue>>* BackPts = nullptr;
+		TestTrue(TEXT("points 배열"), BackLot->TryGetArrayField(TEXT("points"), BackPts) && BackPts->Num() == 4);
+		if (BackPts && BackPts->Num() == 4)
+		{
+			TestEqual(TEXT("points[2].y"), (*BackPts)[2]->AsObject()->GetNumberField(TEXT("y")), 12.5);
+		}
+	}
+
+	// 2) OutLot 없이 로드 — 옛 호출부 그대로 동작
+	TArray<FParkingPreset> Plain;
+	TestTrue(TEXT("lot 파일을 옛 시그니처로 로드"), UPresetMakerWidget::LoadPresetsFromJson(Path, Plain));
+	TestEqual(TEXT("옛 시그니처 프리셋 수"), Plain.Num(), 1);
+
+	// 2b) 패널 저장(KeepingLot) — 프리셋을 바꿔 덮어써도 기존 lot 이 남는다
+	Presets[0].FaceCount = 6;
+	TestTrue(TEXT("패널 저장"), UPresetMakerWidget::SavePresetsToJsonKeepingLot(Path, Presets));
+	TSharedPtr<FJsonObject> KeptLot;
+	TestTrue(TEXT("패널 저장 후 로드"), UPresetMakerWidget::LoadPresetsFromJson(Path, Back, &KeptLot));
+	TestTrue(TEXT("패널 저장이 프리셋 반영"), Back.Num() == 1 && Back[0].FaceCount == 6);
+	TestTrue(TEXT("패널 저장이 lot 보존"), KeptLot.IsValid() && KeptLot->GetStringField(TEXT("source")) == TEXT("boundary"));
+
+	// 2c) 패널 저장 — 새 파일이면 lot 없음
+	const FString NewPath = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Test_PresetFileLot_New.json"));
+	PF.DeleteFile(*NewPath);
+	TestTrue(TEXT("패널 새 파일 저장"), UPresetMakerWidget::SavePresetsToJsonKeepingLot(NewPath, Presets));
+	FString NewRaw;
+	FFileHelper::LoadFileToString(NewRaw, *NewPath);
+	TestFalse(TEXT("새 파일엔 lot 없음"), NewRaw.Contains(TEXT("\"lot\"")));
+	PF.DeleteFile(*NewPath);
+
+	// 3) lot 없이 같은 파일에 저장 → 키가 사라진다(이어 받지 않음)
+	TestTrue(TEXT("lot 없이 저장"), UPresetMakerWidget::SavePresetsToJson(Path, Presets));
+	FString Raw;
+	FFileHelper::LoadFileToString(Raw, *Path);
+	TestFalse(TEXT("lot 키 없음"), Raw.Contains(TEXT("\"lot\"")));
+	TSharedPtr<FJsonObject> NoLot = MakeShared<FJsonObject>();
+	TestTrue(TEXT("lot 없는 파일 로드"), UPresetMakerWidget::LoadPresetsFromJson(Path, Back, &NoLot));
+	TestFalse(TEXT("OutLot nullptr"), NoLot.IsValid());
+
+	PF.DeleteFile(*Path);
 	return true;
 }
 

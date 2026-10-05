@@ -187,6 +187,37 @@ namespace
 		return Out.Num() > 0;
 	}
 
+	/**
+	 * preset.save 의 lot(보드 #1185) — 주차장 영역 {points:[{x,y}] m, source?}. SettingManager 의 것이라 해석하지 않고
+	 * 파일에 그대로 쓴다. 생략·null 이면 OutLot=nullptr(키를 안 쓴다 — 옛 파일의 lot 을 이어 받지 않는다).
+	 * 쓰레기가 파일에 박히지 않게 모양만 본다: 객체, points 배열 3..2000, 점마다 숫자 x·y. 어기면 -32602.
+	 */
+	bool ReadPresetFileLot(const TSharedPtr<FJsonObject>& P, TSharedPtr<FJsonObject>& OutLot, FRpcError& E)
+	{
+		OutLot = nullptr;
+		RpcParam::MarkRead(P, TEXT("lot"));
+		const TSharedPtr<FJsonValue> Raw = (P.IsValid() && P->Values.Contains(TEXT("lot"))) ? P->Values[TEXT("lot")] : nullptr;
+		if (!Raw.IsValid() || Raw->IsNull()) return true;
+
+		auto Bad = [&E](const FString& Msg) { E.Fail(Park3DRpc::InvalidParams, TEXT("lot: ") + Msg, ERpcErrorKind::BadParams); return false; };
+		if (Raw->Type != EJson::Object) return Bad(TEXT("{points:[{x,y}], source?} 객체 또는 null 이어야 합니다"));
+		const TSharedPtr<FJsonObject> Lot = Raw->AsObject();
+		const TArray<TSharedPtr<FJsonValue>>* Points = nullptr;
+		if (!Lot->TryGetArrayField(TEXT("points"), Points)) return Bad(TEXT("points:[{x,y}] 배열이 필요합니다"));
+		if (Points->Num() < 3 || Points->Num() > 2000) return Bad(FString::Printf(TEXT("points 는 3..2000 개 — %d개"), Points->Num()));
+		for (int32 i = 0; i < Points->Num(); ++i)
+		{
+			const TSharedPtr<FJsonObject>* Pt = nullptr;
+			double X = 0, Y = 0;
+			if (!(*Points)[i]->TryGetObject(Pt) || !Pt || !(*Pt)->TryGetNumberField(TEXT("x"), X) || !(*Pt)->TryGetNumberField(TEXT("y"), Y))
+			{
+				return Bad(FString::Printf(TEXT("points[%d] 는 숫자 x·y 를 가진 객체여야 합니다"), i));
+			}
+		}
+		OutLot = Lot;
+		return true;
+	}
+
 	/** 바닥 번호 글자 회전을 0..360 으로 접는다(-90 → 270, 450 → 90). */
 	float NormalizeNumberRot(double Deg)
 	{
@@ -340,8 +371,10 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 	Dispatcher.Register(TEXT("preset.save"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		AParkingPresetManager* Mgr = GetPresetManager(E); if (!Mgr) return nullptr;
+		TSharedPtr<FJsonObject> Lot;
+		if (!ReadPresetFileLot(P, Lot, E)) return nullptr;
 		const FString Path = ResolvePresetPath(P);
-		if (!UPresetMakerWidget::SavePresetsToJson(Path, Mgr->GetPresets()))
+		if (!UPresetMakerWidget::SavePresetsToJson(Path, Mgr->GetPresets(), Lot))
 		{
 			E.FailDomain(FString::Printf(TEXT("프리셋 저장 실패: %s"), *Path));
 			return nullptr;
@@ -350,6 +383,7 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetBoolField(TEXT("ok"), true);
 		O->SetStringField(TEXT("path"), Path);
 		O->SetStringField(TEXT("fileName"), FPaths::GetCleanFilename(Path));
+		O->SetBoolField(TEXT("lot"), Lot.IsValid());
 		return RpcDto::MakeObject(O);
 	});
 
@@ -358,7 +392,8 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 		AParkingPresetManager* Mgr = GetPresetManager(E); if (!Mgr) return nullptr;
 		const FString Path = ResolvePresetPath(P);
 		TArray<FParkingPreset> Loaded;
-		if (!UPresetMakerWidget::LoadPresetsFromJson(Path, Loaded))
+		TSharedPtr<FJsonObject> Lot;
+		if (!UPresetMakerWidget::LoadPresetsFromJson(Path, Loaded, &Lot))
 		{
 			E.FailDomain(FString::Printf(TEXT("프리셋 로드 실패: %s"), *Path));
 			return nullptr;
@@ -369,6 +404,8 @@ void FPresetRpcModule::Register(URpcDispatcher& Dispatcher)
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetBoolField(TEXT("ok"), true);
 		O->SetNumberField(TEXT("count"), Mgr->StoredPresets.Num());
+		// 파일의 주차장 영역(보드 #1185) — 그대로 돌려줄 뿐 그리지 않는다(그리기는 SettingManager 가 preview.show 로). 없으면 키 없음.
+		if (Lot.IsValid()) O->SetObjectField(TEXT("lot"), Lot);
 		return RpcDto::MakeObject(O);
 	});
 

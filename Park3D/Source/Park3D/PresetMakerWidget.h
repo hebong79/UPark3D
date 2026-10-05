@@ -11,6 +11,8 @@
 #include "Types/SlateEnums.h"
 #include "PresetMakerWidget.generated.h"
 
+class FJsonObject;
+
 class UButton;
 class UEditableTextBox;
 class UComboBoxString;
@@ -152,10 +154,12 @@ public:
 	static FParkingPresetDTO ToDTO(const FParkingPreset& P);
 	/** DTO → 도메인 UE 미터 프리셋(dirType clamp, legacy Unity 좌표 선택 변환). */
 	static FParkingPreset FromDTO(const FParkingPresetDTO& D, bool bSourceIsUnreal = false);
-	/** 프리셋 목록을 Unreal 좌표+isUnreal=true JSON 파일로 저장. */
-	static bool SavePresetsToJson(const FString& Path, const TArray<FParkingPreset>& Presets);
-	/** Unity 스키마 JSON 파일에서 프리셋 목록을 로드(실패 시 false). */
-	static bool LoadPresetsFromJson(const FString& Path, TArray<FParkingPreset>& OutPresets);
+	/** 프리셋 목록을 Unreal 좌표+isUnreal=true JSON 파일로 저장. Lot 이 있으면 루트 `lot` 키로 그대로 쓴다(보드 #1185). */
+	static bool SavePresetsToJson(const FString& Path, const TArray<FParkingPreset>& Presets, const TSharedPtr<FJsonObject>& Lot = nullptr);
+	/** 패널 저장용 — 같은 경로에 파일이 있으면 그 파일의 lot 을 이어 쓴다(없으면 lot 없이). */
+	static bool SavePresetsToJsonKeepingLot(const FString& Path, const TArray<FParkingPreset>& Presets);
+	/** Unity 스키마 JSON 파일에서 프리셋 목록을 로드(실패 시 false). OutLot 을 주면 루트 `lot` 객체(없으면 nullptr)를 돌려준다. */
+	static bool LoadPresetsFromJson(const FString& Path, TArray<FParkingPreset>& OutPresets, TSharedPtr<FJsonObject>* OutLot = nullptr);
 
 	/** 그 월드의 프리셋 메이커 패널(닫혀 있어도 인스턴스가 있으면). 없으면 nullptr — RPC 가 패널 목록을 읽을 때 쓴다(C++ 전용). */
 	static UPresetMakerWidget* FindInWorld(const UWorld* World);

@@ -164,6 +164,23 @@ bool FPresetMakerFileLotTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("lot 파일을 옛 시그니처로 로드"), UPresetMakerWidget::LoadPresetsFromJson(Path, Plain));
 	TestEqual(TEXT("옛 시그니처 프리셋 수"), Plain.Num(), 1);
 
+	// 2b) 패널 저장(KeepingLot) — 프리셋을 바꿔 덮어써도 기존 lot 이 남는다
+	Presets[0].FaceCount = 6;
+	TestTrue(TEXT("패널 저장"), UPresetMakerWidget::SavePresetsToJsonKeepingLot(Path, Presets));
+	TSharedPtr<FJsonObject> KeptLot;
+	TestTrue(TEXT("패널 저장 후 로드"), UPresetMakerWidget::LoadPresetsFromJson(Path, Back, &KeptLot));
+	TestTrue(TEXT("패널 저장이 프리셋 반영"), Back.Num() == 1 && Back[0].FaceCount == 6);
+	TestTrue(TEXT("패널 저장이 lot 보존"), KeptLot.IsValid() && KeptLot->GetStringField(TEXT("source")) == TEXT("boundary"));
+
+	// 2c) 패널 저장 — 새 파일이면 lot 없음
+	const FString NewPath = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Test_PresetFileLot_New.json"));
+	PF.DeleteFile(*NewPath);
+	TestTrue(TEXT("패널 새 파일 저장"), UPresetMakerWidget::SavePresetsToJsonKeepingLot(NewPath, Presets));
+	FString NewRaw;
+	FFileHelper::LoadFileToString(NewRaw, *NewPath);
+	TestFalse(TEXT("새 파일엔 lot 없음"), NewRaw.Contains(TEXT("\"lot\"")));
+	PF.DeleteFile(*NewPath);
+
 	// 3) lot 없이 같은 파일에 저장 → 키가 사라진다(이어 받지 않음)
 	TestTrue(TEXT("lot 없이 저장"), UPresetMakerWidget::SavePresetsToJson(Path, Presets));
 	FString Raw;

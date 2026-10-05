@@ -1109,9 +1109,21 @@ bool UPresetMakerWidget::LoadPresetsFromJson(const FString& Path, TArray<FParkin
 	return true;
 }
 
+bool UPresetMakerWidget::SavePresetsToJsonKeepingLot(const FString& Path, const TArray<FParkingPreset>& Presets)
+{
+	// 패널은 lot 을 모른다 — 같은 파일을 덮어쓰면 웹이 넣은 주차장 영역이 사라지므로 기존 파일의 lot 을 이어 쓴다(보드 #1185).
+	TSharedPtr<FJsonObject> Lot;
+	if (FPaths::FileExists(Path))
+	{
+		TArray<FParkingPreset> Ignored;
+		LoadPresetsFromJson(Path, Ignored, &Lot);
+	}
+	return SavePresetsToJson(Path, Presets, Lot);
+}
+
 bool UPresetMakerWidget::SaveToJsonFile(const FString& FilePath)
 {
-	if (!SavePresetsToJson(FilePath, Presets))
+	if (!SavePresetsToJsonKeepingLot(FilePath, Presets))
 	{
 		return false;
 	}

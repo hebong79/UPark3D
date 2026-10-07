@@ -7,6 +7,7 @@
 #include "../../CameraControlManager.h"
 #include "../../PTZCameraActor.h"
 #include "../../CameraControlLibrary.h"
+#include "../../CamLensDistortion.h"
 #include "../../ParkingPresetManager.h"
 #include "../CamStreamSubsystem.h"
 #include "../../Park3DDataPaths.h"
@@ -634,6 +635,45 @@ void FCamRpcModule::Register(URpcDispatcher& Dispatcher)
 		APTZCameraActor* Cam = GetCamById(Mgr, CamId, E); if (!Cam) return nullptr;
 		if (Cam->Capture) { Cam->Capture->FOVAngle = static_cast<float>(Fov); }
 		return RpcDto::OkTrue();
+	});
+
+	// ---- 렌즈 방사 왜곡(보드 #1297, 모델은 CamLensDistortion.h) ----
+	auto DistortionDto = [](int32 CamId, const APTZCameraActor* Cam)
+	{
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetNumberField(TEXT("camId"), CamId);
+		O->SetNumberField(TEXT("k1"), Cam->GetLensK1());
+		O->SetNumberField(TEXT("k2"), Cam->GetLensK2());
+		return RpcDto::MakeObject(O);
+	};
+	Dispatcher.Register(TEXT("cam.setDistortion"), [this, DistortionDto](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		ACameraControlManager* Mgr = GetCameraManager(E); if (!Mgr) return nullptr;
+		int32 CamId = 0; double K1 = 0.0;
+		if (!RpcParam::RequireInt(P, TEXT("camId"), CamId, E)) return nullptr;
+		if (!RpcParam::RequireFloat(P, TEXT("k1"), K1, E)) return nullptr;
+		const double K2 = RpcParam::GetFloat(P, TEXT("k2"), 0.0);
+		APTZCameraActor* Cam = GetCamById(Mgr, CamId, E); if (!Cam) return nullptr;
+		// 모서리 판정은 zoom 1(가장 넓은 화각) 기준 — 줌을 당기면 반경이 줄어 접힘에서 멀어진다.
+		const int32 W = Cam->RenderTarget ? Cam->RenderTarget->SizeX : 1280;
+		const int32 H = Cam->RenderTarget ? Cam->RenderTarget->SizeY : 720;
+		FString Why;
+		if (!CamLens::Validate(K1, K2, CamLens::CornerTan(Cam->DefaultHFov, W, H), Why))
+		{
+			E.Fail(Park3DRpc::InvalidParams, Why, ERpcErrorKind::BadParams);
+			return nullptr;
+		}
+		Cam->SetLensDistortion(K1, K2);
+		UE_LOG(LogTemp, Log, TEXT("[Cam] setDistortion cam=%d k1=%g k2=%g"), CamId, K1, K2);
+		return DistortionDto(CamId, Cam);
+	});
+	Dispatcher.Register(TEXT("cam.getDistortion"), [this, DistortionDto](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		ACameraControlManager* Mgr = GetCameraManager(E); if (!Mgr) return nullptr;
+		int32 CamId = 0;
+		if (!RpcParam::RequireInt(P, TEXT("camId"), CamId, E)) return nullptr;
+		APTZCameraActor* Cam = GetCamById(Mgr, CamId, E); if (!Cam) return nullptr;
+		return DistortionDto(CamId, Cam);
 	});
 
 	// ---- 캡처(Phase 5, 실동작) ----

@@ -126,6 +126,20 @@ public:
 	 */
 	UTextureRenderTarget2D* CaptureAtSize(int32 W, int32 H);
 
+	/**
+	 * 렌즈 방사 왜곡 k1·k2(보드 #1297, CamLensDistortion 모델). 0,0 = 핀홀(기존 그대로).
+	 * 값 검사는 호출자(cam.setDistortion)가 CamLens::Validate 로 한다. 비저장 — 카메라를 새로 만들면 0 으로 돌아간다.
+	 * 켜져 있으면 CaptureOnce/CaptureAtSize 가 넓은 화각으로 중간 타깃에 찍고 격자 와프로 최종 타깃에 그린다
+	 * → 뷰어·MJPEG·cam.captureJPG 가 모두 같은 왜곡 그림을 본다. C++ 전용.
+	 */
+	void SetLensDistortion(double InK1, double InK2) { LensK1 = InK1; LensK2 = InK2; }
+	double GetLensK1() const { return LensK1; }
+	double GetLensK2() const { return LensK2; }
+
+	/** 왜곡 렌더 전용 넓은 화각 중간 타깃(필요할 때만 생성). */
+	UPROPERTY(Transient)
+	UTextureRenderTarget2D* WideCaptureTarget;
+
 	/** 폴대 가시성 토글. 숨김 시 콜리전도 동반 off(바닥 트레이스 오탐 방지, 설계 §12-H). */
 	UFUNCTION(BlueprintCallable, Category = "PTZ")
 	void SetPoleVisible(bool bVisible);
@@ -135,6 +149,12 @@ public:
 	void SetPoleHighlight(bool bOn);
 
 private:
+	/** Out 에 1장 찍는다 — 왜곡이 없으면 CaptureScene 그대로, 있으면 넓게 찍어 와프(SetLensDistortion 주석). */
+	void CaptureInto(UTextureRenderTarget2D* Out);
+
+	double LensK1 = 0.0;
+	double LensK2 = 0.0;
+
 	/** 마지막으로 RenderTarget 에 캡처한 GFrameCounter(같은 프레임 중복 캡처 방지). 비-UPROPERTY. */
 	uint64 LastCaptureFrame = MAX_uint64;
 	bool bViewerTarget = false;

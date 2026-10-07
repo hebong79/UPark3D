@@ -16,6 +16,7 @@
 #include "../../Light/LightControlLibrary.h"
 #include "../../Park3DDataPaths.h"
 #include "../RpcImageUtil.h"
+#include "../../CamLensDistortion.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Serialization/JsonSerializer.h"
@@ -614,8 +615,10 @@ bool FScenarioRpcModule::RunSlotPolygon(const TSharedPtr<FJsonObject>& Measure, 
 			E.FailDomain(TEXT("슬롯이 카메라 뒤에 있다 — 투영할 수 없다"));
 			return false;
 		}
-		const float NdcX = (Local.Y / Local.X) / HalfW;
-		const float NdcY = (Local.Z / Local.X) / (HalfW * Aspect);
+		// 렌즈 왜곡(보드 #1297)이 걸린 카메라는 렌더와 같은 모델로 휜 자리를 잡는다. 화면 y 는 아래가 + 라 -Z.
+		const FVector2D Td = CamLens::DistortTan(FVector2D(Local.Y / Local.X, -Local.Z / Local.X), Cam->GetLensK1(), Cam->GetLensK2());
+		const float NdcX = static_cast<float>(Td.X) / HalfW;
+		const float NdcY = static_cast<float>(-Td.Y) / (HalfW * Aspect);
 		Screen[i] = FVector2D((NdcX * 0.5f + 0.5f) * W, (0.5f - NdcY * 0.5f) * H);
 	}
 

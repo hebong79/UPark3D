@@ -2,6 +2,11 @@
 
 #include "PTZCameraActor.h"
 #include "CameraControlLibrary.h"
+#include "CamLensDistortion.h"
+#include "CanvasItem.h"
+#include "CanvasTypes.h"
+#include "Engine/World.h"
+#include "TextureResource.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -141,9 +146,114 @@ void APTZCameraActor::CaptureOnce()
 {
 	if (Capture)
 	{
-		Capture->CaptureScene();
+		CaptureInto(RenderTarget);
 		LastCaptureFrame = GFrameCounter;
 	}
+}
+
+void APTZCameraActor::CaptureInto(UTextureRenderTarget2D* Out)
+{
+	if (!Capture)
+	{
+		return;
+	}
+	// CaptureScene 은 호출 시점의 타깃·화각으로 렌더 명령을 넣으므로 바로 되돌려도 다음 캡처에 섞이지 않는다.
+	UTextureRenderTarget2D* const PrevTarget = Capture->TextureTarget;
+	UWorld* World = GetWorld();
+	if (!Out || CamLens::IsPinhole(LensK1, LensK2) || !World)
+	{
+		if (Out) { Capture->TextureTarget = Out; }
+		Capture->CaptureScene();
+		Capture->TextureTarget = PrevTarget;
+		return;
+	}
+
+	// ---- 왜곡 렌더(보드 #1297) ----
+	// 출력 픽셀 격자의 각 꼭짓점을 왜곡 후 탄젠트 좌표로 보고 역변환해 "그 픽셀이 보는 방향"을 얻는다.
+	// 바깥으로 휘는(barrel) 렌즈는 모서리가 원래 화각 밖을 보므로, 그 방향까지 담는 넓은 화각으로 중간 타깃에 찍은 뒤
+	// 삼각형 격자(UV = 방향)로 출력 타깃에 그린다. 중심 배율이 같도록 중간 타깃 해상도를 화각 비만큼 키운다.
+	const int32 W = Out->SizeX, H = Out->SizeY;
+	const double T = FMath::Tan(FMath::DegreesToRadians(static_cast<double>(Capture->FOVAngle) * 0.5));
+	const double F = (W * 0.5) / T;
+	constexpr int32 GX = 48, GY = 27;
+	TArray<FVector2D> Dir;
+	Dir.SetNumUninitialized((GX + 1) * (GY + 1));
+	double MaxX = T, MaxY = T * H / W;
+	for (int32 gy = 0; gy <= GY; ++gy)
+	{
+		for (int32 gx = 0; gx <= GX; ++gx)
+		{
+			const FVector2D Xd((W * gx / double(GX) - W * 0.5) / F, (H * gy / double(GY) - H * 0.5) / F);
+			const FVector2D U = CamLens::UndistortTan(Xd, LensK1, LensK2);
+			Dir[gy * (GX + 1) + gx] = U;
+			MaxX = FMath::Max(MaxX, FMath::Abs(U.X));
+			MaxY = FMath::Max(MaxY, FMath::Abs(U.Y));
+		}
+	}
+	// 1% 여유는 가장자리 쌍선형 샘플이 타깃 밖을 집지 않게. 85° 반각이 상한(그 이상은 투영이 무너진다).
+	const double TW = FMath::Min(FMath::Max(MaxX, MaxY * W / H) * 1.01, FMath::Tan(FMath::DegreesToRadians(85.0)));
+	const int32 Ww = FMath::Clamp(FMath::CeilToInt32(W * TW / T), W, 4096);
+	const int32 Hw = FMath::Max(1, FMath::RoundToInt32(static_cast<double>(Ww) * H / W));
+
+	if (!WideCaptureTarget)
+	{
+		WideCaptureTarget = NewObject<UTextureRenderTarget2D>(this);
+		WideCaptureTarget->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8_SRGB; // InitRenderTarget 과 같은 감마 규약
+		WideCaptureTarget->ClearColor = FLinearColor::Black;
+		WideCaptureTarget->bAutoGenerateMips = false;
+		WideCaptureTarget->Filter = TF_Bilinear;
+		WideCaptureTarget->AddressX = TA_Clamp;
+		WideCaptureTarget->AddressY = TA_Clamp;
+	}
+	if (WideCaptureTarget->SizeX != Ww || WideCaptureTarget->SizeY != Hw)
+	{
+		WideCaptureTarget->InitAutoFormat(Ww, Hw);
+		WideCaptureTarget->UpdateResourceImmediate(true);
+	}
+
+	const float PrevFov = Capture->FOVAngle;
+	Capture->FOVAngle = static_cast<float>(2.0 * FMath::RadiansToDegrees(FMath::Atan(TW)));
+	Capture->TextureTarget = WideCaptureTarget;
+	Capture->CaptureScene();
+	Capture->FOVAngle = PrevFov;           // GetZoom·화면 투영은 원래 화각을 본다
+	Capture->TextureTarget = PrevTarget;
+
+	// 넓은 타깃의 수평·수직 반각 탄젠트는 TW, TW·Hw/Ww → UV = 0.5 + 방향/(2·반각탄젠트).
+	const double TWy = TW * Hw / Ww;
+	auto UvOf = [&](const FVector2D& U) { return FVector2D(0.5 + U.X / (2.0 * TW), 0.5 + U.Y / (2.0 * TWy)); };
+	TArray<FCanvasUVTri> Tris;
+	Tris.Reserve(GX * GY * 2);
+	for (int32 gy = 0; gy < GY; ++gy)
+	{
+		for (int32 gx = 0; gx < GX; ++gx)
+		{
+			const int32 I00 = gy * (GX + 1) + gx, I10 = I00 + 1, I01 = I00 + GX + 1, I11 = I01 + 1;
+			const FVector2D P00(W * gx / double(GX), H * gy / double(GY));
+			const FVector2D P11(W * (gx + 1) / double(GX), H * (gy + 1) / double(GY));
+			const FVector2D P10(P11.X, P00.Y), P01(P00.X, P11.Y);
+			// FCanvasUVTri 의 꼭짓점 색 기본값은 (0,0,0,0) 이고 텍스처에 곱해진다 → 흰색을 넣지 않으면 그림이 통째로 검다.
+			FCanvasUVTri A;
+			A.V0_Color = A.V1_Color = A.V2_Color = FLinearColor::White;
+			A.V0_Pos = P00; A.V0_UV = UvOf(Dir[I00]);
+			A.V1_Pos = P10; A.V1_UV = UvOf(Dir[I10]);
+			A.V2_Pos = P11; A.V2_UV = UvOf(Dir[I11]);
+			FCanvasUVTri B;
+			B.V0_Color = B.V1_Color = B.V2_Color = FLinearColor::White;
+			B.V0_Pos = P00; B.V0_UV = UvOf(Dir[I00]);
+			B.V1_Pos = P11; B.V1_UV = UvOf(Dir[I11]);
+			B.V2_Pos = P01; B.V2_UV = UvOf(Dir[I01]);
+			Tris.Add(A);
+			Tris.Add(B);
+		}
+	}
+
+	// 캔버스는 타깃의 표시 감마(기본 2.2)로 한 번 더 인코딩한다 — sRGB 타깃은 하드웨어가 인코딩하므로 1 로 둔다.
+	Out->TargetGamma = 1.f;
+	FCanvas Canvas(Out->GameThread_GetRenderTargetResource(), nullptr, World, World->GetFeatureLevel());
+	FCanvasTriangleItem Item(Tris, WideCaptureTarget->GetResource());
+	Item.BlendMode = SE_BLEND_Opaque;
+	Canvas.DrawItem(Item);
+	Canvas.Flush_GameThread();
 }
 
 void APTZCameraActor::CaptureForViewer()
@@ -179,10 +289,8 @@ UTextureRenderTarget2D* APTZCameraActor::CaptureAtSize(int32 W, int32 H)
 		SizedCaptureTarget->UpdateResourceImmediate(true);
 	}
 
-	// CaptureScene 은 호출 시점의 타깃으로 렌더 명령을 넣으므로 바로 되돌려도 스트림에 섞이지 않는다.
-	Capture->TextureTarget = SizedCaptureTarget;
-	Capture->CaptureScene();
-	Capture->TextureTarget = RenderTarget;
+	// CaptureInto 가 타깃을 바꿔 찍고 RenderTarget 으로 되돌린다 — 스트림에 섞이지 않는다.
+	CaptureInto(SizedCaptureTarget);
 	return SizedCaptureTarget;
 }
 

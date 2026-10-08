@@ -303,11 +303,18 @@ void FStateRpcModule::Register(URpcDispatcher& Dispatcher)
 		}
 		const int32 Removed = bReplace ? Mgr->GetCarCount() : 0;
 		if (bReplace) { Mgr->ClearAll(); }
-		TArray<TSharedPtr<FJsonValue>> Out;
+		// 같은 자리(같은 면·1 m 이내)에 이미 선 차는 지우고 바꾼다 — 목록 안의 중복끼리도 뒤가 이긴다(2026-10-08).
+		const bool bAllowOverlap = RpcParam::GetBool(P, TEXT("allowOverlap"), false);
+		TArray<FString> Replaced;
+		TArray<ACarActor*> Spawned;
 		for (int32 i = 0; i < Parsed.Num(); ++i)
 		{
 			FCarPos Pos = Parsed[i];
-			Pos.id = UCarPlacementLibrary::MakeCarId(Mgr->GetCarCount());
+			if (!bAllowOverlap)
+			{
+				Replaced.Append(Mgr->RemoveCarsOccupying(UCarPlacementLibrary::UnrealMetersToWorld(Pos.pos, Mgr->MetersToUU)));
+			}
+			Pos.id = Mgr->MakeUniqueCarId(Replaced);
 			ACarActor* Car = Mgr->SpawnCarFromPos(Pos, Catalog);
 			if (!Car) { E.FailDomain(FString::Printf(TEXT("cars[%d] 차량 생성 실패"), i), ERpcErrorKind::Internal); return nullptr; }
 			const TSharedPtr<FJsonObject>* C = nullptr;
@@ -316,14 +323,21 @@ void FStateRpcModule::Register(URpcDispatcher& Dispatcher)
 			const FString Kind = RpcParam::GetString(*C, TEXT("plateKind"));
 			if (!Plate.IsEmpty() || !Kind.IsEmpty()) { Car->SetPlate(Plate.IsEmpty() ? Car->GetPlateNumber() : Plate, Kind.IsEmpty() ? Car->GetPlateKind() : Kind); }
 			if (!RpcParam::GetBool(*C, TEXT("visible"), true)) { Car->SetActorHiddenInGame(true); Car->SetActorEnableCollision(false); }
-			Out.Add(RpcDto::CarToDtoValue(Car));
+			Spawned.Add(Car);
+		}
+		// 이번 호출에서 만든 차가 뒤 항목에 교체됐을 수 있다 — 살아 있는 것만 돌려준다.
+		TArray<TSharedPtr<FJsonValue>> Out;
+		for (ACarActor* Car : Spawned)
+		{
+			if (IsValid(Car) && !Car->IsActorBeingDestroyed()) { Out.Add(RpcDto::CarToDtoValue(Car)); }
 		}
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetBoolField(TEXT("ok"), true);
 		O->SetNumberField(TEXT("count"), Out.Num());
 		O->SetNumberField(TEXT("removed"), Removed);
-		O->SetNumberField(TEXT("changed"), Out.Num() + Removed);
+		O->SetNumberField(TEXT("changed"), Out.Num() + Removed + Replaced.Num());
 		O->SetArrayField(TEXT("cars"), Out);
+		O->SetArrayField(TEXT("replaced"), RpcDto::StringArray(Replaced));
 		return RpcDto::MakeObject(O);
 	};
 	Dispatcher.Register(TEXT("car.createMany"), [CreateCars](const TSharedPtr<FJsonObject>& P, FRpcError& E) { return CreateCars(P, E, false); });

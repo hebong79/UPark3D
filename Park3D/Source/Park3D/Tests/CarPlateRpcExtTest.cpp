@@ -927,6 +927,123 @@ bool FRpcCarExtPlaceAtSlotTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// ===== 한 자리에 차 한 대: 같은 면·1 m 이내에 놓으면 교체(겹치면 큰 차 하부로 작은 차 번호판이 보여 "번호판 2개") =====
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRpcCarExtNoOverlapTest,
+	"Park3D.Rpc.CarModuleExt.NoOverlap",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FRpcCarExtNoOverlapTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = CpEditorWorld();
+	if (!World) { AddWarning(TEXT("에디터 월드 없음 — 건너뜀.")); return true; }
+	CpCleanupCarManager(World);
+	CpCleanupPresetManager(World);
+
+	// 합성 프리셋 2면 — 레벨 면과 겹치지 않는 먼 자리(PlaceAtSlot 테스트와 같은 이유).
+	AParkingPresetManager* Presets = World->SpawnActor<AParkingPresetManager>();
+	if (!TestNotNull(TEXT("프리셋 매니저 스폰"), Presets)) return false;
+	FParkingPreset Pr;
+	Pr.PresetIdx = 7;
+	Pr.FaceCount = 2;
+	Pr.BoxSizeX = 2.5f;
+	Pr.BoxSizeZ = 5.0f;
+	Pr.Offset = FVector(700.f, 700.f, 0.f);
+	Presets->StoredPresets = { Pr };
+	TArray<FParkingSlotNumberInfo> Faces;
+	Presets->CollectSlotNumbers(Presets->ResolvePresets(), Faces);
+	const FParkingSlotNumberInfo* Face1 = Faces.FindByPredicate([](const FParkingSlotNumberInfo& S) { return S.bFromPreset && S.Number == 1; });
+	if (!TestNotNull(TEXT("프리셋 면 1"), Face1)) return false;
+
+	URpcDispatcher* D = NewObject<URpcDispatcher>();
+	FCarRpcModule Car([World]() -> UWorld* { return World; });
+	Car.SetCatalog(CpTestCatalog());
+	Car.Register(*D);
+
+	auto CarCount = [&]() -> int32
+	{
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		D->Dispatch(TEXT("car.list"), nullptr, R, E);
+		return CpArrayNum(R, TEXT("cars"));
+	};
+	auto Create = [&](double X, double Y, bool bAllowOverlap) -> TSharedPtr<FJsonValue>
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+		P->SetNumberField(TEXT("prefabId"), 1);
+		TSharedPtr<FJsonObject> Pos = MakeShared<FJsonObject>();
+		Pos->SetNumberField(TEXT("x"), X); Pos->SetNumberField(TEXT("y"), Y); Pos->SetNumberField(TEXT("z"), 0);
+		P->SetObjectField(TEXT("pos"), Pos);
+		if (bAllowOverlap) { P->SetBoolField(TEXT("allowOverlap"), true); }
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		D->Dispatch(TEXT("car.create"), P, R, E);
+		return R;
+	};
+
+	// 1) 면 밖: 같은 점에 두 번 → 1대, 두 번째 응답 replaced = 첫 차.
+	const FString First = CpStrField(Create(-900.0, -900.0, false), TEXT("carNameId"));
+	const TSharedPtr<FJsonValue> Second = Create(-900.3, -900.0, false);
+	TestEqual(TEXT("면 밖 1 m 이내 → 교체, 1대"), CarCount(), 1);
+	TestEqual(TEXT("replaced 1개"), CpArrayNum(Second, TEXT("replaced")), 1);
+	TestNotEqual(TEXT("새 id 는 지운 차와 다르다"), CpStrField(Second, TEXT("carNameId")), First);
+
+	// 2) 1 m 밖은 그대로 둔다(옆 차).
+	Create(-902.0, -900.0, false);
+	TestEqual(TEXT("2 m 옆은 별개 → 2대"), CarCount(), 2);
+
+	// 3) allowOverlap 이면 예전처럼 겹친다.
+	Create(-902.0, -900.0, true);
+	TestEqual(TEXT("allowOverlap → 3대"), CarCount(), 3);
+
+	// 4) 면 안: 면 중심과 면 안 다른 점(1 m 넘게 떨어짐) → 같은 면이라 교체.
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+		TSharedPtr<FJsonObject> Pos = MakeShared<FJsonObject>();
+		Pos->SetNumberField(TEXT("x"), Face1->Center.X / 100.0); Pos->SetNumberField(TEXT("y"), Face1->Center.Y / 100.0);
+		P->SetObjectField(TEXT("pos"), Pos);
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestTrue(TEXT("placeAtWorld 면 중심"), D->Dispatch(TEXT("car.placeAtWorld"), P, R, E));
+		TestEqual(TEXT("빈 면 → replaced 0"), CpArrayNum(R, TEXT("replaced")), 0);
+	}
+	const int32 BeforeFace = CarCount();
+	{
+		// 면 길이축으로 1.5 m 떨어진 면 안의 점(snap:false 라 그 점에 그대로 놓인다).
+		const FVector In = Face1->Center + Face1->AxisDir * 150.f;
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+		TSharedPtr<FJsonObject> Pos = MakeShared<FJsonObject>();
+		Pos->SetNumberField(TEXT("x"), In.X / 100.0); Pos->SetNumberField(TEXT("y"), In.Y / 100.0);
+		P->SetObjectField(TEXT("pos"), Pos);
+		P->SetBoolField(TEXT("snap"), false);
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestTrue(TEXT("placeAtWorld 같은 면 다른 점"), D->Dispatch(TEXT("car.placeAtWorld"), P, R, E));
+		TestEqual(TEXT("같은 면 → replaced 1"), CpArrayNum(R, TEXT("replaced")), 1);
+		TestEqual(TEXT("같은 면 → 대수 그대로"), CarCount(), BeforeFace);
+	}
+
+	// 5) car.placeAtSlot 기본값이 교체로 바뀌었다(replace 생략).
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> Nums;
+		Nums.Add(MakeShared<FJsonValueNumber>(Face1->Number));
+		P->SetArrayField(TEXT("numbers"), Nums);
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestTrue(TEXT("placeAtSlot 기본"), D->Dispatch(TEXT("car.placeAtSlot"), P, R, E));
+		TestEqual(TEXT("placeAtSlot 기본 → removed 1"), CpArrayNum(R, TEXT("removed")), 1);
+		TestEqual(TEXT("placeAtSlot 기본 → 대수 그대로"), CarCount(), BeforeFace);
+	}
+
+	// 6) car.delete 없는 id → not_found(예전엔 ok:true 라 호출자가 지웠다고 믿고 새 차를 얹었다).
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+		P->SetStringField(TEXT("carNameId"), TEXT("없는-00.00.00"));
+		TSharedPtr<FJsonValue> R; FRpcError E;
+		TestFalse(TEXT("없는 id 삭제 거부"), D->Dispatch(TEXT("car.delete"), P, R, E));
+		TestEqual(TEXT("없는 id -32000"), E.Code, Park3DRpc::Domain);
+	}
+
+	CpCleanupCarManager(World);
+	CpCleanupPresetManager(World);
+	return true;
+}
+
 // ===== plate.* =====
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRpcPlateModuleTest,
 	"Park3D.Rpc.PlateModule.RandomAndKinds",

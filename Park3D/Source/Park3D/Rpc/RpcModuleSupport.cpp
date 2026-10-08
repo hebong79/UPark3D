@@ -243,4 +243,11 @@ namespace RpcDto
 		O->SetBoolField(TEXT("ok"), true);
 		return MakeShared<FJsonValueObject>(O);
 	}
+
+	TArray<TSharedPtr<FJsonValue>> StringArray(const TArray<FString>& Values)
+	{
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		for (const FString& V : Values) { Arr.Add(MakeShared<FJsonValueString>(V)); }
+		return Arr;
+	}
 }

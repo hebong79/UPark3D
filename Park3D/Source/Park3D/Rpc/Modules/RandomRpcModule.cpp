@@ -261,7 +261,8 @@ void FRandomRpcModule::Register(URpcDispatcher& Dispatcher)
 
 	/**
 	 * 프리셋의 각 주차면에 차량을 1대씩 새로 스폰한다(Unity CPresetSlotPlacer.PlaceVehiclesOnSlots).
-	 * Unity 와 동일하게 "추가"만 하고 기존 차량을 지우지 않는다 — 같은 프리셋에 두 번 호출하면 겹친다.
+	 * Unity 는 "추가"만 해서 두 번 부르면 겹쳤다 — 여기서는 그 면에 선 차를 지우고 바꾼다(2026-10-08, replaced[]).
+	 * allowOverlap:true 면 Unity 처럼 겹쳐 놓는다.
 	 * persist 파라미터는 받되 동작이 없다: 이 포트는 ACarPlacementManager 의 차량 목록 자체가 저장 권위라
 	 * 스폰과 동시에 이미 반영되며, 파일 쓰기는 car.save 가 담당한다.
 	 */
@@ -274,6 +275,8 @@ void FRandomRpcModule::Register(URpcDispatcher& Dispatcher)
 		const bool bRandom = RpcParam::GetBool(P, TEXT("random"), true);
 		const int32 Seed = RpcParam::GetInt(P, TEXT("seed"), 0);
 		const bool bRandomColor = RpcParam::GetBool(P, TEXT("randomColor"), false);
+		const bool bAllowOverlap = RpcParam::GetBool(P, TEXT("allowOverlap"), false);
+		TArray<FString> Replaced;
 
 		const FParkingPreset* Pr = ResolvePreset(PresetId, PreMgr, E); if (!Pr) return nullptr;
 		if (Catalog.Num() == 0)
@@ -312,8 +315,14 @@ void FRandomRpcModule::Register(URpcDispatcher& Dispatcher)
 
 			const FVector World = S.CenterWorld + OffsetCm;
 
+			// 면에 이미 선 차는 지우고 바꾼다(2026-10-08 — 두 번 부르면 겹쳐 "번호판 2개" 가 됐다).
+			if (!bAllowOverlap)
+			{
+				Replaced.Append(CarMgr->RemoveCarsOccupying(World));
+			}
+
 			FCarPos C;
-			C.id = UCarPlacementLibrary::MakeCarId(CarMgr->GetCarCount());
+			C.id = CarMgr->MakeUniqueCarId(Replaced);
 			C.prefabId = PrefabId;
 			C.prefabName = UCarPlacementLibrary::PrefabNameFromId(Catalog, PrefabId);
 			C.presetId = PresetId;
@@ -332,6 +341,7 @@ void FRandomRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetBoolField(TEXT("ok"), true);
 		O->SetNumberField(TEXT("placedCount"), Placed);
 		O->SetNumberField(TEXT("slotCount"), Slots.Num());
+		O->SetArrayField(TEXT("replaced"), RpcDto::StringArray(Replaced));
 		O->SetNumberField(TEXT("presetId"), PresetId);
 		O->SetBoolField(TEXT("seedHonored"), true);
 		return RpcDto::MakeObject(O);

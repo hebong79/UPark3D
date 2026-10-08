@@ -192,6 +192,25 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Car")
 	bool RemoveCarById(const FString& NameId);
 
+	/**
+	 * WorldLoc(cm)에 새 차를 놓기 전에 그 자리를 비운다 — 같은 주차면(FindParkingSlotAt 이 같은 면을 집는다)이거나
+	 * 수평 중심 거리가 OccupyRadiusCm 이내인 차량(숨긴 차 포함)을 지운다. RPC 배치 경로(car.create·createMany·
+	 * placeAtWorld·random.slotPlace)가 부른다. 같은 자리에 두 대가 겹치면 큰 차 하부로 작은 차 번호판이 드러나
+	 * "번호판 2개" 가 된다(2026-10-08 .125 실측: 23면에 43대).
+	 * @return 지운 차량 id.
+	 */
+	TArray<FString> RemoveCarsOccupying(const FVector& WorldLoc);
+
+	/**
+	 * 지금 목록에 없는 "{순번}-{HH.mm.ss}" id. 순번은 대수에서 출발해 겹치면 올린다 —
+	 * 차를 지운 직후 대수로만 만들면 같은 초 안에 살아 있는 차와 같은 id 가 나온다(sim 의 재사용 규약과 같다).
+	 * Avoid 에는 방금 지운 차의 id 를 넘긴다 — 옛 id 를 든 호출자가 새 차를 집지 않게.
+	 */
+	FString MakeUniqueCarId(const TArray<FString>& Avoid = TArray<FString>()) const;
+
+	/** RemoveCarsOccupying 의 면 밖 판정 반경(cm). 차 폭(약 1.8 m)보다 작게 — 옆 면 차량을 집지 않는다. */
+	static constexpr float OccupyRadiusCm = 100.f;
+
 	/** 차량의 리스트 인덱스 반환(없으면 INDEX_NONE). RPC car.select 용. */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Car")
 	int32 IndexOfNameId(const FString& NameId) const;

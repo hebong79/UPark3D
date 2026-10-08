@@ -61,6 +61,42 @@ public:
 	const FString& GetCurrentFileName() const { return CurrentFileName; }
 	void SetCurrentFileName(const FString& InName) { CurrentFileName = InName; }
 
+	// ---- 시간대·날씨·밤 조명(보드 #1326 B1) ----
+	/**
+	 * In 에서 0 이상인 필드만 적용한다(음수 = 건드리지 않음). 레벨이 못 하는 키는 무시된다 —
+	 * 어느 키가 되는지는 GetSupports 로 미리 알 수 있고 RPC 가 그 기준으로 ignoredKeys 를 만든다.
+	 * 기본맵: 시각 → 우리 태양(ApplySettings 를 거친다), 안개 → 우리가 스폰한 ExponentialHeightFog, 밤 조명 → 달빛.
+	 * UDS 레벨: 시각 → UDS "Time of Day"(0..2400, 시간 흐름 끔), 날씨 → UDW "<X>" 값 + "<X> - Manual Override" 켬.
+	 */
+	void ApplyEnv(const FLightEnv& In);
+
+	/** 지금 시간대·날씨. 기본맵은 마지막 요청값, UDS 레벨은 UDS/UDW 변수에서 되읽은 값(못 하는 키는 음수). */
+	FLightEnv GetEnv() const;
+
+	/** 이 레벨에서 적용 가능한 키. */
+	FLightSupports GetSupports() const;
+
+private:
+	/** 시각으로 태양을 몰고 있는가를 ApplySettings 가 판단하게 하는 표식(ApplyEnv 안에서만 참). */
+	bool bApplyingEnv = false;
+
+	/** 기본맵의 요청 상태. UDS 레벨은 UDS/UDW 변수가 곧 상태라 여기에 담지 않는다. */
+	FLightEnv Env;
+	FLightEnv BaseEnv;
+
+	/** UDS/UDW 변수 기준 상태(light.reset 이 되돌릴 값) — 이름 → 숫자(불은 0/1). */
+	TMap<FString, double> BaseExternalVars;
+
+	/** 달빛(밤 조명)·안개 색을 태양 세기에 맞춘다. ApplySettings·ApplyEnv 가 부른다(기본맵만). */
+	void UpdateNightAndFog(const FLightSettings& S);
+	ADirectionalLight* EnsureMoonLight();
+	ADirectionalLight* EnsureNightSkyLight();
+	class AExponentialHeightFog* EnsureFog();
+
+	/** 레벨의 UltraDynamicSky / UltraDynamicWeather 액터(클래스 이름으로 찾는다 — C++ 타입이 없다). */
+	AActor* FindUds() const;
+	AActor* FindUdw() const;
+
 private:
 	/**
 	 * 태양·하늘빛은 액터가 아니라 컴포넌트로 찾는다. 조명을 ADirectionalLight/ASkyLight 액터로만

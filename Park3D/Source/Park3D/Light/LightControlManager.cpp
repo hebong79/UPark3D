@@ -14,6 +14,9 @@
 #include "LightControlLibrary.h"
 #include "../CarActor.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/ExponentialHeightFogComponent.h"
+#include "Engine/ExponentialHeightFog.h"
+#include "UObject/UnrealType.h"
 
 namespace
 {
@@ -32,6 +35,107 @@ namespace
 
 	/** 차량 전용 채움광이 걸리는 라이팅 채널. 0 은 월드 전체가 쓰므로 1 을 쓴다. */
 	constexpr bool GCh0 = false, GCh1 = true, GCh2 = false;
+
+	/** 달빛(밤 조명). GFillTag 도 함께 달아 FindSun 이 태양으로 오인하지 않게 한다. */
+	static const FName GMoonTag(TEXT("Park3D_MoonLight"));
+	static const FName GFogTag(TEXT("Park3D_Fog"));
+	static const FName GNightSkyTag(TEXT("Park3D_NightSky"));
+	/** 밤하늘 광원 세기 = 달빛 × 이 비율. 대기는 같은 lux 라도 물체보다 훨씬 밝게 보여 크게 줄인다(실측으로 조정). */
+	constexpr float GNightSkyRatio = 0.1f;
+	constexpr float GMoonPitch = -45.0f;
+	constexpr float GMoonYaw = 135.0f;
+	/** 지면 태양광(lux = 광량 × sin 고도)이 이 값 이상이면 달빛 0, 0 이면 NightAmbient 전부. */
+	constexpr float GNightFadeLux = 1.0f;
+	/** fog 1.0 → ExponentialHeightFog 밀도. 0.08 이면 수십 m 앞이 흐려진다(실측으로 조정). */
+	constexpr float GFogDensityAtOne = 0.08f;
+
+	/**
+	 * UDS/UDW 는 블루프린트라 C++ 타입이 없다 — 변수를 리플렉션으로 이름(에디터 표시 이름, 공백 포함)으로 찾는다.
+	 * 이름이 바뀐 UDS 버전이면 못 찾고 supports 가 false 가 된다(조용히 무시하지 않는다).
+	 */
+	FProperty* FindBpProp(const UObject* Obj, const TCHAR* Name)
+	{
+		if (!Obj) { return nullptr; }
+		for (TFieldIterator<FProperty> It(Obj->GetClass()); It; ++It)
+		{
+			if (It->GetAuthoredName() == Name || It->GetName() == Name) { return *It; }
+		}
+		return nullptr;
+	}
+
+	bool GetBpNumber(const UObject* Obj, const TCHAR* Name, double& Out)
+	{
+		FProperty* P = FindBpProp(Obj, Name);
+		if (!P) { return false; }
+		const void* Ptr = P->ContainerPtrToValuePtr<void>(Obj);
+		if (const FNumericProperty* N = CastField<FNumericProperty>(P))
+		{
+			Out = N->IsFloatingPoint() ? N->GetFloatingPointPropertyValue(Ptr) : static_cast<double>(N->GetSignedIntPropertyValue(Ptr));
+			return true;
+		}
+		if (const FBoolProperty* B = CastField<FBoolProperty>(P))
+		{
+			Out = B->GetPropertyValue(Ptr) ? 1.0 : 0.0;
+			return true;
+		}
+		return false;
+	}
+
+	bool SetBpNumber(UObject* Obj, const TCHAR* Name, double V)
+	{
+		FProperty* P = FindBpProp(Obj, Name);
+		if (!P) { return false; }
+		void* Ptr = P->ContainerPtrToValuePtr<void>(Obj);
+		if (FNumericProperty* N = CastField<FNumericProperty>(P))
+		{
+			if (N->IsFloatingPoint()) { N->SetFloatingPointPropertyValue(Ptr, V); }
+			else { N->SetIntPropertyValue(Ptr, static_cast<int64>(FMath::RoundToDouble(V))); }
+			return true;
+		}
+		if (FBoolProperty* B = CastField<FBoolProperty>(P))
+		{
+			B->SetPropertyValue(Ptr, V != 0.0);
+			return true;
+		}
+		return false;
+	}
+
+	/** UDW 날씨 키: RPC 0..1 → UDW 변수 값 배율. 오버라이드 스위치 이름은 "<변수> - Manual Override". */
+	struct FUdwKey { const TCHAR* Var; const TCHAR* Override; float Scale; };
+	const FUdwKey GUdwCloud   { TEXT("Cloud Coverage"),   TEXT("Cloud Coverage - Manual Override"),   10.0f };
+	const FUdwKey GUdwFog     { TEXT("Fog"),              TEXT("Fog - Manual Override"),              10.0f };
+	const FUdwKey GUdwRain    { TEXT("Rain"),             TEXT("Rain - Manual Override"),             10.0f };
+	const FUdwKey GUdwWetness { TEXT("Material Wetness"), TEXT("Material Wetness - Manual Override"), 1.0f };
+	const TCHAR* const GUdsTime = TEXT("Time of Day");          // 0..2400(시 × 100)
+	const TCHAR* const GUdsAnimate = TEXT("Animate Time of Day");
+
+	bool UdwHas(const UObject* Udw, const FUdwKey& K)
+	{
+		return FindBpProp(Udw, K.Var) && FindBpProp(Udw, K.Override);
+	}
+
+	/** 처음 한 번 UDS/UDW 변수의 타입·값을 로그에 남긴다(버전마다 이름·배율이 달라 실측 근거로 쓴다). */
+	void LogExternalVarsOnce(const UObject* Uds, const UObject* Udw)
+	{
+		static bool bLogged = false;
+		if (bLogged || (!Uds && !Udw)) { return; }
+		bLogged = true;
+		auto Dump = [](const UObject* O, const TCHAR* Name)
+		{
+			FProperty* P = FindBpProp(O, Name);
+			double V = 0.0;
+			const bool bOk = GetBpNumber(O, Name, V);
+			UE_LOG(LogTemp, Log, TEXT("[Light][UDS] %s.'%s' = %s (%s)"), O ? *O->GetClass()->GetName() : TEXT("-"), Name,
+				bOk ? *FString::SanitizeFloat(V) : TEXT("?"), P ? *P->GetClass()->GetName() : TEXT("없음"));
+		};
+		Dump(Uds, GUdsTime);
+		Dump(Uds, GUdsAnimate);
+		for (const FUdwKey* K : { &GUdwCloud, &GUdwFog, &GUdwRain, &GUdwWetness })
+		{
+			Dump(Udw, K->Var);
+			Dump(Udw, K->Override);
+		}
+	}
 }
 
 ALightControlManager::ALightControlManager()
@@ -249,6 +353,14 @@ void ALightControlManager::ApplySettings(const FLightSettings& Settings)
 	FLightSettings S = Settings;
 	ULightControlLibrary::ClampSettings(S);
 
+	// 시각이 태양을 몰던 중에 다른 길(패널·light.set 의 태양 키·파일)로 태양 방향이 바뀌면 더 이상 그 시각이 아니다.
+	if (!bApplyingEnv && Env.TimeOfDay >= 0.0f
+		&& (!FMath::IsNearlyEqual(S.SunAltitudeDeg, LastApplied.SunAltitudeDeg, 0.01f)
+			|| !FMath::IsNearlyEqual(S.SunAzimuthDeg, LastApplied.SunAzimuthDeg, 0.01f)))
+	{
+		Env.TimeOfDay = -1.0f;
+	}
+
 	// 채움광은 통합 하늘 시스템 판정보다 먼저 건다. 우리가 소유한 액터라 그 시스템이 덮어쓰지
 	// 않고 빛을 더하기만 하므로, UDS 레벨에서 그늘 밝기를 조절할 수 있는 유일한 수단이다.
 	ApplyFillLights(S);
@@ -315,6 +427,309 @@ void ALightControlManager::ApplySettings(const FLightSettings& Settings)
 	}
 
 	LastApplied = S;
+	UpdateNightAndFog(S);
+}
+
+ADirectionalLight* ALightControlManager::EnsureMoonLight()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return nullptr;
+	}
+	for (TActorIterator<ADirectionalLight> It(World); It; ++It)
+	{
+		if (It->ActorHasTag(GMoonTag))
+		{
+			return *It;
+		}
+	}
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	ADirectionalLight* Moon = World->SpawnActor<ADirectionalLight>(FVector::ZeroVector, FRotator(GMoonPitch, GMoonYaw, 0.0f), Params);
+	if (!Moon)
+	{
+		return nullptr;
+	}
+	Moon->Tags.Add(GFillTag);
+	Moon->Tags.Add(GMoonTag);
+	Moon->SetMobility(EComponentMobility::Movable);
+	Moon->SetActorRotation(FRotator(GMoonPitch, GMoonYaw, 0.0f));
+	if (UDirectionalLightComponent* C = Cast<UDirectionalLightComponent>(Moon->GetLightComponent()))
+	{
+		C->SetCastShadows(false);
+		C->SetIntensity(0.0f);
+		C->SetLightColor(FLinearColor(0.55f, 0.65f, 1.0f));
+		// 대기 광원으로 두지 않는다 — 달빛 세기(lux)로 대기를 밝히면 고정 노출에서 밤하늘이 한낮처럼 파랗게 뜬다(실측).
+		// 하늘은 아래 EnsureNightSkyLight 가 따로, 훨씬 약하게 밝힌다.
+		C->SetAtmosphereSunLight(false);
+	}
+	UE_LOG(LogTemp, Log, TEXT("[Light] 달빛(밤 조명) 생성"));
+	return Moon;
+}
+
+ADirectionalLight* ALightControlManager::EnsureNightSkyLight()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return nullptr;
+	}
+	for (TActorIterator<ADirectionalLight> It(World); It; ++It)
+	{
+		if (It->ActorHasTag(GNightSkyTag))
+		{
+			return *It;
+		}
+	}
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	ADirectionalLight* L = World->SpawnActor<ADirectionalLight>(FVector::ZeroVector, FRotator(GMoonPitch, GMoonYaw, 0.0f), Params);
+	if (!L)
+	{
+		return nullptr;
+	}
+	L->Tags.Add(GFillTag);
+	L->Tags.Add(GNightSkyTag);
+	L->SetMobility(EComponentMobility::Movable);
+	L->SetActorRotation(FRotator(GMoonPitch, GMoonYaw, 0.0f));
+	if (UDirectionalLightComponent* C = Cast<UDirectionalLightComponent>(L->GetLightComponent()))
+	{
+		// 하늘(대기) 전용 — 대기 2번 광원으로 대기만 밝히고, 라이팅 채널을 전부 꺼 물체는 직접 밝히지 않는다.
+		// 하늘빛(SkyLight)은 대기를 실시간 캡처하므로 이 빛이 곧 밤의 그늘 바닥(남색 앰비언트)이 된다.
+		// 태양만 대기를 밝히던 때는 태양을 끄면 캡처된 하늘이 검어 skyIntensity 를 올려도 검정에 곱해질 뿐이었다(보드 #1326 실측 4/255).
+		C->SetCastShadows(false);
+		C->SetIntensity(0.0f);
+		C->SetLightColor(FLinearColor(0.55f, 0.65f, 1.0f));
+		C->SetLightingChannels(false, false, false);
+		C->SetAtmosphereSunLight(true);
+		C->SetAtmosphereSunLightIndex(1);
+	}
+	UE_LOG(LogTemp, Log, TEXT("[Light] 밤하늘 광원 생성"));
+	return L;
+}
+
+AExponentialHeightFog* ALightControlManager::EnsureFog()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return nullptr;
+	}
+	for (TActorIterator<AExponentialHeightFog> It(World); It; ++It)
+	{
+		if (It->ActorHasTag(GFogTag))
+		{
+			return *It;
+		}
+	}
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	AExponentialHeightFog* Fog = World->SpawnActor<AExponentialHeightFog>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
+	if (!Fog)
+	{
+		return nullptr;
+	}
+	Fog->Tags.Add(GFogTag);
+	if (UExponentialHeightFogComponent* C = Fog->GetComponent())
+	{
+		C->SetMobility(EComponentMobility::Movable);
+		C->SetFogDensity(0.0f);
+		C->SetFogHeightFalloff(0.2f);
+		C->SetVolumetricFog(false);
+		C->SetVisibility(false);
+	}
+	UE_LOG(LogTemp, Log, TEXT("[Light] 안개(ExponentialHeightFog) 생성"));
+	return Fog;
+}
+
+void ALightControlManager::UpdateNightAndFog(const FLightSettings& S)
+{
+	if (HasExternalSkySystem())
+	{
+		return;
+	}
+	const float GroundSunLux = S.SunIntensity * FMath::Max(0.0f, FMath::Sin(FMath::DegreesToRadians(S.SunAltitudeDeg)));
+	const float NightFactor = FMath::Clamp(1.0f - GroundSunLux / GNightFadeLux, 0.0f, 1.0f);
+
+	const float MoonLux = FMath::Max(0.0f, Env.NightAmbient) * NightFactor;
+	// 한낮(달빛 0)엔 액터를 만들지도 않는다 — 기존 화면·scenario.* 기준선을 그대로 둔다.
+	ADirectionalLight* Moon = MoonLux > 0.0f ? EnsureMoonLight() : nullptr;
+	UWorld* World = GetWorld();
+	if (!Moon && World)
+	{
+		for (TActorIterator<ADirectionalLight> It(World); It; ++It)
+		{
+			if (It->ActorHasTag(GMoonTag)) { Moon = *It; break; }
+		}
+	}
+	if (Moon)
+	{
+		if (ULightComponent* C = Moon->GetLightComponent())
+		{
+			C->SetIntensity(MoonLux);
+			C->SetVisibility(MoonLux > 0.0f);
+		}
+	}
+	ADirectionalLight* NightSky = MoonLux > 0.0f ? EnsureNightSkyLight() : nullptr;
+	if (!NightSky && World)
+	{
+		for (TActorIterator<ADirectionalLight> It(World); It; ++It)
+		{
+			if (It->ActorHasTag(GNightSkyTag)) { NightSky = *It; break; }
+		}
+	}
+	if (NightSky)
+	{
+		if (ULightComponent* C = NightSky->GetLightComponent())
+		{
+			C->SetIntensity(MoonLux * GNightSkyRatio);
+			C->SetVisibility(MoonLux > 0.0f);
+		}
+	}
+
+	const float Fog = FMath::Max(0.0f, Env.Fog);
+	AExponentialHeightFog* FogActor = Fog > 0.0f ? EnsureFog() : nullptr;
+	if (!FogActor && World)
+	{
+		for (TActorIterator<AExponentialHeightFog> It(World); It; ++It)
+		{
+			if (It->ActorHasTag(GFogTag)) { FogActor = *It; break; }
+		}
+	}
+	if (FogActor)
+	{
+		if (UExponentialHeightFogComponent* C = FogActor->GetComponent())
+		{
+			C->SetFogDensity(Fog * GFogDensityAtOne);
+			// 안개 색은 주변 밝기를 따른다 — 밤에 낮과 같은 회색을 내면 어둠 속에서 안개만 빛난다.
+			const float Day = 1.0f - NightFactor;
+			C->SetFogInscatteringColor(FLinearColor(0.45f, 0.5f, 0.55f) * (0.03f + 0.97f * Day));
+			C->SetVisibility(Fog > 0.0f);
+		}
+	}
+}
+
+AActor* ALightControlManager::FindUds() const
+{
+	if (UWorld* World = GetWorld())
+	{
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			if (It->GetClass()->GetName().StartsWith(TEXT("Ultra_Dynamic_Sky"))) { return *It; }
+		}
+	}
+	return nullptr;
+}
+
+AActor* ALightControlManager::FindUdw() const
+{
+	if (UWorld* World = GetWorld())
+	{
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			if (It->GetClass()->GetName().StartsWith(TEXT("Ultra_Dynamic_Weather"))) { return *It; }
+		}
+	}
+	return nullptr;
+}
+
+FLightSupports ALightControlManager::GetSupports() const
+{
+	FLightSupports Sup;
+	if (!HasExternalSkySystem())
+	{
+		Sup.bTimeOfDay = Sup.bNightAmbient = Sup.bFog = true;
+		return Sup;
+	}
+	const AActor* Uds = FindUds();
+	const AActor* Udw = FindUdw();
+	LogExternalVarsOnce(Uds, Udw);
+	Sup.bTimeOfDay = FindBpProp(Uds, GUdsTime) != nullptr;
+	Sup.bCloudCoverage = UdwHas(Udw, GUdwCloud);
+	Sup.bFog = UdwHas(Udw, GUdwFog);
+	Sup.bRain = UdwHas(Udw, GUdwRain);
+	Sup.bWetness = UdwHas(Udw, GUdwWetness);
+	return Sup;
+}
+
+FLightEnv ALightControlManager::GetEnv() const
+{
+	if (!HasExternalSkySystem())
+	{
+		FLightEnv Out = Env;
+		Out.Fog = FMath::Max(0.0f, Env.Fog);   // 기본맵은 "안개 없음" 이 곧 0
+		Out.CloudCoverage = Out.Rain = Out.Wetness = -1.0f;
+		return Out;
+	}
+	FLightEnv Out;
+	Out.NightAmbient = -1.0f;
+	const AActor* Uds = FindUds();
+	const AActor* Udw = FindUdw();
+	double V = 0.0;
+	if (GetBpNumber(Uds, GUdsTime, V)) { Out.TimeOfDay = static_cast<float>(V / 100.0); }
+	auto Read = [&](const FUdwKey& K, float& Field)
+	{
+		if (UdwHas(Udw, K) && GetBpNumber(Udw, K.Var, V)) { Field = static_cast<float>(V / K.Scale); }
+	};
+	Read(GUdwCloud, Out.CloudCoverage);
+	Read(GUdwFog, Out.Fog);
+	Read(GUdwRain, Out.Rain);
+	Read(GUdwWetness, Out.Wetness);
+	return Out;
+}
+
+void ALightControlManager::ApplyEnv(const FLightEnv& In)
+{
+	EnsureLightingActors();
+	if (!bBaselineTaken)
+	{
+		CaptureBaseline();
+	}
+
+	if (HasExternalSkySystem())
+	{
+		AActor* Uds = FindUds();
+		AActor* Udw = FindUdw();
+		LogExternalVarsOnce(Uds, Udw);
+		if (In.TimeOfDay >= 0.0f && Uds)
+		{
+			// 시간이 흐르면 방금 넣은 시각이 곧 어긋난다 — 시각을 정하면 흐름을 멈춘다(light.reset 이 원래대로 되돌린다).
+			SetBpNumber(Uds, GUdsAnimate, 0.0);
+			SetBpNumber(Uds, GUdsTime, FMath::Fmod(In.TimeOfDay, 24.0f) * 100.0);
+		}
+		auto Write = [&](const FUdwKey& K, float Value)
+		{
+			if (Value < 0.0f || !UdwHas(Udw, K)) { return; }
+			SetBpNumber(Udw, K.Var, FMath::Clamp(Value, 0.0f, 1.0f) * K.Scale);
+			SetBpNumber(Udw, K.Override, 1.0);
+		};
+		Write(GUdwCloud, In.CloudCoverage);
+		Write(GUdwFog, In.Fog);
+		Write(GUdwRain, In.Rain);
+		Write(GUdwWetness, In.Wetness);
+		UE_LOG(LogTemp, Log, TEXT("[Light] UDS 시간대·날씨 적용: time=%.2f cloud=%.2f fog=%.2f rain=%.2f wet=%.2f"),
+			In.TimeOfDay, In.CloudCoverage, In.Fog, In.Rain, In.Wetness);
+		return;
+	}
+
+	if (In.NightAmbient >= 0.0f) { Env.NightAmbient = FMath::Clamp(In.NightAmbient, 0.0f, 5.0f); }
+	if (In.Fog >= 0.0f) { Env.Fog = FMath::Clamp(In.Fog, 0.0f, 1.0f); }
+
+	FLightSettings S;
+	if (!CaptureCurrent(S)) { S = LastApplied; }
+	if (In.TimeOfDay >= 0.0f)
+	{
+		Env.TimeOfDay = FMath::Fmod(In.TimeOfDay, 24.0f);
+		// 정오 광량 기준 = 기동 조명(시작 파일)의 태양 광량. 지금 값을 쓰면 밤에 0 이 된 뒤 아침이 와도 0 으로 남는다.
+		const float Ref = BaseSettings.SunIntensity > 0.0f ? BaseSettings.SunIntensity : FLightSettings().SunIntensity;
+		bool bNight = false;
+		ULightControlLibrary::SunFromTimeOfDay(Env.TimeOfDay, Ref, S.SunAltitudeDeg, S.SunAzimuthDeg, S.SunIntensity, S.SunColor, bNight);
+		TGuardValue<bool> Guard(bApplyingEnv, true);
+		ApplySettings(S);   // 끝에서 UpdateNightAndFog 가 돈다
+		return;
+	}
+	UpdateNightAndFog(S);
 }
 
 void ALightControlManager::CaptureBaseline()
@@ -331,6 +746,26 @@ void ALightControlManager::CaptureBaseline()
 		BaseExposureMin = V->Settings.AutoExposureMinBrightness;
 		BaseExposureMax = V->Settings.AutoExposureMaxBrightness;
 	}
+
+	BaseEnv = Env;
+	BaseExternalVars.Reset();
+	if (HasExternalSkySystem())
+	{
+		const AActor* Uds = FindUds();
+		const AActor* Udw = FindUdw();
+		double V = 0.0;
+		for (const TCHAR* Name : { GUdsTime, GUdsAnimate })
+		{
+			if (GetBpNumber(Uds, Name, V)) { BaseExternalVars.Add(FString(TEXT("uds:")) + Name, V); }
+		}
+		for (const FUdwKey* K : { &GUdwCloud, &GUdwFog, &GUdwRain, &GUdwWetness })
+		{
+			for (const TCHAR* Name : { K->Var, K->Override })
+			{
+				if (GetBpNumber(Udw, Name, V)) { BaseExternalVars.Add(FString(TEXT("udw:")) + Name, V); }
+			}
+		}
+	}
 }
 
 bool ALightControlManager::ResetToBaseline()
@@ -339,7 +774,23 @@ bool ALightControlManager::ResetToBaseline()
 	{
 		return false;
 	}
-	ApplySettings(BaseSettings);
+	// 시간대·날씨도 기동 상태로. 기본맵은 요청 상태를 통째로 되돌린 뒤 태양을 기준값으로 적용하면 달빛·안개가 따라온다.
+	Env = BaseEnv;
+	if (HasExternalSkySystem())
+	{
+		AActor* Uds = FindUds();
+		AActor* Udw = FindUdw();
+		for (const TPair<FString, double>& KV : BaseExternalVars)
+		{
+			FString VarOwner, Name;
+			KV.Key.Split(TEXT(":"), &VarOwner, &Name);
+			SetBpNumber(VarOwner == TEXT("uds") ? Uds : Udw, *Name, KV.Value);
+		}
+	}
+	{
+		TGuardValue<bool> Guard(bApplyingEnv, true);   // 태양을 되돌려도 기준 시각(BaseEnv.TimeOfDay)은 지우지 않는다
+		ApplySettings(BaseSettings);
+	}
 
 	// 기준 시점에 노출이 override 되지 않았다면 그 상태(레벨 자체 노출)로 되돌린다 - 값만 넣으면
 	// "원래 override 가 없던 볼륨" 이 고정 노출 볼륨으로 바뀐 채 남는다.

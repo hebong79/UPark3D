@@ -6,6 +6,9 @@
 #include "../RpcParamUtil.h"
 #include "../../Light/LightControlManager.h"
 #include "../../Light/LightControlLibrary.h"
+#include "../../Light/LotLampActor.h"
+#include "Engine/World.h"
+#include "CollisionQueryParams.h"
 #include "HAL/FileManager.h"
 #include "Misc/Paths.h"
 
@@ -32,6 +35,77 @@ namespace
 		TEXT("exposureEV100"), TEXT("sunIntensity"), TEXT("sunAltitudeDeg"), TEXT("sunAzimuthDeg"),
 		TEXT("skyIntensity"), TEXT("shadowFillIntensity"), TEXT("carFillIntensity"), TEXT("sunColor"),
 	};
+
+	/** 시간대·날씨·밤 조명 키(보드 #1326 B1). FLightEnv 필드 순서와 같다. */
+	const TCHAR* const EnvValueKeys[] = {
+		TEXT("timeOfDay"), TEXT("nightAmbient"), TEXT("fog"), TEXT("cloudCoverage"), TEXT("rain"), TEXT("wetness"),
+	};
+
+	float* EnvValueField(FLightEnv& E, int32 i)
+	{
+		float* F[] = { &E.TimeOfDay, &E.NightAmbient, &E.Fog, &E.CloudCoverage, &E.Rain, &E.Wetness };
+		return F[i];
+	}
+
+	bool EnvKeySupported(const FLightSupports& S, int32 i)
+	{
+		const bool B[] = { S.bTimeOfDay, S.bNightAmbient, S.bFog, S.bCloudCoverage, S.bRain, S.bWetness };
+		return B[i];
+	}
+
+	/** 음수 = 없음(null). */
+	void SetNumberOrNull(const TSharedPtr<FJsonObject>& O, const TCHAR* Key, float V)
+	{
+		if (V < 0.0f) { O->SetField(Key, MakeShared<FJsonValueNull>()); }
+		else          { O->SetNumberField(Key, V); }
+	}
+
+	void EnvToDto(const TSharedPtr<FJsonObject>& O, const FLightEnv& Env)
+	{
+		FLightEnv Copy = Env;
+		for (int32 i = 0; i < UE_ARRAY_COUNT(EnvValueKeys); ++i)
+		{
+			SetNumberOrNull(O, EnvValueKeys[i], *EnvValueField(Copy, i));
+		}
+	}
+
+	TSharedPtr<FJsonObject> SupportsDto(const FLightSupports& S)
+	{
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("timeOfDay"), S.bTimeOfDay);
+		O->SetBoolField(TEXT("nightAmbient"), S.bNightAmbient);
+		O->SetBoolField(TEXT("fog"), S.bFog);
+		O->SetBoolField(TEXT("cloudCoverage"), S.bCloudCoverage);
+		O->SetBoolField(TEXT("rain"), S.bRain);
+		O->SetBoolField(TEXT("wetness"), S.bWetness);
+		O->SetBoolField(TEXT("lamps"), S.bLamps);
+		O->SetBoolField(TEXT("carLights"), S.bCarLights);
+		return O;
+	}
+
+	/** 지면 높이(cm) — lot.* 와 같은 정적 오브젝트 질의(차량·가로등은 걸리지 않는다). 못 찾으면 0. */
+	double LampGroundZ(UWorld* World, double Xcm, double Ycm)
+	{
+		FHitResult Hit;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(LampGround), /*bTraceComplex=*/true);
+		if (World && World->LineTraceSingleByObjectType(Hit, FVector(Xcm, Ycm, 300.0), FVector(Xcm, Ycm, -1000.0),
+			FCollisionObjectQueryParams(FCollisionObjectQueryParams::AllStaticObjects), Params))
+		{
+			return Hit.ImpactPoint.Z;
+		}
+		return 0.0;
+	}
+
+	TSharedPtr<FJsonObject> LampsDto(UWorld* World)
+	{
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		for (const ALotLampActor* L : ALotLampActor::GetAll(World)) { Arr.Add(MakeShared<FJsonValueObject>(L->ToJson())); }
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetArrayField(TEXT("lamps"), Arr);
+		O->SetNumberField(TEXT("count"), Arr.Num());
+		O->SetStringField(TEXT("file"), ALotLampActor::GetFilePath(World));
+		return O;
+	}
 
 	/** UDS 같은 통합 하늘 시스템 레벨에서 적용되지 않는 키(ApplySettings 가 건너뛴다). */
 	bool IsIgnoredOnExternalSky(const FString& Key)
@@ -99,6 +173,18 @@ namespace
 		if (Mgr.GetCurrentFileName().IsEmpty()) { O->SetField(TEXT("fileName"), MakeShared<FJsonValueNull>()); }
 		else                                    { O->SetStringField(TEXT("fileName"), Mgr.GetCurrentFileName()); }
 		O->SetBoolField(TEXT("externalSkySystem"), Mgr.UsesExternalSkySystem());
+		EnvToDto(O, Mgr.GetEnv());
+		O->SetObjectField(TEXT("supports"), SupportsDto(Mgr.GetSupports()));
+		// 가로등 요약(light.lamps 와 짝) — 하나라도 켜져 있으면 on, 세기는 첫 가로등(light.lamps 가 전부 같게 맞춘다). 없으면 null.
+		const TArray<ALotLampActor*> Lamps = ALotLampActor::GetAll(Mgr.GetWorld());
+		TSharedPtr<FJsonObject> L = MakeShared<FJsonObject>();
+		L->SetNumberField(TEXT("count"), Lamps.Num());
+		bool bAnyOn = false;
+		for (const ALotLampActor* Lamp : Lamps) { bAnyOn |= Lamp->IsOn(); }
+		L->SetBoolField(TEXT("on"), bAnyOn);
+		if (Lamps.Num() > 0) { L->SetNumberField(TEXT("intensity"), Lamps[0]->GetIntensity()); }
+		else                 { L->SetField(TEXT("intensity"), MakeShared<FJsonValueNull>()); }
+		O->SetObjectField(TEXT("lamps"), L);
 		return O;
 	}
 
@@ -123,6 +209,25 @@ namespace
 		C->SetStringField(TEXT("unit"), TEXT("linear RGB 0..1"));
 		C->SetObjectField(TEXT("default"), RpcDto::Vec3(1.0, 1.0, 1.0));
 		M->SetObjectField(TEXT("sunColor"), C);
+		// 시간대·날씨(보드 #1326). default = 기동 시 값(음수 키는 "건드리지 않음" 이라 meta 에선 0).
+		struct FEnvMeta { const TCHAR* Key; float Min, Max, Step; const TCHAR* Unit; float Default; };
+		const FLightEnv D;
+		for (const FEnvMeta& K : {
+			FEnvMeta{ TEXT("timeOfDay"),     0.f, 24.f, 0.25f, TEXT("hour"), 12.f },
+			FEnvMeta{ TEXT("nightAmbient"),  0.f, 5.f,  0.05f, TEXT("lux"),  D.NightAmbient },
+			FEnvMeta{ TEXT("fog"),           0.f, 1.f,  0.05f, TEXT("0..1"), 0.f },
+			FEnvMeta{ TEXT("cloudCoverage"), 0.f, 1.f,  0.05f, TEXT("0..1"), 0.f },
+			FEnvMeta{ TEXT("rain"),          0.f, 1.f,  0.05f, TEXT("0..1"), 0.f },
+			FEnvMeta{ TEXT("wetness"),       0.f, 1.f,  0.05f, TEXT("0..1"), 0.f } })
+		{
+			TSharedPtr<FJsonObject> E = MakeShared<FJsonObject>();
+			E->SetNumberField(TEXT("min"), K.Min);
+			E->SetNumberField(TEXT("max"), K.Max);
+			E->SetNumberField(TEXT("step"), K.Step);
+			E->SetStringField(TEXT("unit"), K.Unit);
+			E->SetNumberField(TEXT("default"), K.Default);
+			M->SetObjectField(K.Key, E);
+		}
 		return M;
 	}
 
@@ -179,31 +284,57 @@ void FLightRpcModule::Register(URpcDispatcher& Dispatcher)
 	// 전달한 항목만 바꿔 즉시 적용한다(가림률 측정 중 노출을 고정하는 용도).
 	Dispatcher.Register(TEXT("light.set"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
-		if (!RejectUnknownKeys(P, { ValueKeys[0], ValueKeys[1], ValueKeys[2], ValueKeys[3], ValueKeys[4], ValueKeys[5], ValueKeys[6], ValueKeys[7] }, E)) { return nullptr; }
+		if (!RejectUnknownKeys(P, { ValueKeys[0], ValueKeys[1], ValueKeys[2], ValueKeys[3], ValueKeys[4], ValueKeys[5], ValueKeys[6], ValueKeys[7],
+			EnvValueKeys[0], EnvValueKeys[1], EnvValueKeys[2], EnvValueKeys[3], EnvValueKeys[4], EnvValueKeys[5] }, E)) { return nullptr; }
 		ALightControlManager* Mgr = ALightControlManager::GetOrSpawn(GetWorldPtr());
 		if (!Mgr) { E.FailDomain(TEXT("조명 매니저 없음(월드 미로드)")); return nullptr; }
 
-		// 기준은 현재 월드 상태다 - 마지막 적용값에서 출발하면 패널로 바꾼 값을 되돌려 버린다.
-		FLightSettings S;
-		if (!Mgr->CaptureCurrent(S)) { S = Mgr->GetLastApplied(); }
-		ApplyOptionalFields(P, S);
-		Mgr->ApplySettings(S);
+		// 받았지만 이 레벨에서는 적용되지 않은 키를 이름으로 알린다(조용히 무시하지 않는다).
+		TArray<TSharedPtr<FJsonValue>> Ignored;
+		const FLightSupports Sup = Mgr->GetSupports();
+
+		// 1) 시간대·날씨 먼저 — timeOfDay 가 태양을 정한 뒤 2) 의 태양 키가 있으면 그것이 이긴다.
+		FLightEnv In;
+		In.NightAmbient = -1.0f;   // 구조체 기본값(0.5)은 "보냄" 으로 읽히므로 전부 "안 보냄"(음수)에서 출발
+		bool bAnyEnv = false;
+		for (int32 i = 0; i < UE_ARRAY_COUNT(EnvValueKeys); ++i)
+		{
+			if (!RpcParam::Has(P, EnvValueKeys[i])) { continue; }
+			const double V = RpcParam::GetFloat(P, EnvValueKeys[i], -1.0);
+			if (!EnvKeySupported(Sup, i)) { Ignored.Add(MakeShared<FJsonValueString>(EnvValueKeys[i])); continue; }
+			const float Hi = (i == 0) ? 24.0f : (i == 1 ? 5.0f : 1.0f);
+			*EnvValueField(In, i) = FMath::Clamp(static_cast<float>(V), 0.0f, Hi);
+			bAnyEnv = true;
+		}
+		if (bAnyEnv)
+		{
+			Mgr->ApplyEnv(In);
+		}
+
+		// 2) 기존 조명 값. 기준은 현재 월드 상태다 - 마지막 적용값에서 출발하면 패널로 바꾼 값을 되돌려 버린다.
+		bool bAnyValue = false;
+		for (const TCHAR* K : ValueKeys) { bAnyValue |= RpcParam::Has(P, K); }
+		if (bAnyValue || !bAnyEnv)
+		{
+			FLightSettings S;
+			if (!Mgr->CaptureCurrent(S)) { S = Mgr->GetLastApplied(); }
+			ApplyOptionalFields(P, S);
+			Mgr->ApplySettings(S);
+		}
 		if (P.IsValid() && P->Values.Num() > 0)
 		{
 			Mgr->SetSourceKind(TEXT("override"));
 		}
 
 		TSharedPtr<FJsonObject> O = StateDto(*Mgr);
-		// 받았지만 이 레벨에서는 적용되지 않은 키를 이름으로 알린다(조용히 무시하지 않는다).
 		if (Mgr->UsesExternalSkySystem() && P.IsValid())
 		{
-			TArray<TSharedPtr<FJsonValue>> Ignored;
 			for (const auto& Pair : P->Values)
 			{
 				if (IsIgnoredOnExternalSky(FString(Pair.Key))) { Ignored.Add(MakeShared<FJsonValueString>(FString(Pair.Key))); }
 			}
-			O->SetArrayField(TEXT("ignoredKeys"), Ignored);
 		}
+		O->SetArrayField(TEXT("ignoredKeys"), Ignored);   // 항상 준다(빈 배열 = 전부 적용)
 		return RpcDto::MakeObject(O);
 	});
 	Dispatcher.SetMethodMeta(TEXT("light.set"), { true, false,
@@ -239,7 +370,8 @@ void FLightRpcModule::Register(URpcDispatcher& Dispatcher)
 		if (!Mgr->CaptureCurrent(S)) { S = Mgr->GetLastApplied(); }
 
 		const FString Path = ResolveLightPath(P);
-		if (!ULightControlLibrary::SaveToFile(Path, S))
+		// 시간대·날씨도 같은 파일에(선택 키). 옛 파일·패널 저장분은 이 키가 없고 읽을 때 건드리지 않는다.
+		if (!ULightControlLibrary::SaveToFile(Path, S, Mgr->GetEnv()))
 		{
 			E.FailDomain(FString::Printf(TEXT("조명 저장 실패: %s"), *Path));
 			return nullptr;
@@ -264,7 +396,9 @@ void FLightRpcModule::Register(URpcDispatcher& Dispatcher)
 
 		const FString Path = ResolveLightPath(P);
 		FLightSettings S;
-		if (!ULightControlLibrary::LoadFromFile(Path, S))
+		FLightEnv FileEnv;
+		bool bHasEnv = false;
+		if (!ULightControlLibrary::LoadFromFile(Path, S, FileEnv, bHasEnv))
 		{
 			E.FailDomain(FString::Printf(TEXT("조명 로드 실패: %s"), *Path));
 			return nullptr;
@@ -273,6 +407,8 @@ void FLightRpcModule::Register(URpcDispatcher& Dispatcher)
 		if (bApply)
 		{
 			Mgr->ApplySettings(S);
+			// 파일 시각이 있으면 태양은 시각이 다시 정한다(파일의 태양 값은 그 시각에서 저장된 값이라 같다).
+			if (bHasEnv) { Mgr->ApplyEnv(FileEnv); }
 			Mgr->SetSourceKind(TEXT("file"));
 			Mgr->SetCurrentFileName(FPaths::GetCleanFilename(Path));
 		}
@@ -281,7 +417,12 @@ void FLightRpcModule::Register(URpcDispatcher& Dispatcher)
 		TSharedPtr<FJsonObject> O = StateDto(*Mgr);
 		O->SetBoolField(TEXT("ok"), true);
 		O->SetBoolField(TEXT("applied"), bApply);
-		if (!bApply) { O->SetObjectField(TEXT("file"), SettingsToDto(S)); }
+		if (!bApply)
+		{
+			TSharedPtr<FJsonObject> F = SettingsToDto(S);
+			if (bHasEnv) { EnvToDto(F, FileEnv); }
+			O->SetObjectField(TEXT("file"), F);
+		}
 		O->SetStringField(TEXT("loadedFileName"), FPaths::GetCleanFilename(Path));
 		return RpcDto::MakeObject(O);
 	});
@@ -364,4 +505,128 @@ void FLightRpcModule::Register(URpcDispatcher& Dispatcher)
 	});
 	Dispatcher.SetMethodMeta(TEXT("light.deleteFile"), { true, true, TEXT("fileName"),
 		TEXT("Save/3D/Light/<fileName>.json 하나를 지운다(이름만, .json 자동). _default.txt 가 가리키는 파일은 거절. 없는 파일은 existed:false 로 성공. 응답 {ok, fileName, existed}") });
+
+	// ---- 가로등(보드 #1326 B2.1) — 레벨에 가로등 액터가 없어 만든다. 바꿀 때마다 Save/3D/Lamp/Lamp_<레벨>.json 에 쓴다 ----
+	Dispatcher.Register(TEXT("lamp.create"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		if (!RejectUnknownKeys(P, { TEXT("pos"), TEXT("height"), TEXT("intensity"), TEXT("color"), TEXT("coneDeg"), TEXT("name"), TEXT("on") }, E)) { return nullptr; }
+		UWorld* World = GetWorldPtr();
+		if (!World) { E.FailDomain(TEXT("월드 미로드")); return nullptr; }
+		const TSharedPtr<FJsonObject>* PosObj = nullptr;
+		RpcParam::MarkRead(P, TEXT("pos"));
+		double X = 0.0, Y = 0.0, Z = 0.0;
+		if (!P.IsValid() || !P->TryGetObjectField(TEXT("pos"), PosObj) || !(*PosObj)->TryGetNumberField(TEXT("x"), X) || !(*PosObj)->TryGetNumberField(TEXT("y"), Y))
+		{
+			E.Fail(Park3DRpc::InvalidParams, TEXT("pos {x, y, z?} (m) 가 필요하다"), ERpcErrorKind::BadParams);
+			return nullptr;
+		}
+		const bool bHasZ = (*PosObj)->TryGetNumberField(TEXT("z"), Z);
+		const FVector Ground(X * 100.0, Y * 100.0, bHasZ ? Z * 100.0 : LampGroundZ(World, X * 100.0, Y * 100.0));
+		const FVector C = RpcParam::GetVec3(P, TEXT("color"), FVector(1.0, 0.85, 0.65));
+		const FString Name = ALotLampActor::MakeUniqueName(World, RpcParam::GetString(P, TEXT("name")));
+		ALotLampActor* L = ALotLampActor::Spawn(World, Ground, Name,
+			RpcParam::GetFloat(P, TEXT("height"), ALotLampActor::DefaultHeightM),
+			RpcParam::GetFloat(P, TEXT("intensity"), ALotLampActor::DefaultIntensityCd),
+			FLinearColor(C.X, C.Y, C.Z), RpcParam::GetFloat(P, TEXT("coneDeg"), ALotLampActor::DefaultConeDeg),
+			RpcParam::GetBool(P, TEXT("on"), true));
+		if (!L) { E.FailDomain(TEXT("가로등 생성 실패")); return nullptr; }
+		FString Path;
+		const bool bSaved = ALotLampActor::SaveAll(World, Path);
+		TSharedPtr<FJsonObject> O = L->ToJson();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetBoolField(TEXT("saved"), bSaved);
+		O->SetStringField(TEXT("file"), Path);
+		return RpcDto::MakeObject(O);
+	});
+	Dispatcher.SetMethodMeta(TEXT("lamp.create"), { true, false,
+		TEXT("pos{x,y,z?} m, height?=6 m, intensity?=150 cd, color?{x,y,z}=(1,0.85,0.65), coneDeg?=70, name?, on?=true"),
+		TEXT("기둥+등기구+아래로 비추는 스폿(그림자 있음) 가로등 1개. z 생략 = 노면(정적 질의). name 이 없거나 겹치면 Lamp_<n>. "
+		     "광량은 칸델라 — 이 프로젝트 태양 5 lux 에 맞춘 기본값(150 cd, 6 m 아래 약 4 lux). 레벨 파일에 저장되고 기동·레벨 전환 때 복원. 응답 = lamp.list 한 행 + ok·saved·file") });
+
+	Dispatcher.Register(TEXT("lamp.list"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		if (!RejectUnknownKeys(P, {}, E)) { return nullptr; }
+		UWorld* World = GetWorldPtr();
+		if (!World) { E.FailDomain(TEXT("월드 미로드")); return nullptr; }
+		return RpcDto::MakeObject(LampsDto(World));
+	});
+	Dispatcher.SetMethodMeta(TEXT("lamp.list"), { false, false, TEXT(""),
+		TEXT("가로등 목록 {lamps:[{name,pos{x,y,z} m(지면 점),height,intensity cd,color{x,y,z},coneDeg,on}], count, file}") });
+
+	Dispatcher.Register(TEXT("lamp.delete"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		if (!RejectUnknownKeys(P, { TEXT("name"), TEXT("names"), TEXT("all") }, E)) { return nullptr; }
+		UWorld* World = GetWorldPtr();
+		if (!World) { E.FailDomain(TEXT("월드 미로드")); return nullptr; }
+		const bool bAll = RpcParam::GetBool(P, TEXT("all"), false);
+		TArray<FString> Names;
+		if (RpcParam::Has(P, TEXT("name"))) { Names.Add(RpcParam::GetString(P, TEXT("name"))); }
+		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+		RpcParam::MarkRead(P, TEXT("names"));
+		if (P.IsValid() && P->TryGetArrayField(TEXT("names"), Arr))
+		{
+			for (const TSharedPtr<FJsonValue>& V : *Arr) { if (V.IsValid() && V->Type == EJson::String) { Names.Add(V->AsString()); } }
+		}
+		if (bAll == (Names.Num() > 0))
+		{
+			E.Fail(Park3DRpc::InvalidParams, TEXT("name | names[] | all:true 중 하나"), ERpcErrorKind::BadParams);
+			return nullptr;
+		}
+		TArray<TSharedPtr<FJsonValue>> Deleted, NotFound;
+		if (bAll)
+		{
+			for (ALotLampActor* L : ALotLampActor::GetAll(World)) { Deleted.Add(MakeShared<FJsonValueString>(L->GetLampName())); L->Destroy(); }
+		}
+		else
+		{
+			for (const FString& N : Names)
+			{
+				if (ALotLampActor* L = ALotLampActor::FindByName(World, N)) { Deleted.Add(MakeShared<FJsonValueString>(N)); L->Destroy(); }
+				else { NotFound.Add(MakeShared<FJsonValueString>(N)); }
+			}
+		}
+		FString Path;
+		ALotLampActor::SaveAll(World, Path);
+		TSharedPtr<FJsonObject> O = LampsDto(World);
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetArrayField(TEXT("deleted"), Deleted);
+		O->SetArrayField(TEXT("notFound"), NotFound);
+		return RpcDto::MakeObject(O);
+	});
+	Dispatcher.SetMethodMeta(TEXT("lamp.delete"), { true, true, TEXT("name | names[] | all:true (하나)"),
+		TEXT("가로등 삭제 후 레벨 파일 갱신(0개면 파일 삭제). 없는 이름은 notFound(실패 아님). 응답 = lamp.list 모양 + ok·deleted·notFound") });
+
+	Dispatcher.Register(TEXT("light.lamps"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		if (!RejectUnknownKeys(P, { TEXT("on"), TEXT("intensity"), TEXT("color") }, E)) { return nullptr; }
+		UWorld* World = GetWorldPtr();
+		if (!World) { E.FailDomain(TEXT("월드 미로드")); return nullptr; }
+		const bool bOn = RpcParam::Has(P, TEXT("on"));
+		const bool bI = RpcParam::Has(P, TEXT("intensity"));
+		const bool bC = RpcParam::Has(P, TEXT("color"));
+		if (!bOn && !bI && !bC)
+		{
+			E.Fail(Park3DRpc::InvalidParams, TEXT("on · intensity · color 중 하나 이상"), ERpcErrorKind::BadParams);
+			return nullptr;
+		}
+		const TArray<ALotLampActor*> All = ALotLampActor::GetAll(World);
+		for (ALotLampActor* L : All)
+		{
+			if (bOn) { L->SetOn(RpcParam::GetBool(P, TEXT("on"))); }
+			if (bI) { L->SetIntensity(RpcParam::GetFloat(P, TEXT("intensity"), L->GetIntensity())); }
+			if (bC)
+			{
+				const FVector C = RpcParam::GetVec3(P, TEXT("color"), FVector(L->GetColor().R, L->GetColor().G, L->GetColor().B));
+				L->SetColor(FLinearColor(C.X, C.Y, C.Z));
+			}
+		}
+		FString Path;
+		ALotLampActor::SaveAll(World, Path);
+		TSharedPtr<FJsonObject> O = LampsDto(World);
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetNumberField(TEXT("changedCount"), All.Num());
+		return RpcDto::MakeObject(O);
+	});
+	Dispatcher.SetMethodMeta(TEXT("light.lamps"), { true, false, TEXT("on?: bool, intensity?: cd, color?{x,y,z} (하나 이상)"),
+		TEXT("가로등 전부를 한 번에 켜고/끄고/세기·색 지정(절대값). 가로등이 없으면 changedCount 0. 레벨 파일 갱신. 응답 = lamp.list 모양 + ok·changedCount") });
 }

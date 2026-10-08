@@ -17,6 +17,8 @@ class UCarColorComponent;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class UTexture2D;
+class USpotLightComponent;
+class UPointLightComponent;
 struct FPlateKindDef;
 
 /**
@@ -226,6 +228,33 @@ public:
 
 	/** 현재 종류가 종류별 판(MI_Plate_<key>)으로 그려졌는가. false 면 옛 판(normal_film 그림) 폴백. */
 	bool IsPlateKindRendered() const { return bPlateKindRendered; }
+
+	/**
+	 * 차량 조명(보드 #1326 B2.2). 전조등 = 앞쪽 하향 스폿 2개, 미등/제동등 = 뒤쪽 빨간 점광원 2개(제동이면 더 밝게),
+	 * 번호판등 = 판 바로 앞 흰 점광원(뒤: 미등·전조등 중 하나라도 켜지면, 앞: 전조등이 켜지면 — 앞판 조명은 실차엔 없는 시뮬 보조).
+	 * 처음 켤 때 컴포넌트를 만든다. UPROPERTY 를 늘리지 않으려고(쿠킹 에셋 안전) 인스턴스 컴포넌트로 붙인다.
+	 * 발광 렌즈(눈부심) 메시는 없다 — 빛이 노면·판을 밝힐 뿐 램프 자체가 빛나 보이지는 않는다.
+	 */
+	void SetCarLights(bool bInHeadlights, bool bInTail, bool bInBrake);
+	bool AreHeadlightsOn() const { return bHeadlightsOn; }
+	bool AreTailLightsOn() const { return bTailOn; }
+	bool AreBrakeLightsOn() const { return bBrakeOn; }
+
+private:
+	void EnsureCarLightComponents();
+	UPointLightComponent* MakeCarPointLight(const TCHAR* Name);
+	USpotLightComponent* MakeCarSpotLight(const TCHAR* Name);
+
+	// 차량 조명 — 인스턴스 컴포넌트(AddInstanceComponent 가 GC 에서 붙잡는다). UPROPERTY 아님(위 주석).
+	USpotLightComponent* HeadlightL = nullptr;
+	USpotLightComponent* HeadlightR = nullptr;
+	UPointLightComponent* TailL = nullptr;
+	UPointLightComponent* TailR = nullptr;
+	UPointLightComponent* PlateLampFront = nullptr;
+	UPointLightComponent* PlateLampBack = nullptr;
+	bool bHeadlightsOn = false;
+	bool bTailOn = false;
+	bool bBrakeOn = false;
 
 private:
 	/** 최초 InitFromPos에서만 PlateNumber와 앞/뒤 텍스트를 설정한다. */

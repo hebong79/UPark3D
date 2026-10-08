@@ -54,3 +54,33 @@ struct PARK3D_API FLightSettings
 	 */
 	UPROPERTY(BlueprintReadWrite, Category = "Light") float CarFillIntensity = 0.0f;
 };
+
+/**
+ * 시간대·날씨·밤 조명(보드 #1326 B1). FLightSettings 와 따로 두는 이유: 조명 패널·시나리오·랜덤 배치가
+ * FLightSettings 를 통째로 만들어 ApplySettings 하므로, 여기에 섞으면 패널 '적용' 한 번에 안개·시간대가 꺼진다.
+ * 음수 = "건드리지 않음"(레벨 그대로). UPROPERTY 가 아닌 순수 C++ 구조체다(쿠킹 에셋과 무관).
+ */
+struct FLightEnv
+{
+	/** 시각(시, 0..24). 음수 = 시간대로 몰지 않음(태양은 sunAltitudeDeg 등 직접 값). */
+	float TimeOfDay = -1.0f;
+	/**
+	 * 밤 조명(lux) — 태양이 약할수록 켜지는 달빛(그림자 없음) + 그 10% 로 대기만 밝히는 밤하늘 광원(남색 하늘·그늘 앰비언트).
+	 * 기본 1.5 = 기본맵 고정 노출(−1.02)에서 메인 뷰 평균 약 38/255(실측, 보드 #1326 의 임시 밤 33 과 비슷).
+	 * 실제 세기 = NightAmbient × (1 − 지면 태양광/1 lux) 이라 한낮(기본 조명)에는 0 이다 — scenario.* 기준선 불변.
+	 */
+	float NightAmbient = 1.5f;
+	/** 안개 0..1. 기본맵은 ExponentialHeightFog 밀도, UDS 레벨은 UDW Fog. 음수 = 건드리지 않음. */
+	float Fog = -1.0f;
+	/** 구름·비·젖음 0..1(UDS/UDW 레벨만). 음수 = 건드리지 않음. */
+	float CloudCoverage = -1.0f;
+	float Rain = -1.0f;
+	float Wetness = -1.0f;
+};
+
+/** 레벨마다 적용 가능한 키(light.get supports). 거짓인 키를 보내면 ignoredKeys 에 이름이 담긴다. */
+struct FLightSupports
+{
+	bool bTimeOfDay = false, bNightAmbient = false, bFog = false, bCloudCoverage = false, bRain = false, bWetness = false;
+	bool bLamps = true, bCarLights = true;
+};

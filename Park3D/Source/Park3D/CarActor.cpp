@@ -3,6 +3,8 @@
 #include "CarActor.h"
 #include "CarPlateNumberWidget.h"
 #include "Components/WidgetComponent.h"
+#include "Components/PointLightComponent.h"
+#include "Components/SpotLightComponent.h"
 #include "CarColorComponent.h"
 #include "CarPlacementLibrary.h"
 #include "Components/PrimitiveComponent.h"
@@ -785,4 +787,125 @@ void ACarActor::ApplySelectionVisual()
 	// 도색(carpaint)과 겹치지 않게: 메시 위에 오버레이 머티리얼을 덧입혀 청록 림 발광으로 선택 표시.
 	MeshComp->SetOverlayMaterial(bShowMark ? SelectionOverlayMaterial : nullptr);
 	MeshComp->SetRenderCustomDepth(bShowMark);  // 외곽선 포스트프로세스 연동 시 사용(옵션).
+}
+
+// ===== 차량 조명(보드 #1326 B2.2) =====
+// 광량은 칸델라다. 이 프로젝트의 태양은 5 lux(노출 −1 고정)라 실차 값(전조등 수만 cd)을 그대로 쓰면 하얗게 탄다 —
+// "낮 노면과 비슷한 밝기" 를 기준으로 실측해 맞춘 값이다.
+namespace
+{
+	constexpr float GHeadlightCd = 600.0f;
+	constexpr float GTailCd = 1.0f;
+	constexpr float GBrakeCd = 5.0f;
+	constexpr float GPlateLampCd = 0.6f;
+}
+
+UPointLightComponent* ACarActor::MakeCarPointLight(const TCHAR* Name)
+{
+	UPointLightComponent* L = NewObject<UPointLightComponent>(this, Name);
+	L->SetupAttachment(MeshComp);
+	L->SetMobility(EComponentMobility::Movable);
+	L->SetIntensityUnits(ELightUnits::Candelas);
+	L->SetCastShadows(false);
+	L->SetVisibility(false);
+	L->RegisterComponent();
+	AddInstanceComponent(L);
+	return L;
+}
+
+USpotLightComponent* ACarActor::MakeCarSpotLight(const TCHAR* Name)
+{
+	USpotLightComponent* L = NewObject<USpotLightComponent>(this, Name);
+	L->SetupAttachment(MeshComp);
+	L->SetMobility(EComponentMobility::Movable);
+	L->SetIntensityUnits(ELightUnits::Candelas);
+	// 그림자를 끈다 — 수십 대가 동시에 켜면 그림자 맵 비용이 차량 수만큼 는다. 빛은 다른 차를 통과한다.
+	L->SetCastShadows(false);
+	L->SetVisibility(false);
+	L->RegisterComponent();
+	AddInstanceComponent(L);
+	return L;
+}
+
+void ACarActor::EnsureCarLightComponents()
+{
+	if (!MeshComp)
+	{
+		return;
+	}
+	if (!HeadlightL)
+	{
+		HeadlightL = MakeCarSpotLight(TEXT("HeadlightL"));
+		HeadlightR = MakeCarSpotLight(TEXT("HeadlightR"));
+		TailL = MakeCarPointLight(TEXT("TailL"));
+		TailR = MakeCarPointLight(TEXT("TailR"));
+		PlateLampFront = MakeCarPointLight(TEXT("PlateLampFront"));
+		PlateLampBack = MakeCarPointLight(TEXT("PlateLampBack"));
+	}
+
+	// 위치는 매번 메시 바운즈에서 다시 잡는다(차종이 바뀔 수 있다). 메시 로컬: X=전폭, Y=전장, Z=위.
+	// 차 앞은 메시 로컬 +Y 다 — −Y 로 두었더니 실기 캡처에서 전조등이 뒤(해치·후미등 쪽)로 나왔다(2026-10-08).
+	FVector Min = FVector::ZeroVector, Max = FVector::ZeroVector;
+	MeshComp->GetLocalBounds(Min, Max);
+	const FVector O = (Min + Max) * 0.5f;
+	const FVector Ext = (Max - Min) * 0.5f;
+	const float Side = Ext.X * 0.65f;
+	const float LampZ = O.Z - Ext.Z * 0.1f;
+	const float FrontY = O.Y + Ext.Y + 10.0f;   // 차체 밖으로 10cm — 안쪽에 두면 자기 차체에 막힌다
+	const float BackY = O.Y - Ext.Y - 8.0f;
+
+	for (USpotLightComponent* H : { HeadlightL, HeadlightR })
+	{
+		H->SetRelativeLocation(FVector(O.X + (H == HeadlightL ? -Side : Side), FrontY, LampZ));
+		H->SetRelativeRotation(FRotator(-5.0, 90.0, 0.0));   // 앞(+Y)을 보고 5° 숙인다(하향등)
+		H->SetOuterConeAngle(30.0f);
+		H->SetInnerConeAngle(18.0f);
+		H->SetAttenuationRadius(4000.0f);
+		H->SetLightColor(FLinearColor(1.0f, 0.95f, 0.85f));
+	}
+	for (UPointLightComponent* T : { TailL, TailR })
+	{
+		T->SetRelativeLocation(FVector(O.X + (T == TailL ? -Side : Side), BackY, LampZ));
+		T->SetAttenuationRadius(150.0f);
+		T->SetLightColor(FLinearColor(1.0f, 0.05f, 0.02f));
+	}
+	// 번호판등: 판 중심(UpdatePlatePresentation 의 MountZ)에서 바깥 12cm·위 8cm.
+	const float PlateZ = O.Z - Ext.Z * 0.4f + 8.0f;
+	PlateLampFront->SetRelativeLocation(FVector(O.X, O.Y + Ext.Y + 13.0f, PlateZ));
+	PlateLampBack->SetRelativeLocation(FVector(O.X, O.Y - Ext.Y - 13.0f, PlateZ));
+	for (UPointLightComponent* P : { PlateLampFront, PlateLampBack })
+	{
+		P->SetAttenuationRadius(80.0f);
+		P->SetLightColor(FLinearColor::White);
+		P->SetIntensity(GPlateLampCd);
+	}
+}
+
+void ACarActor::SetCarLights(bool bInHeadlights, bool bInTail, bool bInBrake)
+{
+	bHeadlightsOn = bInHeadlights;
+	bTailOn = bInTail;
+	bBrakeOn = bInBrake;
+	if (!bHeadlightsOn && !bTailOn && !bBrakeOn && !HeadlightL)
+	{
+		return;   // 한 번도 켠 적 없으면 컴포넌트를 만들지 않는다
+	}
+	EnsureCarLightComponents();
+	if (!HeadlightL)
+	{
+		return;
+	}
+	for (USpotLightComponent* H : { HeadlightL, HeadlightR })
+	{
+		H->SetIntensity(GHeadlightCd);
+		H->SetVisibility(bHeadlightsOn);
+	}
+	const float RearCd = bBrakeOn ? GBrakeCd : (bTailOn ? GTailCd : 0.0f);
+	for (UPointLightComponent* T : { TailL, TailR })
+	{
+		T->SetIntensity(RearCd);
+		T->SetVisibility(RearCd > 0.0f);
+	}
+	PlateLampFront->SetVisibility(bHeadlightsOn);
+	PlateLampBack->SetVisibility(bHeadlightsOn || bTailOn || bBrakeOn);
 }

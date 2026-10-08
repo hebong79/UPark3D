@@ -174,6 +174,10 @@ namespace RpcDto
 			}
 		}
 		O->SetStringField(TEXT("colorName"), ColorName);
+		// 차량 조명(car.setLights, 보드 #1326).
+		O->SetBoolField(TEXT("headlights"), Car->AreHeadlightsOn());
+		O->SetBoolField(TEXT("tail"), Car->AreTailLightsOn());
+		O->SetBoolField(TEXT("brake"), Car->AreBrakeLightsOn());
 		return O;
 	}
 

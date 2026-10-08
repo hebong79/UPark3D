@@ -138,6 +138,90 @@ bool ULightControlLibrary::FromJson(const FString& Json, FLightSettings& Out)
 	return true;
 }
 
+void ULightControlLibrary::SunFromTimeOfDay(float Hour, float RefIntensity, float& OutAltitudeDeg, float& OutAzimuthDeg,
+	float& OutIntensity, FLinearColor& OutColor, bool& bOutNight)
+{
+	constexpr float Sunrise = 6.0f, Sunset = 18.0f, NoonAltitude = 60.0f;
+	Hour = FMath::Fmod(Hour, 24.0f);
+	if (Hour < 0.0f) { Hour += 24.0f; }
+
+	// 해의 위치 방위(나침반, 북=+X 에서 +Y 쪽으로): 6시 90°(동) → 12시 180°(남) → 18시 270°(서). 밤에도 같은 식으로 돈다.
+	const float SunPosYaw = 90.0f + 15.0f * (Hour - Sunrise);
+	OutAzimuthDeg = FMath::Fmod(SunPosYaw + 180.0f, 360.0f);   // 빛은 해 반대쪽으로 나아간다
+	if (OutAzimuthDeg < 0.0f) { OutAzimuthDeg += 360.0f; }
+
+	const float Alt = NoonAltitude * FMath::Sin(PI * (Hour - Sunrise) / (Sunset - Sunrise));
+	bOutNight = Hour <= Sunrise || Hour >= Sunset || Alt <= 0.0f;
+	if (bOutNight)
+	{
+		OutAltitudeDeg = 0.0f;
+		OutIntensity = 0.0f;
+		OutColor = FLinearColor(1.0f, 0.6f, 0.35f);
+		return;
+	}
+	OutAltitudeDeg = Alt;
+	OutIntensity = RefIntensity * FMath::Clamp(Alt / 20.0f, 0.0f, 1.0f);
+	const float T = FMath::Clamp(Alt / 25.0f, 0.0f, 1.0f);
+	OutColor = FMath::Lerp(FLinearColor(1.0f, 0.6f, 0.35f), FLinearColor::White, T);
+	OutColor.A = 1.0f;
+}
+
+namespace
+{
+	const TCHAR* LightEnvFileKeys[] = { TEXT("TimeOfDay"), TEXT("NightAmbient"), TEXT("Fog"), TEXT("CloudCoverage"), TEXT("Rain"), TEXT("Wetness") };
+
+	float* LightEnvFileField(FLightEnv& E, int32 i)
+	{
+		float* F[] = { &E.TimeOfDay, &E.NightAmbient, &E.Fog, &E.CloudCoverage, &E.Rain, &E.Wetness };
+		return F[i];
+	}
+}
+
+bool ULightControlLibrary::SaveToFile(const FString& Path, const FLightSettings& S, const FLightEnv& Env)
+{
+	if (Path.IsEmpty())
+	{
+		return false;
+	}
+	TSharedPtr<FJsonObject> Root;
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(ToJson(S)), Root) || !Root.IsValid())
+	{
+		return false;
+	}
+	FLightEnv Copy = Env;
+	for (int32 i = 0; i < UE_ARRAY_COUNT(LightEnvFileKeys); ++i)
+	{
+		Root->SetNumberField(LightEnvFileKeys[i], *LightEnvFileField(Copy, i));
+	}
+	FString Out;
+	FJsonSerializer::Serialize(Root.ToSharedRef(), TJsonWriterFactory<>::Create(&Out));
+	return FFileHelper::SaveStringToFile(Out, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+}
+
+bool ULightControlLibrary::LoadFromFile(const FString& Path, FLightSettings& Out, FLightEnv& OutEnv, bool& bOutHasEnv)
+{
+	FString Json;
+	if (Path.IsEmpty() || !FFileHelper::LoadFileToString(Json, *Path) || !FromJson(Json, Out))
+	{
+		return false;
+	}
+	TSharedPtr<FJsonObject> Root;
+	FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Root);
+	FLightEnv Env;
+	bOutHasEnv = false;
+	for (int32 i = 0; Root.IsValid() && i < UE_ARRAY_COUNT(LightEnvFileKeys); ++i)
+	{
+		double V = 0.0;
+		if (Root->TryGetNumberField(LightEnvFileKeys[i], V))
+		{
+			*LightEnvFileField(Env, i) = static_cast<float>(V);
+			bOutHasEnv = true;
+		}
+	}
+	OutEnv = Env;
+	return true;
+}
+
 bool ULightControlLibrary::SaveToFile(const FString& Path, const FLightSettings& S)
 {
 	if (Path.IsEmpty())

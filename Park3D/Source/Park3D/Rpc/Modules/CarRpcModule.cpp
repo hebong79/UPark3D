@@ -800,6 +800,60 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 	Dispatcher.SetMethodMeta(TEXT("car.moveAll"), { true, false, TEXT("{delta:{x,y,z?} UE 미터, carNameIds?: string[] | selected?: bool}"),
 		TEXT("차량을 같은 delta 만큼 평행 이동(회전 불변, 지면 재안착, 숨긴 차 포함). 대상: carNameIds · selected=현재 선택 · 없으면 전부. {ok, changedCount, cars:[{carNameId,pos}], notFound}") });
 
+	// 차량 조명(보드 #1326 B2.2). 대상은 carNameIds · selected · all:true 중 하나를 꼭 준다 — 실수로 전부 켜지 않게
+	// (moveAll 과 달리 생략 = 전부가 아니다). 보내지 않은 조명 키는 차마다 지금 상태를 유지한다.
+	Dispatcher.Register(TEXT("car.setLights"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
+		const bool bAll = RpcParam::GetBool(P, TEXT("all"), false);
+		const bool bIds = RpcParam::Has(P, TEXT("carNameIds"));
+		const bool bSel = RpcParam::GetBool(P, TEXT("selected"), false);
+		if ((bAll ? 1 : 0) + (bIds ? 1 : 0) + (bSel ? 1 : 0) != 1)
+		{
+			E.Fail(Park3DRpc::InvalidParams, TEXT("대상은 carNameIds · selected:true · all:true 중 정확히 하나"), ERpcErrorKind::BadParams);
+			return nullptr;
+		}
+		const bool bHasHead = RpcParam::Has(P, TEXT("headlights"));
+		const bool bHasTail = RpcParam::Has(P, TEXT("tail"));
+		const bool bHasBrake = RpcParam::Has(P, TEXT("brake"));
+		if (!bHasHead && !bHasTail && !bHasBrake)
+		{
+			E.Fail(Park3DRpc::InvalidParams, TEXT("headlights · tail · brake 중 하나 이상"), ERpcErrorKind::BadParams);
+			return nullptr;
+		}
+
+		TArray<int32> Targets;
+		TArray<TSharedPtr<FJsonValue>> NotFound;
+		if (!ResolveBatchTargets(Mgr, P, Targets, NotFound, E)) return nullptr;
+
+		TArray<TSharedPtr<FJsonValue>> Rows;
+		for (const int32 Idx : Targets)
+		{
+			ACarActor* Car = Mgr->GetCar(Idx);
+			if (!Car) continue;
+			Car->SetCarLights(
+				bHasHead ? RpcParam::GetBool(P, TEXT("headlights")) : Car->AreHeadlightsOn(),
+				bHasTail ? RpcParam::GetBool(P, TEXT("tail")) : Car->AreTailLightsOn(),
+				bHasBrake ? RpcParam::GetBool(P, TEXT("brake")) : Car->AreBrakeLightsOn());
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("carNameId"), Car->CarData.id);
+			Row->SetBoolField(TEXT("headlights"), Car->AreHeadlightsOn());
+			Row->SetBoolField(TEXT("tail"), Car->AreTailLightsOn());
+			Row->SetBoolField(TEXT("brake"), Car->AreBrakeLightsOn());
+			Rows.Add(MakeShared<FJsonValueObject>(Row));
+		}
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetNumberField(TEXT("changedCount"), Rows.Num());
+		O->SetArrayField(TEXT("cars"), Rows);
+		O->SetArrayField(TEXT("notFound"), NotFound);
+		return RpcDto::MakeObject(O);
+	});
+	Dispatcher.SetMethodMeta(TEXT("car.setLights"), { true, false,
+		TEXT("{carNameIds: string[] | selected: true | all: true (정확히 하나), headlights?: bool, tail?: bool, brake?: bool (하나 이상)}"),
+		TEXT("차량 조명 켜기/끄기(숨긴 차 포함). 보내지 않은 키는 차마다 지금 상태 유지. 전조등=앞 하향 스폿 2개+앞 번호판등, 미등/제동등=뒤 빨간 점광원(제동이 더 밝음)+뒤 번호판등. "
+		     "발광 렌즈(눈부심) 표현은 없다. 저장 안 됨 — 차를 다시 만들면(랜덤 배치 등) 꺼진다. {ok, changedCount, cars:[{carNameId,headlights,tail,brake}], notFound}") });
+
 	// ---- 색상 ----
 	Dispatcher.Register(TEXT("car.setColor"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{

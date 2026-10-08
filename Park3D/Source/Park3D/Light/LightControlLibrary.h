@@ -47,9 +47,25 @@ public:
 	/** JSON 문자열 → 설정. 파싱 실패 시 false 를 반환하고 Out 을 건드리지 않는다. */
 	static bool FromJson(const FString& Json, FLightSettings& Out);
 
+	// ---- 시간대(보드 #1326) ----
+	/**
+	 * 시각 → 태양(기본맵 전용 단순 모델). 해 뜸 6시·짐 18시, 정오 고도 60°.
+	 * 방위는 지도 북쪽 = UE +X 로 가정한다: 해는 6시 동(+Y)·12시 남(−X)·18시 서(−Y)에 있고,
+	 * 반환 방위는 sunAzimuthDeg 규약(빛이 나아가는 방향의 UE yaw)이다 — 6시 270°, 12시 0°, 18시 90°.
+	 * 광량은 고도 0→20° 에서 0→RefIntensity, 색은 고도 0→25° 에서 주황→흰색. 해가 지평선 아래면 bOutNight=true, 광량 0, 고도 0.
+	 */
+	static void SunFromTimeOfDay(float Hour, float RefIntensity, float& OutAltitudeDeg, float& OutAzimuthDeg,
+		float& OutIntensity, FLinearColor& OutColor, bool& bOutNight);
+
 	// ---- 파일 입출력 ----
 	static bool SaveToFile(const FString& Path, const FLightSettings& S);
 	static bool LoadFromFile(const FString& Path, FLightSettings& Out);
+	/**
+	 * 시간대·날씨(FLightEnv)를 같은 파일에 선택 키로 함께 쓴다/읽는다(TimeOfDay·NightAmbient·Fog·CloudCoverage·Rain·Wetness).
+	 * 읽을 때 그 키가 하나도 없으면 bOutHasEnv=false(옛 파일 — 시간대·날씨는 건드리지 않는다).
+	 */
+	static bool SaveToFile(const FString& Path, const FLightSettings& S, const FLightEnv& Env);
+	static bool LoadFromFile(const FString& Path, FLightSettings& Out, FLightEnv& OutEnv, bool& bOutHasEnv);
 
 	/** Save/3D/Light 디렉터리 절대 경로. */
 	static FString GetLightDir();

@@ -20,6 +20,7 @@
 #include "Env/EnvActorLibrary.h" // config 의 hide_actors 적용(env.hide 와 같은 로직).
 #include "Env/LevelSlotLibrary.h" // config 의 slot_file 적용(bay.loadLevel 과 같은 로직).
 #include "Light/LightControlManager.h"
+#include "Light/LotLampActor.h"
 #include "Blueprint/UserWidget.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/InputComponent.h"
@@ -485,6 +486,8 @@ void APark3DGameMode::ApplyStartupLighting()
 	// 조명 설정은 레벨과 짝이다(하늘 없는 레벨은 코드가 조명을 만들고 이 값을 그대로 적용한다).
 	// 그래서 레벨을 정하는 config 가 조명 파일도 정하게 한다 — 없으면 종전대로 _default.txt 를 따른다.
 	FLightSettings Settings;
+	FLightEnv StartupEnv;
+	bool bHasEnv = false;
 	FString Source;
 	FString StartupFile;
 	FPark3DAppConfig AppConfig;
@@ -494,7 +497,7 @@ void APark3DGameMode::ApplyStartupLighting()
 		UPark3DAppConfigLibrary::ApplyLevelOverrides(AppConfig, UPark3DAppConfigLibrary::GetCurrentLevelPath(GetWorld()));
 	}
 	if (bLoaded && !AppConfig.LightFile.IsEmpty()
-		&& ULightControlLibrary::LoadFromFile(Park3DDataPaths::GetDataFilePath(TEXT("Light"), *AppConfig.LightFile), Settings))
+		&& ULightControlLibrary::LoadFromFile(Park3DDataPaths::GetDataFilePath(TEXT("Light"), *AppConfig.LightFile), Settings, StartupEnv, bHasEnv))
 	{
 		Source = FString::Printf(TEXT("config_pmaker.json light_file=%s"), *AppConfig.LightFile);
 		StartupFile = FPaths::GetCleanFilename(AppConfig.LightFile);
@@ -513,6 +516,11 @@ void APark3DGameMode::ApplyStartupLighting()
 		}
 	}
 	LightMgr->ApplySettings(Settings);
+	// 시작 파일에 시간대·날씨 키가 있으면 함께 적용한다(기준 상태에 들어가야 light.reset 이 여기로 돌아온다).
+	if (bHasEnv)
+	{
+		LightMgr->ApplyEnv(StartupEnv);
+	}
 	// light.reset 이 돌아갈 곳 = 시작 조명이 적용된 이 화면.
 	LightMgr->CaptureBaseline();
 	if (!StartupFile.IsEmpty())
@@ -540,6 +548,8 @@ void APark3DGameMode::ApplyStartupConfig()
 
 	// 주차장 영역(lot.set 이 남긴 Save/3D/Lot/Lot_<레벨>.json, 보드 #1168) — config 와 무관하게 레벨마다 복원.
 	ARpcOverlayActor::LoadLotForWorld(GetWorld());
+	// 가로등(lamp.create 가 남긴 Save/3D/Lamp/Lamp_<레벨>.json, 보드 #1326) — 같은 규약.
+	ALotLampActor::LoadForWorld(GetWorld());
 
 	FPark3DAppConfig Config;
 	if (!UPark3DAppConfigLibrary::Load(Config))

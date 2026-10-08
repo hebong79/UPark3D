@@ -189,7 +189,6 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		if (!RpcParam::RequirePosXZ(P, TEXT("pos"), Pos, E)) return nullptr;
 
 		FCarPos C;
-		C.id = UCarPlacementLibrary::MakeCarId(Mgr->GetCarCount());
 		C.prefabId = RpcParam::GetInt(P, TEXT("prefabId"), 1);
 		C.presetId = RpcParam::GetInt(P, TEXT("presetId"), 0);
 		C.slotId = -1; // car.create 로 만든 차량은 슬롯 미배정(노이즈 후보)
@@ -198,11 +197,17 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		C.pos = { static_cast<float>(Pos.X), static_cast<float>(Pos.Y), static_cast<float>(Pos.Z) };
 		C.prefabName = UCarPlacementLibrary::PrefabNameFromId(Catalog, C.prefabId);
 
+		// 그 자리(같은 면·1 m 이내)의 차를 먼저 지운다 — 겹치면 큰 차 하부로 작은 차 번호판이 드러난다.
+		const TArray<FString> Replaced = RpcParam::GetBool(P, TEXT("allowOverlap"), false)
+			? TArray<FString>() : Mgr->RemoveCarsOccupying(UCarPlacementLibrary::UnrealMetersToWorld(C.pos, Mgr->MetersToUU));
+		C.id = Mgr->MakeUniqueCarId(Replaced);
+
 		ACarActor* Car = Mgr->SpawnCarFromPos(C, Catalog);
 		if (!Car) { E.FailDomain(TEXT("차량 생성 실패")); return nullptr; }
 
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetStringField(TEXT("carNameId"), Car->CarData.id);
+		O->SetArrayField(TEXT("replaced"), RpcDto::StringArray(Replaced));
 		return RpcDto::MakeObject(O);
 	});
 
@@ -237,7 +242,8 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 	/**
 	 * 월드 지점에 차량 1대를 놓는다 — 차량 배치 패널의 Ctrl+좌클릭과 같은 경로(ACarPlacementManager::SnapCarPosToSlot).
 	 * snap(기본 true)이면 그 지점이 주차면 사각형 **안**일 때만 면 중앙·면 축 정렬로 붙고, 밖이면 지점 그대로 놓인다
-	 * (응답 snapped 로 어느 쪽인지 알 수 있다). 이미 차가 서 있는 면도 막지 않는다(random.slotPlace 와 같은 규약).
+	 * (응답 snapped 로 어느 쪽인지 알 수 있다). 그 자리(같은 면·1 m 이내)에 서 있던 차는 지우고 바꾼다(replaced[],
+	 * 2026-10-08 — 겹침이 "번호판 2개" 를 만들었다). allowOverlap:true 면 예전처럼 겹쳐 놓는다.
 	 *
 	 * pos 는 car.create 와 달리 {x,y,z} 를 그대로 읽는다 — UE 미터에서 x·y 가 지면이고 z 가 높이인데
 	 * car.create 가 쓰는 RequirePosXZ 는 x,z 를 필수로 받고 지면 y 를 0 으로 채워, 스냅 판정이 엉뚱한 면을 집는다.
@@ -265,7 +271,6 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		}
 
 		FCarPos C;
-		C.id = UCarPlacementLibrary::MakeCarId(Mgr->GetCarCount());
 		C.prefabId = PrefabId;
 		C.prefabName = UCarPlacementLibrary::PrefabNameFromId(Catalog, PrefabId);
 		C.type = RpcParam::GetInt(P, TEXT("type"), static_cast<int32>(ECarType::Small));
@@ -280,12 +285,18 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		const FVector World = UCarPlacementLibrary::UnrealMetersToWorld(C.pos, Mgr->MetersToUU);
 		const bool bSnapped = bSnap && Mgr->SnapCarPosToSlot(World, C);
 
+		// 스냅된 실제 자리 기준으로 비운다(같은 면·1 m 이내). allowOverlap 이면 예전처럼 겹쳐 놓는다.
+		const TArray<FString> Replaced = RpcParam::GetBool(P, TEXT("allowOverlap"), false)
+			? TArray<FString>() : Mgr->RemoveCarsOccupying(UCarPlacementLibrary::UnrealMetersToWorld(C.pos, Mgr->MetersToUU));
+		C.id = Mgr->MakeUniqueCarId(Replaced);
+
 		ACarActor* Car = Mgr->SpawnCarFromPos(C, Catalog);
 		if (!Car) { E.FailDomain(TEXT("차량 생성 실패")); return nullptr; }
 
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetBoolField(TEXT("ok"), true);
 		O->SetStringField(TEXT("carNameId"), Car->CarData.id);
+		O->SetArrayField(TEXT("replaced"), RpcDto::StringArray(Replaced));
 		O->SetBoolField(TEXT("snapped"), bSnapped);
 		O->SetNumberField(TEXT("presetId"), Car->CarData.presetId);
 		O->SetNumberField(TEXT("slotId"), Car->CarData.slotId);
@@ -300,7 +311,12 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
 		FString Id;
 		if (!RpcParam::RequireString(P, TEXT("carNameId"), Id, E)) return nullptr;
-		Mgr->RemoveCarById(Id);
+		// 없는 id 를 성공으로 넘기면 호출자는 지웠다고 믿고 그 자리에 새 차를 놓아 겹친다(2026-10-08).
+		if (!Mgr->RemoveCarById(Id))
+		{
+			E.FailDomain(FString::Printf(TEXT("차량 없음: %s (car.list 로 확인)"), *Id), ERpcErrorKind::NotFound);
+			return nullptr;
+		}
 		return RpcDto::OkTrue();
 	});
 
@@ -1200,7 +1216,8 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 	 *  - 위치·전면 방향은 car.placeAtWorld 와 **같은 창구**(ACarPlacementManager::SnapCarPosToSlot)에 면 중심을 넣어 얻는다 —
 	 *    면 길이축 + 전면이 감시카메라(프리셋 카메라, 레벨 면은 가장 가까운 카메라)를 향하는 쪽.
 	 *  - presetId = 프리셋 idx(레벨 면은 0), slotId = 프리셋 면이면 면 슬롯, 레벨 면이면 바닥 번호(CarPos_13Num.객리단 관례).
-	 *  - replace=true 면 그 면 사각형(OBB) 안에 이미 선 차량을 먼저 지운다. 기본은 random.slotPlace 처럼 겹쳐 쌓인다.
+	 *  - 기본(replace 생략 = true)은 그 면 사각형(OBB) 안에 이미 선 차량을 먼저 지운다. replace:false 또는
+	 *    allowOverlap:true 면 겹쳐 쌓인다(2026-10-08 기본값 반전 — 겹침이 "번호판 2개" 를 만들었다).
 	 */
 	Dispatcher.Register(TEXT("car.placeAtSlot"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
@@ -1254,7 +1271,8 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		const bool bRandomColor = RpcParam::GetBool(P, TEXT("randomColor"), false);
 		TArray<ECarColor> Palette;   // randomColor=true 일 때만 쓴다
 		if (!ReadColorsParam(P, Palette, E)) return nullptr;
-		const bool bReplace = RpcParam::GetBool(P, TEXT("replace"), false);
+		// 기본은 교체(2026-10-08 — 겹쳐 쌓이면 "번호판 2개"). replace:false 나 allowOverlap:true 면 예전처럼 쌓는다.
+		const bool bReplace = RpcParam::GetBool(P, TEXT("replace"), !RpcParam::GetBool(P, TEXT("allowOverlap"), false));
 		const float U = Mgr->MetersToUU;
 
 		// 면 사각형(OBB) 안 판정 — AParkingPresetManager::FindSlotNumberAtWorld 와 같은 수식을 이 면 하나에만 건다.
@@ -1269,6 +1287,7 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		};
 
 		TArray<TSharedPtr<FJsonValue>> Placed, NotFound, Removed;
+		TArray<FString> RemovedIds; // 지운 id 를 새 차에 다시 쓰지 않는다
 		for (const int32 N : Wanted)
 		{
 			const int32* Idx = ByNumber.Find(N);
@@ -1291,13 +1310,13 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 				}
 				for (const FString& Id : Victims)
 				{
-					if (Mgr->RemoveCarById(Id)) { Removed.Add(MakeShared<FJsonValueString>(Id)); }
+					if (Mgr->RemoveCarById(Id)) { Removed.Add(MakeShared<FJsonValueString>(Id)); RemovedIds.Add(Id); }
 				}
 			}
 
 			const int32 Pid = PrefabId > 0 ? PrefabId : Catalog[Stream.RandRange(0, Catalog.Num() - 1)].Idx;
 			FCarPos C;
-			C.id = UCarPlacementLibrary::MakeCarId(Mgr->GetCarCount());
+			C.id = Mgr->MakeUniqueCarId(RemovedIds);
 			C.prefabId = Pid;
 			C.prefabName = UCarPlacementLibrary::PrefabNameFromId(Catalog, Pid);
 			C.type = static_cast<int32>(ECarType::Small);

@@ -197,6 +197,51 @@ bool ACarPlacementManager::RemoveCarById(const FString& NameId)
 	return false;
 }
 
+TArray<FString> ACarPlacementManager::RemoveCarsOccupying(const FVector& WorldLoc)
+{
+	FVector FaceCenter = FVector::ZeroVector;
+	float Yaw = 0.f;
+	int32 PresetId = 0, SlotId = -1;
+	const bool bOnFace = FindParkingSlotAt(WorldLoc, FaceCenter, Yaw, PresetId, SlotId);
+
+	TArray<FString> Removed;
+	for (int32 i = Cars.Num() - 1; i >= 0; --i)
+	{
+		ACarActor* Car = Cars[i];
+		if (!Car) continue;
+		const FVector CarLoc = Car->GetActorLocation();
+		bool bOccupies = FVector::DistSquared2D(CarLoc, WorldLoc) < FMath::Square(OccupyRadiusCm);
+		if (!bOccupies && bOnFace)
+		{
+			// 같은 면 = 차량 위치가 집는 면 중심이 같다(random.slotPlace 처럼 면 안에서 흔들린 차도 잡는다).
+			FVector OtherCenter = FVector::ZeroVector;
+			float OtherYaw = 0.f;
+			int32 OtherPreset = 0, OtherSlot = -1;
+			bOccupies = FindParkingSlotAt(CarLoc, OtherCenter, OtherYaw, OtherPreset, OtherSlot)
+				&& FVector::DistSquared2D(OtherCenter, FaceCenter) < 1.f;
+		}
+		if (bOccupies)
+		{
+			// id 가 아니라 원소로 지운다 — id 는 "{순번}-{시각}" 이라 겹칠 수 있고, RemoveCarById 는 첫 일치만 지운다.
+			Removed.Insert(Car->CarData.id, 0);
+			Car->Destroy();
+			Cars.RemoveAt(i);
+		}
+	}
+	return Removed;
+}
+
+FString ACarPlacementManager::MakeUniqueCarId(const TArray<FString>& Avoid) const
+{
+	int32 Index = Cars.Num();
+	FString Id = UCarPlacementLibrary::MakeCarId(Index);
+	while (FindByNameId(Id) || Avoid.Contains(Id))
+	{
+		Id = UCarPlacementLibrary::MakeCarId(++Index);
+	}
+	return Id;
+}
+
 int32 ACarPlacementManager::IndexOfNameId(const FString& NameId) const
 {
 	for (int32 i = 0; i < Cars.Num(); ++i)

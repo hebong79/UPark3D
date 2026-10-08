@@ -92,4 +92,7 @@ namespace RpcDto
 	/** 단일 필드 {Key:Value} 결과 헬퍼들. */
 	TSharedPtr<FJsonValue> MakeObject(const TSharedPtr<FJsonObject>& Obj);
 	TSharedPtr<FJsonValue> OkTrue();
+
+	/** 문자열 목록 → JSON 배열(car.* 의 replaced[] 등). */
+	TArray<TSharedPtr<FJsonValue>> StringArray(const TArray<FString>& Values);
 }

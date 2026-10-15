@@ -227,6 +227,16 @@ struct FPark3DAppConfig
 	float StreamMainFps = 0.f;
 
 	/**
+	 * 번호판 종류 추첨 가중치(보드 #1499) — `plate_kind_weights: {latestKind, latestRatio}`. 비어 있음/음수 = 미지정
+	 * (코드 기본 normal_film 0.6). 기동 때 한 번 PlateKinds 에 넣고, 런타임 변경은 plate.kindWeights.set.
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = "Config")
+	FString PlateLatestKind;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Config")
+	double PlateLatestRatio = -1.0;   // double: float 이면 0.65 가 응답에 0.6499999761 로 나온다
+
+	/**
 	 * RPC 리스너 바인드 주소. "any" = 모든 인터페이스, "localhost" = 루프백 전용. 빈 문자열 = 기본값("any").
 	 * 이 값이 곧 [HTTPServer.Listeners] 의 포트별 override 로 런타임에 등록된다 —
 	 * ini 에 포트를 박아 두면 rpc_port 를 바꿀 때마다 목록이 빗나가 조용히 루프백으로 떨어지기 때문이다.

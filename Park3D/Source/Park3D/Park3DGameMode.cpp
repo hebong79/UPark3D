@@ -21,6 +21,7 @@
 #include "Env/LevelSlotLibrary.h" // config 의 slot_file 적용(bay.loadLevel 과 같은 로직).
 #include "Light/LightControlManager.h"
 #include "Light/LotLampActor.h"
+#include "Plate/PlateKinds.h"   // config 의 plate_kind_weights 적용(#1499).
 #include "Blueprint/UserWidget.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/InputComponent.h"
@@ -557,6 +558,29 @@ void APark3DGameMode::ApplyStartupConfig()
 		UE_LOG(LogTemp, Log, TEXT("[Config] 시작 설정 파일 없음/읽기 실패 — 자동 로딩 건너뜀: %s"),
 			*UPark3DAppConfigLibrary::GetConfigFilePath());
 		return;
+	}
+
+	// 번호판 종류 가중치(보드 #1499) — 차량 자동 로딩(스폰 때 종류 배정)보다 앞. 프로세스에 한 번만: 레벨을 바꿔도
+	// plate.kindWeights.set 으로 바꾼 런타임 값을 config 가 되덮지 않게.
+	static bool bPlateWeightsApplied = false;
+	if (!bPlateWeightsApplied)
+	{
+		bPlateWeightsApplied = true;
+		const bool bKind = !Config.PlateLatestKind.IsEmpty();
+		const double Ratio = Config.PlateLatestRatio;
+		if (bKind || Ratio >= 0.0)
+		{
+			FString Error;
+			if (PlateKinds::SetKindWeights(bKind ? &Config.PlateLatestKind : nullptr, Ratio >= 0.0 ? &Ratio : nullptr, TEXT("config"), Error))
+			{
+				UE_LOG(LogTemp, Log, TEXT("[Plate] 종류 가중치 config 적용: %s %.3f"),
+					*PlateKinds::KindWeights().LatestKind, PlateKinds::KindWeights().LatestRatio);
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[Plate] config plate_kind_weights 무시(기본값 유지): %s"), *Error);
+			}
+		}
 	}
 
 	// 0) 주차장 선택(levels[])으로 들어온 레벨이면 그 항목의 데이터 파일이 최상위 *_file 을 덮는다 —

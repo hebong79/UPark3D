@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
-// PlateRpcModule : plate.* (5) 핸들러 — 번호판 번호·종류 추첨(plate.random)과 텍스처 굽기(plate.bake),
-// 월드 기본 종류(plate.setDefault / plate.getDefault — 팀보드 #919, 2026-09-22).
+// PlateRpcModule : plate.* (7) 핸들러 — 번호판 번호·종류 추첨(plate.random)과 텍스처 굽기(plate.bake),
+// 월드 기본 종류(plate.setDefault / plate.getDefault — 팀보드 #919, 2026-09-22),
+// 종류 추첨 가중치(plate.kindWeights.get / set — 보드 #1499, 2026-10-15).
 // OmiPark3D 확장(rpc/modules/plate.py · world/plates.py)의 언리얼 이식이다. 차량에 붙이는 쪽은 car.setPlate.
 //
 // 종류 표·번호 문법·표시 정규화는 `Plate/PlateKinds` 에 있다(2026-09-21 차량 액터가 종류별 판을 그리게 되면서 RPC 밖으로
@@ -36,6 +37,9 @@ namespace PlateRpc
 
 	/** plate.kinds / car.plateKinds 공용 응답. */
 	TSharedPtr<FJsonObject> KindsPayload(UWorld* World);
+
+	/** plate.kindWeights.get/set 공용 응답 {latestKind, latestRatio, source, kinds:[{id,name,p}]}(보드 #1499). */
+	TSharedPtr<FJsonObject> KindWeightsPayload();
 
 	/**
 	 * 번호 SDF 아틀라스. 게임 인스턴스가 있으면 그 서브시스템, 없으면(에디터 자동화 테스트·커맨드릿) 파일만 읽는

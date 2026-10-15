@@ -16,8 +16,9 @@ namespace
 		TEXT("충북"), TEXT("충남"), TEXT("전북"), TEXT("전남"), TEXT("경북"), TEXT("경남"), TEXT("제주"), TEXT("세종") };
 
 
-	// plates.py EV_NAME_HINTS · TRUCK_TYPES(ECarType Bongo=5 · Truck=6)
+	// plates.py EV_NAME_HINTS · TRUCK_TYPES(ECarType Bongo=5 · Truck=6) + 트럭 모델 이름(카탈로그: 기아_봉고·기아_봉고_탑차·현대_포터)
 	const TCHAR* const EvNameHints[] = { TEXT("EV"), TEXT("아이오닉"), TEXT("IONIQ") };
+	const TCHAR* const TruckNameHints[] = { TEXT("봉고"), TEXT("포터") };
 	constexpr int32 TruckTypeBongo = 5;
 	constexpr int32 TruckTypeTruck = 6;
 }
@@ -26,21 +27,20 @@ namespace PlateKinds
 {
 	const TArray<FPlateKindDef>& Kinds()
 	{
-		// RandomWeight = plates.py RANDOM_WEIGHTS(AUTO_WEIGHTS + ev 8). AutoKindFor 는 ev 를 뺀 같은 표를 쓴다.
-		// 색은 plates.py 의 WHITE/INK/YELLOW/GREEN/SKY/LIME/OLD_* (sRGB 0..1 → 0..255).
+		// 추첨 확률은 표가 아니라 FKindWeights(#1499)가 정한다. 색은 plates.py 의 WHITE/INK/YELLOW/GREEN/SKY/LIME/OLD_* (sRGB 0..1 → 0..255).
 		const FColor White(245, 244, 242), Ink(23, 22, 23), Yellow(242, 189, 13), Green(10, 84, 51), Sky(158, 209, 240),
 			Lime(189, 235, 77), OldWhiteInk(247, 247, 242), OldBlueInk(20, 41, 115);
 		static const TArray<FPlateKindDef> Table = {
-			{ TEXT("normal_film"),        TEXT("비사업용 8자리 필름식"),          TEXT("2020-07~"),        520, 110, TEXT("one_row"), true,  false, 3, PassengerRentalChars, TEXT("123가4568"),   40, TEXT("hologram"), White,  Ink },
-			{ TEXT("normal_paint8"),      TEXT("비사업용 8자리 페인트식"),        TEXT("2019-09~"),        520, 110, TEXT("one_row"), false, false, 3, PassengerRentalChars, TEXT("123가4568"),   15, TEXT(""),         White,  Ink },
-			{ TEXT("normal_paint7"),      TEXT("비사업용 7자리 유럽형"),          TEXT("2006-11~2019-08"), 520, 110, TEXT("one_row"), false, false, 2, PassengerRentalChars, TEXT("12가4568"),    20, TEXT(""),         White,  Ink },
-			{ TEXT("ev"),                 TEXT("전기·수소차"),                    TEXT("2017-06~"),        520, 110, TEXT("one_row"), true,  false, 3, PassengerRentalChars, TEXT("123가4568"),    8, TEXT("ev"),       Sky,    Ink },
-			{ TEXT("commercial"),         TEXT("자동차 운수 사업용"),             TEXT("2006~"),           520, 110, TEXT("one_row"), false, true,  2, CommercialChars,      TEXT("서울12바3456"),  5, TEXT(""),         Yellow, Ink },
-			{ TEXT("corporate"),          TEXT("법인 업무용 고가차량(연두)"),     TEXT("2024-01~"),        520, 110, TEXT("one_row"), true,  false, 3, PassengerRentalChars, TEXT("123가4568"),    5, TEXT("hologram"), Lime,   Ink },
-			{ TEXT("short_white"),        TEXT("비사업용 두 줄"),                 TEXT("2006~"),           335, 155, TEXT("two_row"), false, false, 2, PassengerRentalChars, TEXT("12가4568"),     5, TEXT(""),         White,  Ink },
-			{ TEXT("old_green_region"),   TEXT("구형 자가용 지역판(녹색)"),       TEXT("1973~2003"),       335, 170, TEXT("two_row"), false, true,  2, PassengerChars,       TEXT("서울52가1234"),  3, TEXT(""),         Green,  OldWhiteInk },
-			{ TEXT("old_green_national"), TEXT("구형 자가용 전국판(녹색)"),       TEXT("2004~2006"),       335, 170, TEXT("two_row"), false, false, 2, PassengerChars,       TEXT("52가1234"),     4, TEXT(""),         Green,  OldWhiteInk },
-			{ TEXT("old_business"),       TEXT("구형 영업용(노란 바탕 청색 글자)"), TEXT("~2006"),         335, 170, TEXT("two_row"), false, true,  2, CommercialChars,      TEXT("서울52바1234"),  3, TEXT(""),         Yellow, OldBlueInk },
+			{ TEXT("normal_film"),        TEXT("비사업용 8자리 필름식"),          TEXT("2020-07~"),        520, 110, TEXT("one_row"), true,  false, 3, PassengerRentalChars, TEXT("123가4568"),   TEXT("hologram"), White,  Ink },
+			{ TEXT("normal_paint8"),      TEXT("비사업용 8자리 페인트식"),        TEXT("2019-09~"),        520, 110, TEXT("one_row"), false, false, 3, PassengerRentalChars, TEXT("123가4568"),   TEXT(""),         White,  Ink },
+			{ TEXT("normal_paint7"),      TEXT("비사업용 7자리 유럽형"),          TEXT("2006-11~2019-08"), 520, 110, TEXT("one_row"), false, false, 2, PassengerRentalChars, TEXT("12가4568"),    TEXT(""),         White,  Ink },
+			{ TEXT("ev"),                 TEXT("전기·수소차"),                    TEXT("2017-06~"),        520, 110, TEXT("one_row"), true,  false, 3, PassengerRentalChars, TEXT("123가4568"),   TEXT("ev"),       Sky,    Ink },
+			{ TEXT("commercial"),         TEXT("자동차 운수 사업용"),             TEXT("2006~"),           520, 110, TEXT("one_row"), false, true,  2, CommercialChars,      TEXT("서울12바3456"), TEXT(""),         Yellow, Ink },
+			{ TEXT("corporate"),          TEXT("법인 업무용 고가차량(연두)"),     TEXT("2024-01~"),        520, 110, TEXT("one_row"), true,  false, 3, PassengerRentalChars, TEXT("123가4568"),   TEXT("hologram"), Lime,   Ink },
+			{ TEXT("short_white"),        TEXT("비사업용 두 줄"),                 TEXT("2006~"),           335, 155, TEXT("two_row"), false, false, 2, PassengerRentalChars, TEXT("12가4568"),    TEXT(""),         White,  Ink },
+			{ TEXT("old_green_region"),   TEXT("구형 자가용 지역판(녹색)"),       TEXT("1973~2003"),       335, 170, TEXT("two_row"), false, true,  2, PassengerChars,       TEXT("서울52가1234"), TEXT(""),         Green,  OldWhiteInk },
+			{ TEXT("old_green_national"), TEXT("구형 자가용 전국판(녹색)"),       TEXT("2004~2006"),       335, 170, TEXT("two_row"), false, false, 2, PassengerChars,       TEXT("52가1234"),     TEXT(""),         Green,  OldWhiteInk },
+			{ TEXT("old_business"),       TEXT("구형 영업용(노란 바탕 청색 글자)"), TEXT("~2006"),         335, 170, TEXT("two_row"), false, true,  2, CommercialChars,      TEXT("서울52바1234"), TEXT(""),         Yellow, OldBlueInk },
 		};
 		return Table;
 	}
@@ -53,19 +53,81 @@ namespace PlateKinds
 		return FPackageName::DoesPackageExist(PackagePath);
 	}
 
-	FString RandomKindFor(FRandomStream& Stream, const FString& PrefabName)
+	FString RandomKindFor(FRandomStream& Stream, const FString& PrefabName, int32 CarType)
 	{
 		const FString Upper = PrefabName.ToUpper();
 		for (const TCHAR* Hint : EvNameHints)
 		{
 			if (!Upper.IsEmpty() && Upper.Contains(FString(Hint).ToUpper())) { return TEXT("ev"); }
 		}
-		for (int32 Try = 0; Try < 8; ++Try)
+		return PickKindForCar(Stream.GetFraction(), IsTruck(PrefabName, CarType));
+	}
+
+	bool IsTruck(const FString& PrefabName, int32 CarType)
+	{
+		if (CarType == TruckTypeBongo || CarType == TruckTypeTruck) { return true; }
+		for (const TCHAR* Hint : TruckNameHints)
 		{
-			const FString Kind = PickRandomKind(Stream);
-			if (Kind != TEXT("ev")) { return Kind; }
+			if (PrefabName.Contains(Hint)) { return true; }
 		}
-		return DefaultKind();
+		return false;
+	}
+
+	FString PickKindForCar(double U, bool bTruck)
+	{
+		if (!bTruck) { return PickWeightedKind(U); }
+		if (U < TruckCommercialRatio) { return TEXT("commercial"); }
+		return PickWeightedKind((U - TruckCommercialRatio) / (1.0 - TruckCommercialRatio), /*bExcludeCommercial=*/true);
+	}
+
+	static FKindWeights GKindWeights{ DefaultKind(), 0.6, TEXT("default") };
+
+	const FKindWeights& KindWeights()
+	{
+		return GKindWeights;
+	}
+
+	bool SetKindWeights(const FString* LatestKind, const double* LatestRatio, const TCHAR* Source, FString& OutError)
+	{
+		if (LatestRatio && !(*LatestRatio >= 0.0 && *LatestRatio <= 1.0))
+		{
+			OutError = FString::Printf(TEXT("latestRatio 는 0..1 이어야 합니다: %g"), *LatestRatio);
+			return false;
+		}
+		if (LatestKind && (FindKind(*LatestKind) == nullptr || *LatestKind == TEXT("ev")))
+		{
+			OutError = FString::Printf(TEXT("latestKind 는 ev 가 아닌 종류 key 여야 합니다: %s"), **LatestKind);
+			return false;
+		}
+		if (LatestKind) { GKindWeights.LatestKind = *LatestKind; }
+		if (LatestRatio) { GKindWeights.LatestRatio = *LatestRatio; }
+		GKindWeights.Source = Source;
+		return true;
+	}
+
+	FString PickWeightedKind(double U, bool bExcludeCommercial)
+	{
+		const FKindWeights& W = GKindWeights;
+		if (U < W.LatestRatio) { return W.LatestKind; }
+		TArray<const TCHAR*, TInlineAllocator<16>> Pool;
+		for (const FPlateKindDef& K : Kinds())
+		{
+			if (W.LatestKind == K.Key || FCString::Strcmp(K.Key, TEXT("ev")) == 0) { continue; }
+			if (bExcludeCommercial && FCString::Strcmp(K.Key, TEXT("commercial")) == 0) { continue; }
+			Pool.Add(K.Key);
+		}
+		const double Rest = 1.0 - W.LatestRatio;
+		if (Pool.Num() == 0 || Rest <= 0.0) { return W.LatestKind; }
+		const int32 Idx = FMath::Clamp(FMath::FloorToInt32((U - W.LatestRatio) / Rest * Pool.Num()), 0, Pool.Num() - 1);
+		return Pool[Idx];
+	}
+
+	double KindProbability(const FString& Key)
+	{
+		const FKindWeights& W = GKindWeights;
+		if (Key == W.LatestKind) { return W.LatestRatio; }
+		if (Key == TEXT("ev") || FindKind(Key) == nullptr) { return 0.0; }
+		return (1.0 - W.LatestRatio) / static_cast<double>(Kinds().Num() - 2);   // 최신·ev 를 뺀 수
 	}
 
 	static FString GWorldKind;   // "" = auto
@@ -92,9 +154,9 @@ namespace PlateKinds
 		return GWorldKind.IsEmpty() ? AutoKindFor(CarId, PrefabName, CarType) : GWorldKind;
 	}
 
-	FString RandomOrWorldKindFor(FRandomStream& Stream, const FString& PrefabName)
+	FString RandomOrWorldKindFor(FRandomStream& Stream, const FString& PrefabName, int32 CarType)
 	{
-		return GWorldKind.IsEmpty() ? RandomKindFor(Stream, PrefabName) : GWorldKind;
+		return GWorldKind.IsEmpty() ? RandomKindFor(Stream, PrefabName, CarType) : GWorldKind;
 	}
 
 	const FPlateKindDef* FindKind(const FString& Key)
@@ -118,15 +180,7 @@ namespace PlateKinds
 
 	FString PickRandomKind(FRandomStream& Stream)
 	{
-		int32 Total = 0;
-		for (const FPlateKindDef& K : Kinds()) { Total += K.RandomWeight; }
-		int32 Roll = Stream.RandRange(0, FMath::Max(Total, 1) - 1);
-		for (const FPlateKindDef& K : Kinds())
-		{
-			Roll -= K.RandomWeight;
-			if (Roll < 0) { return K.Key; }
-		}
-		return DefaultKind();
+		return PickWeightedKind(Stream.GetFraction());
 	}
 
 	uint32 IdSalt(const FString& CarId)
@@ -142,20 +196,8 @@ namespace PlateKinds
 		{
 			if (!Upper.IsEmpty() && Upper.Contains(FString(Hint).ToUpper())) { return TEXT("ev"); }
 		}
-		const uint32 Roll = IdSalt(CarId) % 100u;
-		if (CarType == TruckTypeBongo || CarType == TruckTypeTruck)
-		{
-			return Roll < 50u ? TEXT("commercial") : (Roll < 80u ? TEXT("normal_film") : TEXT("normal_paint8"));
-		}
-		// 가중표(ev 제외, 합 100) — ev 는 차종 이름으로만 준다(plates.py AUTO_WEIGHTS).
-		uint32 Acc = 0;
-		for (const FPlateKindDef& K : Kinds())
-		{
-			if (FCString::Strcmp(K.Key, TEXT("ev")) == 0) { continue; }
-			Acc += static_cast<uint32>(K.RandomWeight);
-			if (Roll < Acc) { return K.Key; }
-		}
-		return DefaultKind();
+		// id 해시 → 0..1. 같은 id 는 늘 같은 U 라 같은 종류(가중치를 바꾸면 그 비율대로 다시 갈린다).
+		return PickKindForCar(static_cast<double>(IdSalt(CarId) % 100000u) / 100000.0, IsTruck(PrefabName, CarType));
 	}
 
 	bool ParsePlate(const FString& Raw, FString& OutRegion, FString& OutPrefix, FString& OutUsage, FString& OutSerial)

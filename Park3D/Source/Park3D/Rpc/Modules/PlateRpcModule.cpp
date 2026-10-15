@@ -7,6 +7,7 @@
 #include "../../CarActor.h"
 #include "../../CarPlacementManager.h"
 #include "../../Plate/PlateGlyphAtlas.h"
+#include "../../Config/CarCatalogConfig.h"
 #include "Engine/World.h"
 #include "Engine/GameInstance.h"
 #include "Engine/Texture2D.h"
@@ -98,6 +99,37 @@ namespace PlateRpc
 		O->SetArrayField(TEXT("kinds"), Arr);
 		return O;
 	}
+
+	TSharedPtr<FJsonObject> KindWeightsPayload()
+	{
+		const PlateKinds::FKindWeights& W = PlateKinds::KindWeights();
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		for (const FPlateKindDef& K : Kinds())
+		{
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("id"), K.Key);
+			Row->SetStringField(TEXT("name"), K.Name);
+			Row->SetNumberField(TEXT("p"), PlateKinds::KindProbability(K.Key));
+			Arr.Add(MakeShared<FJsonValueObject>(Row));
+		}
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetStringField(TEXT("latestKind"), W.LatestKind);
+		O->SetNumberField(TEXT("latestRatio"), W.LatestRatio);
+		O->SetStringField(TEXT("source"), W.Source);
+		O->SetArrayField(TEXT("kinds"), Arr);
+		// 트럭 규칙(마스터 결정 「트럭은 기존대로 50%」) — 고정값이라 set·config 로 못 바꾼다. models = 카탈로그 중 트럭 이름.
+		TArray<TSharedPtr<FJsonValue>> Models;
+		for (const FString& Name : UCarCatalogConfigLibrary::GetCachedOrder())
+		{
+			if (PlateKinds::IsTruck(Name, 0)) { Models.Add(MakeShared<FJsonValueString>(Name)); }
+		}
+		TSharedPtr<FJsonObject> Truck = MakeShared<FJsonObject>();
+		Truck->SetStringField(TEXT("kind"), TEXT("commercial"));
+		Truck->SetNumberField(TEXT("p"), PlateKinds::TruckCommercialRatio);
+		Truck->SetArrayField(TEXT("models"), Models);
+		O->SetObjectField(TEXT("truck"), Truck);
+		return O;
+	}
 }
 
 void FPlateRpcModule::Register(URpcDispatcher& Dispatcher)
@@ -161,6 +193,49 @@ void FPlateRpcModule::Register(URpcDispatcher& Dispatcher)
 		return RpcDto::MakeObject(O);
 	});
 	Dispatcher.SetMethodMeta(TEXT("plate.getDefault"), { false, false, TEXT(""), TEXT("{kind: key | auto} — plate.setDefault 로 잡은 월드 기본 종류") });
+
+	/**
+	 * 종류 추첨 가중치(보드 #1499, OmiPark3D #1498 과 같은 이름·필드). 최신 종류 latestKind 가 latestRatio, 나머지는
+	 * latestKind·ev 를 뺀 종류에 균등. kinds[].p 는 EV 가 아닌 차 기준(ev = 0). set 은 런타임만(재기동 = config 값),
+	 * 기존 차는 다시 뽑지 않는다(car.randomizePlates 로).
+	 */
+	Dispatcher.Register(TEXT("plate.kindWeights.get"), [](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		return RpcDto::MakeObject(PlateRpc::KindWeightsPayload());
+	});
+	Dispatcher.SetMethodMeta(TEXT("plate.kindWeights.get"), { false, false, TEXT(""), TEXT("{latestKind, latestRatio, source, kinds:[{id,name,p}]} — 번호판 종류 추첨 가중치") });
+
+	Dispatcher.Register(TEXT("plate.kindWeights.set"), [](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		const bool bHasKind = RpcParam::Has(P, TEXT("latestKind"));
+		const bool bHasRatio = RpcParam::Has(P, TEXT("latestRatio"));
+		if (!bHasKind && !bHasRatio)
+		{
+			E.FailDomain(TEXT("latestRatio 또는 latestKind 중 하나는 있어야 합니다"), ERpcErrorKind::BadParams);
+			return nullptr;
+		}
+		FString Kind;
+		double Ratio = 0.0;
+		if (bHasKind && !RpcParam::RequireString(P, TEXT("latestKind"), Kind, E)) return nullptr;
+		if (bHasRatio && !RpcParam::RequireFloat(P, TEXT("latestRatio"), Ratio, E)) return nullptr;
+		Kind.TrimStartAndEndInline();
+
+		const PlateKinds::FKindWeights Before = PlateKinds::KindWeights();
+		FString Error;
+		if (!PlateKinds::SetKindWeights(bHasKind ? &Kind : nullptr, bHasRatio ? &Ratio : nullptr, TEXT("rpc"), Error))
+		{
+			E.FailDomain(Error, ERpcErrorKind::BadParams);
+			return nullptr;
+		}
+		const PlateKinds::FKindWeights& After = PlateKinds::KindWeights();
+		const bool bChanged = After.LatestKind != Before.LatestKind || After.LatestRatio != Before.LatestRatio;
+		UE_LOG(LogTemp, Log, TEXT("[Plate] 종류 가중치 → %s %.3f (이전 %s %.3f)"),
+			*After.LatestKind, After.LatestRatio, *Before.LatestKind, Before.LatestRatio);
+
+		TSharedPtr<FJsonObject> O = PlateRpc::KindWeightsPayload();
+		O->SetBoolField(TEXT("changed"), bChanged);
+		return RpcDto::MakeObject(O);
+	});
 
 	/**
 	 * 번호·종류 무작위 추첨(차량에 안 붙임). kind=key 면 종류 고정. 결과 plate 는 그대로 car.setPlate 에 넣는다.

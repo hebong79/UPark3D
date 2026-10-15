@@ -11,7 +11,7 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
-// ===== 종류 배정: 결정적 · EV 힌트 · 트럭 규칙 · 무작위는 ev 를 차종 이름 없이 안 준다 =====
+// ===== 종류 배정: 결정적 · EV 힌트 · 무작위는 ev 를 차종 이름 없이 안 준다 =====
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPlateKindsAssignTest,
 	"Park3D.Plate.Kinds.Assign",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
@@ -41,28 +41,18 @@ bool FPlateKindsAssignTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("200대면 종류가 5가지 이상 퍼진다"), Seen.Num() >= 5);
 	TestEqual(TEXT("EV 이름 힌트 → ev"), PlateKinds::AutoKindFor(TEXT("x"), TEXT("현대_아이오닉5"), 2), FString(TEXT("ev")));
 	TestEqual(TEXT("IONIQ 힌트 → ev"), PlateKinds::AutoKindFor(TEXT("x"), TEXT("IONIQ 9"), 2), FString(TEXT("ev")));
-	{
-		int32 Commercial = 0;
-		for (int32 i = 0; i < 100; ++i)
-		{
-			const FString K = PlateKinds::AutoKindFor(FString::Printf(TEXT("truck-%d"), i), TEXT("현대_포터"), 6);
-			if (K == TEXT("commercial")) { ++Commercial; }
-			TestTrue(TEXT("트럭은 사업용/필름/페인트8 중 하나"), K == TEXT("commercial") || K == TEXT("normal_film") || K == TEXT("normal_paint8"));
-		}
-		TestTrue(TEXT("트럭 100대 중 사업용이 30~70대"), Commercial >= 30 && Commercial <= 70);
-	}
 
 	// 무작위: seed 재현, 승용 이름이면 ev 없음, EV 이름이면 항상 ev.
 	{
 		FRandomStream S1(77), S2(77);
 		for (int32 i = 0; i < 50; ++i)
 		{
-			const FString A = PlateKinds::RandomKindFor(S1, TEXT("기아_카니발"));
-			const FString B = PlateKinds::RandomKindFor(S2, TEXT("기아_카니발"));
+			const FString A = PlateKinds::RandomKindFor(S1, TEXT("기아_카니발"), 2);
+			const FString B = PlateKinds::RandomKindFor(S2, TEXT("기아_카니발"), 2);
 			TestEqual(TEXT("RandomKindFor seed 재현"), A, B);
 			TestNotEqual(TEXT("RandomKindFor 는 승용 이름에 ev 를 안 준다"), A, FString(TEXT("ev")));
 		}
-		TestEqual(TEXT("RandomKindFor EV 이름 → ev"), PlateKinds::RandomKindFor(S1, TEXT("기아_EV6")), FString(TEXT("ev")));
+		TestEqual(TEXT("RandomKindFor EV 이름 → ev"), PlateKinds::RandomKindFor(S1, TEXT("기아_EV6"), 2), FString(TEXT("ev")));
 	}
 
 	// 표시 정규화: 2자리 종류는 앞자리를 자르고, 사업용 한글, 지역 배정은 seed 에 결정적.
@@ -91,11 +81,133 @@ bool FPlateKindsAssignTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("key 설정"), PlateKinds::SetWorldKind(TEXT("commercial")));
 		TestEqual(TEXT("WorldKind"), PlateKinds::WorldKind(), FString(TEXT("commercial")));
 		TestEqual(TEXT("EV 이름도 월드 기본"), PlateKinds::AssignedKindFor(TEXT("x"), TEXT("현대_아이오닉5"), 2), FString(TEXT("commercial")));
-		TestEqual(TEXT("랜덤 배치도 월드 기본"), PlateKinds::RandomOrWorldKindFor(S, TEXT("기아_EV6")), FString(TEXT("commercial")));
+		TestEqual(TEXT("랜덤 배치도 월드 기본"), PlateKinds::RandomOrWorldKindFor(S, TEXT("기아_EV6"), 2), FString(TEXT("commercial")));
 		TestTrue(TEXT("auto 복귀"), PlateKinds::SetWorldKind(TEXT("auto")));
 		TestTrue(TEXT("auto 면 비어 있다"), PlateKinds::WorldKind().IsEmpty());
-		TestEqual(TEXT("auto 복귀 뒤 EV 이름 → ev"), PlateKinds::RandomOrWorldKindFor(S, TEXT("기아_EV6")), FString(TEXT("ev")));
+		TestEqual(TEXT("auto 복귀 뒤 EV 이름 → ev"), PlateKinds::RandomOrWorldKindFor(S, TEXT("기아_EV6"), 2), FString(TEXT("ev")));
 	}
+	return true;
+}
+
+// ===== 종류 가중치(#1499): 최신 60% · 나머지 균등 · ev 제외 · 검증 · 경로별(무작위/id 해시/차 없음) 분포 =====
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPlateKindWeightsTest,
+	"Park3D.Plate.Kinds.Weights",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FPlateKindWeightsTest::RunTest(const FString& Parameters)
+{
+	PlateKinds::SetWorldKind(FString());
+	const PlateKinds::FKindWeights Saved = PlateKinds::KindWeights();
+	FString Err;
+	const FString Film(TEXT("normal_film"));
+	double R = 0.6;
+	TestTrue(TEXT("기본으로 되돌림"), PlateKinds::SetKindWeights(&Film, &R, TEXT("default"), Err));
+
+	// 확률표: 최신 0.6, ev 0, 나머지 8종 0.05, 합 1.
+	double Sum = 0.0;
+	for (const FPlateKindDef& K : PlateKinds::Kinds()) { Sum += PlateKinds::KindProbability(K.Key); }
+	TestTrue(TEXT("p 합 = 1"), FMath::IsNearlyEqual(Sum, 1.0, 1e-9));
+	TestTrue(TEXT("p(normal_film) = 0.6"), FMath::IsNearlyEqual(PlateKinds::KindProbability(Film), 0.6, 1e-9));
+	TestEqual(TEXT("p(ev) = 0"), PlateKinds::KindProbability(TEXT("ev")), 0.0);
+	TestTrue(TEXT("p(old_business) = 0.05"), FMath::IsNearlyEqual(PlateKinds::KindProbability(TEXT("old_business")), 0.05, 1e-9));
+
+	// 세 경로 각 N 장 — 최신 60%±5%, ev 0, 나머지 8종이 모두 나온다.
+	auto CheckHist = [this](const TCHAR* Label, const TMap<FString, int32>& H, int32 N)
+	{
+		const double Latest = static_cast<double>(H.FindRef(TEXT("normal_film"))) / N;
+		TestTrue(*FString::Printf(TEXT("%s 최신 %.3f 가 0.55..0.65"), Label, Latest), Latest >= 0.55 && Latest <= 0.65);
+		TestEqual(*FString::Printf(TEXT("%s ev 0"), Label), H.FindRef(TEXT("ev")), 0);
+		TestEqual(*FString::Printf(TEXT("%s 종류 9가지"), Label), H.Num(), 9);
+		FString Line;
+		for (const FPlateKindDef& K : PlateKinds::Kinds()) { Line += FString::Printf(TEXT(" %s=%d"), K.Key, H.FindRef(K.Key)); }
+		AddInfo(FString::Printf(TEXT("[#1499] %s N=%d:%s"), Label, N, *Line));
+	};
+	constexpr int32 N = 2000;
+	{
+		TMap<FString, int32> H;
+		FRandomStream S(1499);
+		for (int32 i = 0; i < N; ++i) { H.FindOrAdd(PlateKinds::RandomKindFor(S, TEXT("기아_카니발"), 2))++; }
+		CheckHist(TEXT("RandomKindFor"), H, N);
+	}
+	{
+		TMap<FString, int32> H;
+		for (int32 i = 0; i < N; ++i) { H.FindOrAdd(PlateKinds::AutoKindFor(FString::Printf(TEXT("%d-12.34.%02d"), i, i % 60), TEXT("현대_쏘나타"), 2))++; }
+		CheckHist(TEXT("AutoKindFor"), H, N);
+	}
+	// 트럭(마스터 결정 「트럭은 기존대로 50%」): commercial 50%±5%, 나머지 절반 중 최신 0.6 → 전체 30%±5%, ev 0.
+	// 이름(봉고·포터)으로도, type 5·6 으로도 트럭이다.
+	TestTrue(TEXT("이름 봉고 → 트럭"), PlateKinds::IsTruck(TEXT("기아_봉고_탑차"), 0));
+	TestTrue(TEXT("이름 포터 → 트럭"), PlateKinds::IsTruck(TEXT("현대_포터"), 2));
+	TestTrue(TEXT("type 6 → 트럭"), PlateKinds::IsTruck(TEXT("x"), 6));
+	TestFalse(TEXT("승용 → 트럭 아님"), PlateKinds::IsTruck(TEXT("현대_쏘나타"), 2));
+	for (int32 Path = 0; Path < 2; ++Path)
+	{
+		TMap<FString, int32> H;
+		FRandomStream S(1500);
+		for (int32 i = 0; i < N; ++i)
+		{
+			H.FindOrAdd(Path == 0
+				? PlateKinds::AutoKindFor(FString::Printf(TEXT("t%d-12.34.%02d"), i, i % 60), TEXT("현대_포터"), 0)
+				: PlateKinds::RandomKindFor(S, TEXT("기아_봉고"), 0))++;
+		}
+		const TCHAR* Label = Path == 0 ? TEXT("트럭 AutoKindFor") : TEXT("트럭 RandomKindFor");
+		const double Com = static_cast<double>(H.FindRef(TEXT("commercial"))) / N;
+		const double Latest = static_cast<double>(H.FindRef(TEXT("normal_film"))) / N;
+		TestTrue(*FString::Printf(TEXT("%s commercial %.3f 가 0.45..0.55"), Label, Com), Com >= 0.45 && Com <= 0.55);
+		TestTrue(*FString::Printf(TEXT("%s 최신 %.3f 가 0.25..0.35"), Label, Latest), Latest >= 0.25 && Latest <= 0.35);
+		TestEqual(*FString::Printf(TEXT("%s ev 0"), Label), H.FindRef(TEXT("ev")), 0);
+		FString Line;
+		for (const FPlateKindDef& K : PlateKinds::Kinds()) { Line += FString::Printf(TEXT(" %s=%d"), K.Key, H.FindRef(K.Key)); }
+		AddInfo(FString::Printf(TEXT("[#1499] %s N=%d:%s"), Label, N, *Line));
+	}
+	{
+		TMap<FString, int32> H;
+		FRandomStream S(7);
+		for (int32 i = 0; i < N; ++i) { H.FindOrAdd(PlateKinds::PickRandomKind(S))++; }
+		CheckHist(TEXT("PickRandomKind"), H, N);
+	}
+	// seed 재현.
+	{
+		FRandomStream S1(42), S2(42);
+		bool bSame = true;
+		for (int32 i = 0; i < 100; ++i) { bSame &= PlateKinds::RandomKindFor(S1, TEXT("x"), 2) == PlateKinds::RandomKindFor(S2, TEXT("x"), 2); }
+		TestTrue(TEXT("seed 재현"), bSame);
+	}
+	// 경계: 1 = 전부 최신, 0 = 최신 없음.
+	{
+		double One = 1.0, Zero = 0.0;
+		TestTrue(TEXT("ratio 1"), PlateKinds::SetKindWeights(nullptr, &One, TEXT("rpc"), Err));
+		FRandomStream S(3);
+		bool bAll = true;
+		for (int32 i = 0; i < 200; ++i) { bAll &= PlateKinds::PickRandomKind(S) == Film; }
+		TestTrue(TEXT("ratio 1 → 전부 최신"), bAll);
+		TestTrue(TEXT("ratio 0"), PlateKinds::SetKindWeights(nullptr, &Zero, TEXT("rpc"), Err));
+		bool bNone = true;
+		for (int32 i = 0; i < 200; ++i) { bNone &= PlateKinds::PickRandomKind(S) != Film; }
+		TestTrue(TEXT("ratio 0 → 최신 없음"), bNone);
+	}
+	// latestKind 교체: 그 종류가 최신, normal_film 은 나머지로 내려간다.
+	{
+		const FString Paint8(TEXT("normal_paint8"));
+		double Half = 0.5;
+		TestTrue(TEXT("latestKind 교체"), PlateKinds::SetKindWeights(&Paint8, &Half, TEXT("rpc"), Err));
+		TestTrue(TEXT("p(paint8) = 0.5"), FMath::IsNearlyEqual(PlateKinds::KindProbability(Paint8), 0.5, 1e-9));
+		TestTrue(TEXT("p(film) = 0.5/8"), FMath::IsNearlyEqual(PlateKinds::KindProbability(Film), 0.5 / 8.0, 1e-9));
+	}
+	// 거부: 범위 밖·ev·모르는 key — 아무것도 안 바뀐다.
+	{
+		const PlateKinds::FKindWeights Before = PlateKinds::KindWeights();
+		double Bad = 1.2, Neg = -0.1;
+		const FString Ev(TEXT("ev")), Nope(TEXT("nope"));
+		TestFalse(TEXT("1.2 거부"), PlateKinds::SetKindWeights(nullptr, &Bad, TEXT("rpc"), Err));
+		TestFalse(TEXT("-0.1 거부"), PlateKinds::SetKindWeights(nullptr, &Neg, TEXT("rpc"), Err));
+		TestFalse(TEXT("ev 거부"), PlateKinds::SetKindWeights(&Ev, nullptr, TEXT("rpc"), Err));
+		double Ok = 0.3;
+		TestFalse(TEXT("모르는 key 거부(ratio 함께여도)"), PlateKinds::SetKindWeights(&Nope, &Ok, TEXT("rpc"), Err));
+		TestEqual(TEXT("거부 뒤 kind 불변"), PlateKinds::KindWeights().LatestKind, Before.LatestKind);
+		TestEqual(TEXT("거부 뒤 ratio 불변"), PlateKinds::KindWeights().LatestRatio, Before.LatestRatio);
+	}
+	PlateKinds::SetKindWeights(&Saved.LatestKind, &Saved.LatestRatio, *Saved.Source, Err);
 	return true;
 }
 

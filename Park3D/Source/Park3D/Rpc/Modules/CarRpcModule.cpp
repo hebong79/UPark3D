@@ -1508,7 +1508,7 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		{
 			FRandomStream Stream = PlateRpc::MakeStream(Seed);
 			if (Number.IsEmpty() && bRandom) { Number = ACarActor::MakeRandomPlateNumber(Stream); }
-			if (Kind.IsEmpty() || Kind == PlateRpc::RandomKind()) { Kind = PlateKinds::RandomKindFor(Stream, Car->CarData.prefabName); }
+			if (Kind.IsEmpty() || Kind == PlateRpc::RandomKind()) { Kind = PlateKinds::RandomKindFor(Stream, Car->CarData.prefabName, Car->CarData.type); }
 		}
 		if (Number.IsEmpty() && Kind.IsEmpty())
 		{

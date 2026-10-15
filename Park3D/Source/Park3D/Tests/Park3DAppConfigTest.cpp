@@ -209,6 +209,14 @@ bool FPark3DAppConfigStreamSlotsTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("미지정 hard max"), None.StreamHardMaxSlots, 0);
 	TestEqual(TEXT("미지정 total fps"), None.StreamTotalFps, 0.f);
 	TestEqual(TEXT("미지정 main fps"), None.StreamMainFps, 0.f);
+	TestTrue(TEXT("미지정 plate kind"), None.PlateLatestKind.IsEmpty());
+	TestTrue(TEXT("미지정 plate ratio < 0"), None.PlateLatestRatio < 0.0);
+
+	// 번호판 종류 가중치(#1499) — 값 검증은 PlateKinds 가 하므로 여기선 읽기만.
+	FPark3DAppConfig Plate;
+	UPark3DAppConfigLibrary::FromJson(TEXT(R"({"plate_kind_weights":{"latestKind":"normal_film","latestRatio":0.7}})"), Plate);
+	TestEqual(TEXT("plate kind"), Plate.PlateLatestKind, FString(TEXT("normal_film")));
+	TestEqual(TEXT("plate ratio"), Plate.PlateLatestRatio, 0.7);
 
 	// 0·음수는 미지정 취급 — 그대로 적용하면 슬롯 0(아무도 못 봄)/fps 0(0 나눗셈)이 된다.
 	FPark3DAppConfig Zero, Neg;

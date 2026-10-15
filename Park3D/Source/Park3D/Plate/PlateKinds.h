@@ -25,7 +25,6 @@ struct FPlateKindDef
 	int32 Digits;             // 앞자리 개수(2 | 3)
 	const TCHAR* UsageChars;  // 이 종류가 허용하는 한글
 	const TCHAR* Example;
-	int32 RandomWeight;       // plate.random / car.setPlate random 추첨 가중치(0 = 추첨 안 함)
 	/** 판 위 글자 배치 — "hologram"(2020 필름식 띠) | "ev" | ""(별표 2의1 페인트식). plates.py 의 band. */
 	const TCHAR* Band;
 	/** 바탕·글자 sRGB(plates.py 의 bg/fg). 실제 그림은 MI_Plate_<key> 가 내고, 여기 값은 plate.bake 미리보기용. */
@@ -63,7 +62,7 @@ namespace PlateKinds
 	FString AssignedKindFor(const FString& CarId, const FString& PrefabName, int32 CarType);
 
 	/** 랜덤 배치의 종류 — 월드 기본이 있으면 그것("1개 타입으로 통일"이 랜덤 재생성에도 지켜져야 한다), 없으면 RandomKindFor. */
-	FString RandomOrWorldKindFor(FRandomStream& Stream, const FString& PrefabName);
+	FString RandomOrWorldKindFor(FRandomStream& Stream, const FString& PrefabName, int32 CarType);
 
 	/** 종류별 머티리얼 인스턴스 경로(`Tools/plate_kinds/build_plate_assets.py` 가 만든다). */
 	FString KindMaterialPath(const FString& Key);
@@ -71,20 +70,59 @@ namespace PlateKinds
 	/** 그 종류의 인스턴스 패키지가 디스크(또는 pak)에 있는가 — 로드하지 않고 존재만 본다(plate.kinds 의 `rendered`). */
 	bool IsKindRendered(const FString& Key);
 
-	/** 무작위 종류 — 단, 전기차판(ev)은 차종 이름이 EV 일 때만(plates.py 의 auto 규칙과 random 표를 합친 것). */
-	FString RandomKindFor(FRandomStream& Stream, const FString& PrefabName);
+	/** 무작위 종류 — 이름에 EV/아이오닉/IONIQ 이 있으면 ev, 나머지는 PickKindForCar(Stream.GetFraction()). */
+	FString RandomKindFor(FRandomStream& Stream, const FString& PrefabName, int32 CarType);
 
 	/** seed 규약(저장소 공통): 0 = 비결정, 그 외 = 재현. */
 	FRandomStream MakeStream(int32 Seed);
 
-	/** RandomWeight 로 가중 추첨한 종류 key(전기차판 포함). */
+	/** 가중 추첨한 종류 key — 차가 없는 추첨(plate.random/bake)용. PickWeightedKind(Stream.GetFraction()). */
 	FString PickRandomKind(FRandomStream& Stream);
 
 	/**
-	 * 차량 id·차종으로 종류를 **결정적으로** 고른다(plates.py auto_kind) — 같은 id 는 재생성·재부팅 후에도 같은 종류.
-	 * 이름에 EV/아이오닉/IONIQ 이 있으면 ev, 봉고·트럭은 절반이 사업용, 나머지는 가중표(ev 제외).
+	 * 차량 id·차종으로 종류를 **결정적으로** 고른다 — 같은 id 는 재생성·재부팅 후에도 같은 종류.
+	 * 이름에 EV/아이오닉/IONIQ 이 있으면 ev, 나머지는 id 해시를 PickKindForCar 에 넣는다.
 	 */
 	FString AutoKindFor(const FString& CarId, const FString& PrefabName, int32 CarType);
+
+	/**
+	 * 트럭 규칙(#1499 마스터 결정 「트럭은 기존대로 50%」) — 트럭이면 commercial 이 TruckCommercialRatio, 나머지는
+	 * commercial·ev 를 뺀 가중 추첨. 트럭 = CarData.type 이 Bongo(5)/Truck(6) **또는** 모델 이름에 봉고/포터.
+	 * 이름도 보는 이유: 저장 장면·랜덤 배치·car.create 는 type 을 0/Small 로 두어 type 만으로는 트럭이 거의 안 잡힌다.
+	 */
+	constexpr double TruckCommercialRatio = 0.5;
+	bool IsTruck(const FString& PrefabName, int32 CarType);
+
+	/** EV 가 아닌 차의 종류 — U(0..1) 하나로 트럭 규칙과 가중 추첨을 함께 정한다(트럭: U<0.5 → commercial, 아니면 (U-0.5)/0.5). */
+	FString PickKindForCar(double U, bool bTruck);
+
+	/**
+	 * 종류 추첨 가중치(보드 #1499·#1498, OmiPark3D 와 같은 계약) — 최신 종류 LatestKind 가 LatestRatio(기본 0.6),
+	 * 나머지 1-LatestRatio 는 LatestKind·ev 를 뺀 종류에 균등. ev 는 추첨에서 나오지 않는다(EV 이름 차량만 받는다).
+	 * 프로세스 전역: 기동 때 config `plate_kind_weights` 가 한 번 덮고, plate.kindWeights.set 이 런타임에 바꾼다(저장 안 함).
+	 */
+	struct FKindWeights
+	{
+		FString LatestKind;
+		double LatestRatio = 0.6;
+		FString Source;   // "default" | "config" | "rpc"
+	};
+	const FKindWeights& KindWeights();
+
+	/**
+	 * 가중치 변경 — nullptr 인 항목은 그대로. LatestRatio 는 0..1, LatestKind 는 표의 key 이면서 ev 가 아니어야 한다.
+	 * 하나라도 틀리면 아무것도 안 바꾸고 false(OutError 에 이유).
+	 */
+	bool SetKindWeights(const FString* LatestKind, const double* LatestRatio, const TCHAR* Source, FString& OutError);
+
+	/**
+	 * 0..1 균등 난수 하나로 종류를 고른다(ev 제외, bExcludeCommercial 이면 commercial 도 — 트럭의 나머지 절반).
+	 * 같은 U → 같은 종류(seed·id 해시 재현의 바탕).
+	 */
+	FString PickWeightedKind(double U, bool bExcludeCommercial = false);
+
+	/** EV 가 아닌 차가 그 종류를 받을 확률(plate.kindWeights.get 의 p). ev 는 0. */
+	double KindProbability(const FString& Key);
 
 	/** 차량 id → 표시 정규화(지역명·사업용 한글 배정)에 쓰는 소금값. AutoKindFor 와 같은 해시라 같은 차는 늘 같은 지역. */
 	uint32 IdSalt(const FString& CarId);

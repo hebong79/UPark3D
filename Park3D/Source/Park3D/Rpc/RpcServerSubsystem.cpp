@@ -203,6 +203,8 @@ namespace
 			// 보드 #1100 — 일괄·되돌리기.
 			TEXT("system.batch"), TEXT("state.snapshot"), TEXT("state.restore"), TEXT("state.drop"), TEXT("state.list"),
 			TEXT("car.setAll"), TEXT("car.createMany"), TEXT("car.setVisible"), TEXT("preset.setAll"),
+			// 보드 #1499 — 번호판 종류 가중치(OmiPark3D #1498 과 같은 이름).
+			TEXT("plate.kindWeights.get"), TEXT("plate.kindWeights.set"),
 		};
 		TArray<FString> Out;
 		for (const TCHAR* N : Names) { Out.Add(N); }

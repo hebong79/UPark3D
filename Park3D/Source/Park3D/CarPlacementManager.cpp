@@ -835,7 +835,7 @@ int32 ACarPlacementManager::RandomizeVisiblePlateNumbers(int32 Seed)
 
 		// 종류도 같이 뽑는다 — "여러 타입의 번호판이 랜덤으로"(2026-09-21). 전기차판은 차종 이름이 EV 일 때만.
 		// 월드 기본 종류(plate.setDefault)가 잡혀 있으면 추첨하지 않고 그 종류다 — 랜덤 재생성이 "1개 타입" 을 깨면 안 된다.
-		Car->SetPlate(Number, PlateKinds::RandomOrWorldKindFor(Stream, Car->CarData.prefabName));
+		Car->SetPlate(Number, PlateKinds::RandomOrWorldKindFor(Stream, Car->CarData.prefabName, Car->CarData.type));
 		Used.Add(Car->GetPlateNumber());
 		++Changed;
 	}

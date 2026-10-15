@@ -76,6 +76,12 @@ namespace Park3DRpc
 	 */
 	PARK3D_API int64 SceneSeq();
 	PARK3D_API int64 BumpSceneSeq();
+
+	/**
+	 * 응답 시각(ms, 보드 #1468) — 프로세스 시작부터의 단조 시계(FPlatformTime, GStartTime 기준) 하나.
+	 * mutating 응답(frameId 옆)과 캡처 응답이 같은 시계를 단다 → 두 값의 차가 곧 지연이다. 순서는 frameId 로 가른다.
+	 */
+	PARK3D_API double NowMs();
 }
 
 /**

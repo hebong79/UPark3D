@@ -173,12 +173,13 @@ void FRandomRpcModule::Register(URpcDispatcher& Dispatcher)
 	// ---- 씬 무관 (2) ----
 	Dispatcher.Register(TEXT("random.pickCount"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
-		const int32 Seed = RpcParam::GetInt(P, TEXT("seed"), 0);
+		const int32 Seed = RpcParam::ResolveSeed(P);
 		FRandomStream Stream = MakeStream(Seed);
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetBoolField(TEXT("ok"), true);
 		O->SetNumberField(TEXT("count"), PickVehicleCount(Stream));
 		O->SetBoolField(TEXT("seedHonored"), true);
+		O->SetNumberField(TEXT("seed"), Seed);   // 실효 시드 — 생략했어도 이 값으로 재현된다(보드 #1468)
 		return RpcDto::MakeObject(O);
 	});
 
@@ -188,7 +189,7 @@ void FRandomRpcModule::Register(URpcDispatcher& Dispatcher)
 		if (!RpcParam::RequireVec3(P, TEXT("boxMin"), BoxMin, E)) return nullptr;
 		if (!RpcParam::RequireVec3(P, TEXT("boxMax"), BoxMax, E)) return nullptr;
 		const double Y = RpcParam::GetFloat(P, TEXT("y"), 0.0);
-		const int32 Seed = RpcParam::GetInt(P, TEXT("seed"), 0);
+		const int32 Seed = RpcParam::ResolveSeed(P);
 		FRandomStream Stream = MakeStream(Seed);
 		const double X = Stream.FRandRange(BoxMin.X, BoxMax.X);
 		const double Z = Stream.FRandRange(BoxMin.Z, BoxMax.Z);
@@ -196,6 +197,7 @@ void FRandomRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetBoolField(TEXT("ok"), true);
 		O->SetObjectField(TEXT("pos"), RpcDto::Vec3(X, Y, Z));
 		O->SetBoolField(TEXT("seedHonored"), true);
+		O->SetNumberField(TEXT("seed"), Seed);   // 실효 시드 — 생략했어도 이 값으로 재현된다(보드 #1468)
 		return RpcDto::MakeObject(O);
 	});
 
@@ -203,7 +205,7 @@ void FRandomRpcModule::Register(URpcDispatcher& Dispatcher)
 	Dispatcher.Register(TEXT("random.hideNoise"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
-		const int32 Seed = RpcParam::GetInt(P, TEXT("seed"), 0);
+		const int32 Seed = RpcParam::ResolveSeed(P);
 
 		// 노이즈 차량 = faceSlot(slotId) <= 0 (Unity 정의). 인덱스 수집.
 		TArray<int32> NoiseIdx;
@@ -220,6 +222,7 @@ void FRandomRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetNumberField(TEXT("shownCount"), TotalNoise - Hidden.Num());
 		O->SetNumberField(TEXT("totalNoise"), TotalNoise);
 		O->SetBoolField(TEXT("seedHonored"), true);
+		O->SetNumberField(TEXT("seed"), Seed);   // 실효 시드 — 생략했어도 이 값으로 재현된다(보드 #1468)
 		return RpcDto::MakeObject(O);
 	});
 
@@ -227,7 +230,7 @@ void FRandomRpcModule::Register(URpcDispatcher& Dispatcher)
 	{
 		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
 		const bool bRandomCreate = RpcParam::GetBool(P, TEXT("randomCreate"), true);
-		const int32 Seed = RpcParam::GetInt(P, TEXT("seed"), 0);
+		const int32 Seed = RpcParam::ResolveSeed(P);
 		const FCarPosDatas Data = Mgr->ToCarPosDatas(); // 현재 위치 보존.
 		if (bRandomCreate)
 		{
@@ -241,6 +244,7 @@ void FRandomRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetBoolField(TEXT("ok"), true);
 		O->SetNumberField(TEXT("carCount"), Mgr->GetCarCount());
 		O->SetBoolField(TEXT("seedHonored"), true);
+		O->SetNumberField(TEXT("seed"), Seed);   // 실효 시드 — 생략했어도 이 값으로 재현된다(보드 #1468)
 		return RpcDto::MakeObject(O);
 	});
 
@@ -248,12 +252,13 @@ void FRandomRpcModule::Register(URpcDispatcher& Dispatcher)
 	{
 		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
 		const int32 Count = RpcParam::GetInt(P, TEXT("count"), 0);
-		const int32 Seed = RpcParam::GetInt(P, TEXT("seed"), 0);
+		const int32 Seed = RpcParam::ResolveSeed(P);
 		TArray<ACarActor*> Toggled = Mgr->ToggleRandomCars(Count, Seed);
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetBoolField(TEXT("ok"), true);
 		O->SetNumberField(TEXT("toggledCount"), Toggled.Num());
 		O->SetBoolField(TEXT("seedHonored"), true);
+		O->SetNumberField(TEXT("seed"), Seed);   // 실효 시드 — 생략했어도 이 값으로 재현된다(보드 #1468)
 		return RpcDto::MakeObject(O);
 	});
 
@@ -273,7 +278,7 @@ void FRandomRpcModule::Register(URpcDispatcher& Dispatcher)
 
 		const int32 PresetId = RpcParam::GetInt(P, TEXT("presetId"), 1);
 		const bool bRandom = RpcParam::GetBool(P, TEXT("random"), true);
-		const int32 Seed = RpcParam::GetInt(P, TEXT("seed"), 0);
+		const int32 Seed = RpcParam::ResolveSeed(P);
 		const bool bRandomColor = RpcParam::GetBool(P, TEXT("randomColor"), false);
 		const bool bAllowOverlap = RpcParam::GetBool(P, TEXT("allowOverlap"), false);
 		TArray<FString> Replaced;
@@ -344,6 +349,7 @@ void FRandomRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetArrayField(TEXT("replaced"), RpcDto::StringArray(Replaced));
 		O->SetNumberField(TEXT("presetId"), PresetId);
 		O->SetBoolField(TEXT("seedHonored"), true);
+		O->SetNumberField(TEXT("seed"), Seed);   // 실효 시드 — 생략했어도 이 값으로 재현된다(보드 #1468)
 		return RpcDto::MakeObject(O);
 	});
 
@@ -375,7 +381,7 @@ void FRandomRpcModule::Register(URpcDispatcher& Dispatcher)
 		AParkingPresetManager* PreMgr = GetPresetManager(E); if (!PreMgr) return nullptr;
 
 		const int32 PresetId = RpcParam::GetInt(P, TEXT("presetId"), 1);
-		const int32 Seed = RpcParam::GetInt(P, TEXT("seed"), 0);
+		const int32 Seed = RpcParam::ResolveSeed(P);
 		const bool bRandomShow = RpcParam::GetBool(P, TEXT("randomShow"), true);
 
 		const FParkingPreset* Pr = ResolvePreset(PresetId, PreMgr, E); if (!Pr) return nullptr;
@@ -445,6 +451,7 @@ void FRandomRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetNumberField(TEXT("noiseShownCount"), NoiseShown);
 		O->SetNumberField(TEXT("ambient"), AmbientApplied);
 		O->SetBoolField(TEXT("seedHonored"), true);
+		O->SetNumberField(TEXT("seed"), Seed);   // 실효 시드 — 생략했어도 이 값으로 재현된다(보드 #1468)
 		return RpcDto::MakeObject(O);
 	});
 
@@ -467,7 +474,7 @@ TSharedPtr<FJsonValue> FRandomRpcModule::JitterPresetCars(
 
 	const int32 PresetId = RpcParam::GetInt(P, TEXT("presetId"), 1);
 	const int32 SlotIndex = bUseSlotIndexFilter ? RpcParam::GetInt(P, TEXT("slotIndex"), -1) : -1;
-	const int32 Seed = RpcParam::GetInt(P, TEXT("seed"), 0);
+	const int32 Seed = RpcParam::ResolveSeed(P);
 
 	const FParkingPreset* Pr = ResolvePreset(PresetId, PreMgr, E); if (!Pr) return nullptr;
 
@@ -498,5 +505,6 @@ TSharedPtr<FJsonValue> FRandomRpcModule::JitterPresetCars(
 	O->SetNumberField(TEXT("appliedCount"), Applied);
 	O->SetNumberField(TEXT("frontCount"), FrontCount);
 	O->SetBoolField(TEXT("seedHonored"), true);
+	O->SetNumberField(TEXT("seed"), Seed);   // 실효 시드 — 생략했어도 이 값으로 재현된다(보드 #1468)
 	return RpcDto::MakeObject(O);
 }

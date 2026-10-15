@@ -909,3 +909,52 @@ void ACarActor::SetCarLights(bool bInHeadlights, bool bInTail, bool bInBrake)
 	PlateLampFront->SetVisibility(bHeadlightsOn);
 	PlateLampBack->SetVisibility(bHeadlightsOn || bTailOn || bBrakeOn);
 }
+
+FVector ACarActor::GetForwardWorld() const
+{
+	// 차 앞은 메시 로컬 +Y(EnsureCarLightComponents 의 전조등과 같은 규약).
+	return MeshComp ? MeshComp->GetComponentTransform().TransformVectorNoScale(FVector::YAxisVector).GetSafeNormal() : GetActorForwardVector();
+}
+
+void ACarActor::GetPlateWorldInfos(TArray<FCarPlateWorld>& Out) const
+{
+	Out.Reset();
+	if (!MeshComp || !MeshComp->GetStaticMesh())
+	{
+		return;
+	}
+	const FVector CarCenter = MeshComp->Bounds.Origin;
+	const FVector Forward = GetForwardWorld();
+	for (const UStaticMeshComponent* Plate : { FrontPlateComp, BackPlateComp })
+	{
+		if (!Plate || !Plate->GetStaticMesh() || !Plate->IsVisible())
+		{
+			continue;
+		}
+		// 판 메시 바운즈를 컴포넌트 스케일(종류별 판 크기)까지 곱해 축을 고른다 — AlignPlateAndText 와 같은 얇은/넓은 축 규칙.
+		const FTransform& T = Plate->GetComponentTransform();
+		const FBoxSphereBounds MB = Plate->GetStaticMesh()->GetBounds();
+		const FVector S = MB.BoxExtent * T.GetScale3D().GetAbs();
+		const int32 Thin = (S.X <= S.Y && S.X <= S.Z) ? 0 : ((S.Y <= S.Z) ? 1 : 2);
+		const int32 Wide = (S.X >= S.Y && S.X >= S.Z) ? 0 : ((S.Y >= S.Z) ? 1 : 2);
+		const int32 Tall = (Thin != Wide) ? (3 - Thin - Wide) : Thin;
+		const FVector Axes[3] = { FVector::XAxisVector, FVector::YAxisVector, FVector::ZAxisVector };
+
+		const FVector Center = T.TransformPosition(MB.Origin);
+		FVector N = T.TransformVectorNoScale(Axes[Thin]).GetSafeNormal();
+		if (FVector::DotProduct(N, Center - CarCenter) < 0.0) { N = -N; }
+		FVector U = T.TransformVectorNoScale(Axes[Tall]).GetSafeNormal();
+		if (U.Z < 0.0) { U = -U; }
+
+		FCarPlateWorld W;
+		W.FaceCenter = Center + N * S[Thin];
+		W.Normal = N;
+		W.Up = U;
+		W.Right = FVector::CrossProduct(U, -N).GetSafeNormal();   // 판을 마주 본 사람(시선 -N)의 오른쪽
+		W.WidthCm = S[Wide] * 2.0;
+		W.HeightCm = S[Tall] * 2.0;
+		W.bFrontSide = FVector::DotProduct(W.FaceCenter - CarCenter, Forward) > 0.0;
+		W.Comp = Plate;
+		Out.Add(W);
+	}
+}

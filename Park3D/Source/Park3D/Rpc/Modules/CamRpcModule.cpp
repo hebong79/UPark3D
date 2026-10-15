@@ -4,6 +4,7 @@
 #include "../RpcDispatcher.h"
 #include "../RpcParamUtil.h"
 #include "../RpcImageUtil.h"
+#include "../CaptureTruth.h"
 #include "../../CameraControlManager.h"
 #include "../../PTZCameraActor.h"
 #include "../../CameraControlLibrary.h"
@@ -201,6 +202,24 @@ namespace
 			return nullptr;
 		}
 		const double RenderMs = (FPlatformTime::Seconds() - T0) * 1000.0; // 렌더 + 리드백(인코딩 제외)
+		const double CaptureTimeMs = Park3DRpc::NowMs();   // 그림을 읽어 낸 시각(mutating 응답 timeMs 와 같은 시계, 보드 #1468)
+
+		// 정답(보드 #1468) — 방금 찍은 그림과 같은 프레임·같은 자세로 깊이 패스를 더 찍는다. 스트림·뷰어는 이 렌더를 보지 않는다.
+		const bool bWithMask = RpcParam::GetBool(P, TEXT("withMask"), false);
+		const bool bWithTruth = RpcParam::GetBool(P, TEXT("withTruth"), false) || bWithMask;
+		TSharedPtr<FJsonObject> Truth;
+		TArray<uint8> Mask;
+		if (bWithTruth)
+		{
+			FString TruthError;
+			if (!CaptureTruth::Build(Cam, CamId, RT->SizeX, RT->SizeY, bWithMask, Truth, Mask, TruthError))
+			{
+				E.FailDomain(TruthError);
+				return nullptr;
+			}
+			Truth->SetNumberField(TEXT("frameId"), static_cast<double>(FrameId));
+			Truth->SetNumberField(TEXT("timeMs"), CaptureTimeMs);
+		}
 
 		TArray<uint8> Bytes;
 		if (!RpcImage::EncodeColors(Bitmap, RT->SizeX, RT->SizeY, bPng, Quality, Bytes))
@@ -217,6 +236,21 @@ namespace
 		O->SetNumberField(TEXT("camId"), CamId);
 		O->SetNumberField(TEXT("renderMs"), FMath::RoundToDouble(RenderMs * 10.0) / 10.0);
 		O->SetNumberField(TEXT("frameId"), static_cast<double>(FrameId));
+		O->SetNumberField(TEXT("timeMs"), CaptureTimeMs);
+		if (Truth.IsValid())
+		{
+			O->SetObjectField(TEXT("truth"), Truth);
+		}
+		if (bWithMask)
+		{
+			TArray<uint8> MaskPng;
+			if (!RpcImage::EncodeGray8Png(Mask, RT->SizeX, RT->SizeY, MaskPng))
+			{
+				E.FailDomain(TEXT("마스크 PNG 인코딩 실패"));
+				return nullptr;
+			}
+			O->SetStringField(TEXT("mask_png"), RpcImage::ToBase64(MaskPng));
+		}
 		return RpcDto::MakeObject(O);
 	}
 

@@ -140,6 +140,33 @@ public:
 	UPROPERTY(Transient)
 	UTextureRenderTarget2D* WideCaptureTarget;
 
+	/**
+	 * 캡처 정답(보드 #1468) 깊이 공간 — 출력 W×H 그림과 같은 투영의 핀홀 깊이 렌더 크기와 수평 반각 탄젠트.
+	 * 핀홀이면 출력과 같고, 왜곡이 켜져 있으면 CaptureInto 의 넓은 중간 렌더와 같다(그 뒤 와프로 출력이 된다).
+	 */
+	struct FTruthDepthSpace
+	{
+		int32 W = 0;
+		int32 H = 0;
+		double Tan = 0.0;
+	};
+	FTruthDepthSpace GetTruthDepthSpace(int32 OutW, int32 OutH) const;
+
+	/**
+	 * 장면 깊이(cm, 카메라 전방 거리)를 Space 로 찍어 Rect(깊이 공간 픽셀) 안만 읽는다. C++ 전용.
+	 * OnlyActor 가 있으면 그 액터만 그린다(가림 없는 모양). 렌더는 전용 캡처 컴포넌트·타깃을 써서
+	 * 뷰어·MJPEG·Capture 상태를 건드리지 않는다. 지터(TAA)·조명은 끈다 — 같은 시점의 두 렌더가 픽셀 단위로 겹쳐야 한다.
+	 * @return OutDepth = Rect.Area() 개(행 우선). 실RHI 가 없으면 false.
+	 */
+	bool CaptureTruthDepth(const FTruthDepthSpace& Space, AActor* OnlyActor, const FIntRect& Rect, TArray<float>& OutDepth);
+
+	/** 정답 깊이 패스 전용(필요할 때만 생성). 이름표가 아니라 GC 보호용 UPROPERTY. */
+	UPROPERTY(Transient)
+	USceneCaptureComponent2D* TruthCapture;
+
+	UPROPERTY(Transient)
+	UTextureRenderTarget2D* TruthDepthTarget;
+
 	/** 폴대 가시성 토글. 숨김 시 콜리전도 동반 off(바닥 트레이스 오탐 방지, 설계 §12-H). */
 	UFUNCTION(BlueprintCallable, Category = "PTZ")
 	void SetPoleVisible(bool bVisible);
@@ -151,6 +178,12 @@ public:
 private:
 	/** Out 에 1장 찍는다 — 왜곡이 없으면 CaptureScene 그대로, 있으면 넓게 찍어 와프(SetLensDistortion 주석). */
 	void CaptureInto(UTextureRenderTarget2D* Out);
+
+	/**
+	 * 왜곡 렌더의 넓은 화각 반각 탄젠트(출력 W×H, 출력 반각 탄젠트 T). OutDir 가 있으면 격자 꼭짓점의 왜곡 전 방향을 채운다.
+	 * CaptureInto 와 정답 깊이 공간이 같은 값을 쓰도록 한 곳에 둔다.
+	 */
+	double ComputeWideTan(int32 W, int32 H, double T, TArray<FVector2D>* OutDir) const;
 
 	double LensK1 = 0.0;
 	double LensK2 = 0.0;

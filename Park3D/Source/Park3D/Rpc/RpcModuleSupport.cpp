@@ -186,6 +186,29 @@ namespace RpcDto
 		return MakeShared<FJsonValueObject>(CarToDto(Car));
 	}
 
+	TArray<TSharedPtr<FJsonValue>> PlatesWorldJson(const ACarActor* Car)
+	{
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		if (!Car) { return Arr; }
+		TArray<FCarPlateWorld> Plates;
+		Car->GetPlateWorldInfos(Plates);
+		for (const FCarPlateWorld& W : Plates)
+		{
+			TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+			O->SetStringField(TEXT("side"), W.bFrontSide ? TEXT("front") : TEXT("rear"));
+			O->SetObjectField(TEXT("center"), Vec3(W.FaceCenter.X / 100.0, W.FaceCenter.Y / 100.0, W.FaceCenter.Z / 100.0));   // UE 미터(pos 와 같은 규약)
+			O->SetObjectField(TEXT("normal"), Vec3(W.Normal.X, W.Normal.Y, W.Normal.Z));
+			O->SetObjectField(TEXT("right"), Vec3(W.Right.X, W.Right.Y, W.Right.Z));
+			O->SetObjectField(TEXT("up"), Vec3(W.Up.X, W.Up.Y, W.Up.Z));
+			TSharedPtr<FJsonObject> Size = MakeShared<FJsonObject>();
+			Size->SetNumberField(TEXT("w"), W.WidthCm / 100.0);
+			Size->SetNumberField(TEXT("h"), W.HeightCm / 100.0);
+			O->SetObjectField(TEXT("sizeM"), Size);
+			Arr.Add(MakeShared<FJsonValueObject>(O));
+		}
+		return Arr;
+	}
+
 	TSharedPtr<FJsonObject> PresetToDto(const FParkingPreset& P)
 	{
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();

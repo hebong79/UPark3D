@@ -168,7 +168,7 @@ void FPlateRpcModule::Register(URpcDispatcher& Dispatcher)
 	 */
 	Dispatcher.Register(TEXT("plate.random"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
-		const int32 Seed = RpcParam::GetInt(P, TEXT("seed"), 0);
+		const int32 Seed = RpcParam::ResolveSeed(P);
 		const int32 Count = FMath::Clamp(RpcParam::GetInt(P, TEXT("count"), 1), 1, 100);
 		FString Requested;
 		if (!PlateRpc::KindParam(P, TEXT("kind"), PlateRpc::RandomKind(), Requested, E)) return nullptr;
@@ -192,6 +192,7 @@ void FPlateRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetNumberField(TEXT("count"), Rows.Num());
 		O->SetArrayField(TEXT("plates"), Rows);
 		O->SetBoolField(TEXT("seedHonored"), true);
+		O->SetNumberField(TEXT("seed"), Seed);   // 실효 시드 — 생략했어도 이 값으로 재현된다(보드 #1468)
 		return RpcDto::MakeObject(O);
 	});
 

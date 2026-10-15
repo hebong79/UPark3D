@@ -282,8 +282,9 @@ FString IndexMarkdown(const URpcDispatcher& D, const FLiveContext& Ctx)
 	S += FString::Printf(TEXT("- **One door: `POST %s/rpc`, JSON-RPC 2.0.** `params` is an object. A JSON array of requests is answered with an array; `system.batch {calls:[…], atomic?}` runs several calls in one frame.\n"), *B);
 	S += TEXT("- **Ask before you guess.** `/help/rpc/<method>` (or `system.help {method}`) gives params with type/unit/default. `system.catalog` lists names; `system.catalog {detail:true}` returns the same objects as `/help?format=json`.\n");
 	S += TEXT("- **Unknown params are not silently accepted.** A success response carries `warnings:[{kind:\"unknownParam\",key}]` for every top-level key the handler never read — check it.\n");
-	S += TEXT("- **Mutating calls** return `revision{cars,presets,cameras,view,env,total}` and `frameId` next to `result`; pass `requestId` to make a retry idempotent for 60 s (not on `light.*`, which rejects every unknown key including `requestId`). `view.waitFrame {after:frameId}` waits until a stream shows that change.\n");
+	S += TEXT("- **Mutating calls** return `revision{cars,presets,cameras,view,env,total}`, `frameId` and `timeMs` (ms since process start, the same clock as capture `timeMs`) next to `result`; pass `requestId` to make a retry idempotent for 60 s (not on `light.*`, which rejects every unknown key including `requestId`). `view.waitFrame {after:frameId}` waits until a stream shows that change.\n");
 	S += TEXT("- **`movesCamera: true`** re-aims a simulated PTZ camera or the main view. Other tools (SettingManager, TourAgent, a person) may be watching that stream — do not call those unless your user asked.\n");
+	S += TEXT("- **Random calls take `seed`** (>0 reproduces) and echo the `seed` they used; omitting it draws a fresh one you can replay.\n");
 	S += TEXT("- **Units: positions in RPC are UE metres with z = height** (a few env/bay calls take cm — each method says). Save files under `Save/3D/` are not always the same frame. See [units](/help/units).\n");
 	S += TEXT("- **Text from this server is Korean** — error messages, place names, car model names. Quote them verbatim; do not translate.\n\n");
 

@@ -41,6 +41,28 @@ namespace RpcImage
 		return true;
 	}
 
+	bool EncodeGray8Png(const TArray<uint8>& Pixels, int32 W, int32 H, TArray<uint8>& OutBytes)
+	{
+		OutBytes.Reset();
+		if (W <= 0 || H <= 0 || Pixels.Num() < W * H)
+		{
+			return false;
+		}
+		IImageWrapperModule& Module = FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
+		TSharedPtr<IImageWrapper> Wrapper = Module.CreateImageWrapper(EImageFormat::PNG);
+		if (!Wrapper.IsValid() || !Wrapper->SetRaw(Pixels.GetData(), static_cast<int64>(W) * H, W, H, ERGBFormat::Gray, 8))
+		{
+			return false;
+		}
+		const TArray64<uint8>& Compressed = Wrapper->GetCompressed(0);
+		if (Compressed.Num() == 0)
+		{
+			return false;
+		}
+		OutBytes.Append(Compressed.GetData(), static_cast<int32>(Compressed.Num()));
+		return true;
+	}
+
 	FString ToBase64(const TArray<uint8>& Bytes)
 	{
 		if (Bytes.Num() == 0)

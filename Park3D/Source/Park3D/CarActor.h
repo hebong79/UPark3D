@@ -22,6 +22,23 @@ class UPointLightComponent;
 struct FPlateKindDef;
 
 /**
+ * 번호판 한 장의 월드 자세(보드 #1468 — car.list withPlates·캡처 정답). 단위 cm·월드 좌표.
+ * 면 = 판 앞면(보이는 쪽) 중심, Normal = 차 바깥, Up = 판 위쪽, Right = 판 앞에서 바라볼 때 오른쪽.
+ */
+struct FCarPlateWorld
+{
+	/** 차 진행 방향(메시 로컬 +Y) 쪽 판인가. 컴포넌트 이름(Front/Back)과는 반대일 수 있어 기하로 정한다. */
+	bool bFrontSide = false;
+	FVector FaceCenter = FVector::ZeroVector;
+	FVector Normal = FVector::ZeroVector;
+	FVector Right = FVector::ZeroVector;
+	FVector Up = FVector::ZeroVector;
+	double WidthCm = 0.0;
+	double HeightCm = 0.0;
+	const UStaticMeshComponent* Comp = nullptr;
+};
+
+/**
  * 번호판 메시에서 읽어 낸 로컬 기준틀. 축을 코드에 박으면 콘텐츠(판 메시)가 바뀌는 순간
  * 글자가 모서리로 서서 사라진다 — 2026-08-16 콘텐츠 교체 때 실제로 그렇게 됐다.
  * 그래서 판을 쓰는 쪽(글자·위젯·양각)이 전부 이 한 곳에서 축을 받는다.
@@ -239,6 +256,12 @@ public:
 	bool AreHeadlightsOn() const { return bHeadlightsOn; }
 	bool AreTailLightsOn() const { return bTailOn; }
 	bool AreBrakeLightsOn() const { return bBrakeOn; }
+
+	/** 보이는 번호판(앞·뒤)의 월드 자세를 모은다. 판이 숨었거나 메시가 없으면 빠진다. C++ 전용. */
+	void GetPlateWorldInfos(TArray<FCarPlateWorld>& Out) const;
+
+	/** 차 진행 방향(메시 로컬 +Y)의 월드 단위 벡터 — 전조등·번호판 앞뒤 판정과 같은 규약. */
+	FVector GetForwardWorld() const;
 
 private:
 	void EnsureCarLightComponents();

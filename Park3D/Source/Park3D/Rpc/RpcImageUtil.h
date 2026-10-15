@@ -16,6 +16,9 @@ namespace RpcImage
 	 */
 	PARK3D_API bool EncodeColors(const TArray<FColor>& Pixels, int32 W, int32 H, bool bPng, int32 Quality, TArray<uint8>& OutBytes);
 
+	/** 8비트 회색조 W*H 바이트 → PNG(캡처 정답 마스크, 보드 #1468 — 픽셀 값 = 차량 번호). */
+	PARK3D_API bool EncodeGray8Png(const TArray<uint8>& Pixels, int32 W, int32 H, TArray<uint8>& OutBytes);
+
 	/** 바이트 → base64 문자열. */
 	PARK3D_API FString ToBase64(const TArray<uint8>& Bytes);
 }

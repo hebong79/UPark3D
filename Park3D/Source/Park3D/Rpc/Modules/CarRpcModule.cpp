@@ -223,7 +223,7 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		const float Spacing = RpcParam::GetFloat(P, TEXT("spacing"), 2.5);
 		const bool bVertical = RpcParam::GetBool(P, TEXT("vertical"), false);
 		const float RotY = RpcParam::GetFloat(P, TEXT("rotY"), 180.0);
-		const int32 Seed = RpcParam::GetInt(P, TEXT("seed"), 0);
+		const int32 Seed = RpcParam::ResolveSeed(P);
 
 		const FVector StartWorld = UCarPlacementLibrary::UnrealMetersToWorld(
 			FCarVec3{ static_cast<float>(Offset.X), static_cast<float>(Offset.Y), static_cast<float>(Offset.Z) }, Mgr->MetersToUU);
@@ -236,6 +236,7 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetArrayField(TEXT("carNameIds"), Ids);
 		O->SetBoolField(TEXT("seedHonored"), true);
+		O->SetNumberField(TEXT("seed"), Seed);   // 실효 시드 — 생략했어도 이 값으로 재현된다(보드 #1468)
 		return RpcDto::MakeObject(O);
 	});
 
@@ -343,12 +344,15 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 	{
 		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
 		const int32 FilterPreset = RpcParam::GetInt(P, TEXT("presetId"), -1);
+		const bool bWithPlates = RpcParam::GetBool(P, TEXT("withPlates"), false);   // 번호판 월드 자세(보드 #1468)
 		TArray<TSharedPtr<FJsonValue>> Arr;
 		for (ACarActor* Car : Mgr->GetCars())
 		{
 			if (!Car) continue;
 			if (FilterPreset != -1 && Car->CarData.presetId != FilterPreset) continue;
-			Arr.Add(RpcDto::CarToDtoValue(Car));
+			TSharedPtr<FJsonObject> Dto = RpcDto::CarToDto(Car);
+			if (bWithPlates) { Dto->SetArrayField(TEXT("plates"), RpcDto::PlatesWorldJson(Car)); }
+			Arr.Add(MakeShared<FJsonValueObject>(Dto));
 		}
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetArrayField(TEXT("cars"), Arr);
@@ -894,15 +898,16 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 			}
 		}
 
+		const int32 Seed = RpcParam::ResolveSeed(P);   // 보드 #1468
 		TArray<TSharedPtr<FJsonValue>> Applied, NotFound;
 		if (Ids.Num() == 0)
 		{
-			for (ACarActor* Car : Mgr->SetRandomColorOfCarListFromPalette(0, Palette)) { Applied.Add(AppliedColorRow(Car)); }
+			for (ACarActor* Car : Mgr->SetRandomColorOfCarListFromPalette(Seed, Palette)) { Applied.Add(AppliedColorRow(Car)); }
 		}
 		else
 		{
 			// 없는 차는 기존처럼 조용히 건너뛰되 notFound 로 알린다.
-			FRandomStream Stream = PlateRpc::MakeStream(0);
+			FRandomStream Stream = PlateRpc::MakeStream(Seed);
 			for (const FString& Id : Ids)
 			{
 				ACarActor* Car = Mgr->FindByNameId(Id);
@@ -918,10 +923,11 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetBoolField(TEXT("ok"), true);
 		O->SetBoolField(TEXT("colorsHonored"), true);
 		O->SetArrayField(TEXT("applied"), Applied);
+		O->SetNumberField(TEXT("seed"), Seed);
 		O->SetArrayField(TEXT("notFound"), NotFound);
 		return RpcDto::MakeObject(O);
 	});
-	Dispatcher.SetMethodMeta(TEXT("car.setRandomColor"), { true, false, TEXT("{carNameId?, carNameIds?: string[], colors?: (int|string)[]}"), TEXT("랜덤 도색(CarData.color 기록). colors=팔레트(ECarColor 정수·이름, 빈값=10종), id 없으면 가시 차량 전부. {ok, colorsHonored, applied:[{carNameId,color}], notFound}") });
+	Dispatcher.SetMethodMeta(TEXT("car.setRandomColor"), { true, false, TEXT("{carNameId?, carNameIds?: string[], colors?: (int|string)[], seed?}"), TEXT("랜덤 도색(CarData.color 기록). colors=팔레트(ECarColor 정수·이름, 빈값=10종), id 없으면 가시 차량 전부. seed>0 재현(생략=새로 뽑아 응답 seed). {ok, colorsHonored, seed, applied:[{carNameId,color}], notFound}") });
 
 	Dispatcher.Register(TEXT("car.setMetallic"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
@@ -1037,7 +1043,7 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 	{
 		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
 		const int32 Count = RpcParam::GetInt(P, TEXT("count"), 0);
-		const int32 Seed = RpcParam::GetInt(P, TEXT("seed"), 0);
+		const int32 Seed = RpcParam::ResolveSeed(P);
 		TArray<ACarActor*> Hidden = Mgr->HideRandomCars(Count, Seed);
 		TArray<TSharedPtr<FJsonValue>> Ids;
 		for (ACarActor* Car : Hidden) { if (Car) Ids.Add(MakeShared<FJsonValueString>(Car->CarData.id)); }
@@ -1045,6 +1051,7 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetNumberField(TEXT("hiddenCount"), Hidden.Num());
 		O->SetArrayField(TEXT("hiddenCarNameIds"), Ids);
 		O->SetBoolField(TEXT("seedHonored"), true);
+		O->SetNumberField(TEXT("seed"), Seed);   // 실효 시드 — 생략했어도 이 값으로 재현된다(보드 #1468)
 		return RpcDto::MakeObject(O);
 	});
 
@@ -1062,18 +1069,20 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 			return nullptr;
 		}
 		TArray<ECarColor> Palette;
+		const int32 Seed = RpcParam::ResolveSeed(P);   // 보드 #1468 — 차종·숨김·색·번호판이 모두 이 시드로 재현된다
 		if (!ReadColorsParam(P, Palette, E)) return nullptr;
 		// count 는 요청을 되비추지 않는다 — 실제로 배치(가시)된 대수를 돌려줘야 화면이 사실을 말한다.
-		const int32 PlacedCount = Mgr->ResetRandomPlacementWithPalette(ResetMode, Catalog, Count, 0, Palette);
+		const int32 PlacedCount = Mgr->ResetRandomPlacementWithPalette(ResetMode, Catalog, Count, Seed, Palette);
 
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetBoolField(TEXT("ok"), true);
 		O->SetStringField(TEXT("mode"), Mode);
 		O->SetNumberField(TEXT("count"), PlacedCount);
 		O->SetBoolField(TEXT("colorsHonored"), true);
+		O->SetNumberField(TEXT("seed"), Seed);
 		return RpcDto::MakeObject(O);
 	});
-	Dispatcher.SetMethodMeta(TEXT("car.resetRandom"), { true, false, TEXT("{mode?, count?, colors?: (int|string)[]}"), TEXT("랜덤 리셋(color/objectAndColor/countObjectAndColor). colors=색 단계 팔레트(빈값=10종). {ok, mode, count, colorsHonored}") });
+	Dispatcher.SetMethodMeta(TEXT("car.resetRandom"), { true, false, TEXT("{mode?, count?, colors?: (int|string)[], seed?}"), TEXT("랜덤 리셋(color/objectAndColor/countObjectAndColor). colors=색 단계 팔레트(빈값=10종). seed>0 재현(생략=새로 뽑아 응답 seed). {ok, mode, count, colorsHonored, seed}") });
 
 	/**
 	 * 지금 보이는 차량의 번호판 번호만 새로 뽑는다. car.resetRandom 이 마지막에 하는 일과 같은 백엔드지만,
@@ -1083,7 +1092,7 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 	Dispatcher.Register(TEXT("car.randomizePlates"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		ACarPlacementManager* Mgr = GetCarManager(E); if (!Mgr) return nullptr;
-		const int32 Seed = RpcParam::GetInt(P, TEXT("seed"), 0);
+		const int32 Seed = RpcParam::ResolveSeed(P);
 
 		const int32 Changed = Mgr->RandomizeVisiblePlateNumbers(Seed);
 
@@ -1105,6 +1114,7 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetNumberField(TEXT("carCount"), Mgr->GetCarCount());
 		O->SetArrayField(TEXT("plates"), Plates);
 		O->SetBoolField(TEXT("seedHonored"), true);
+		O->SetNumberField(TEXT("seed"), Seed);   // 실효 시드 — 생략했어도 이 값으로 재현된다(보드 #1468)
 		return RpcDto::MakeObject(O);
 	});
 
@@ -1320,7 +1330,7 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 			return nullptr;
 		}
 
-		const int32 Seed = RpcParam::GetInt(P, TEXT("seed"), 0);
+		const int32 Seed = RpcParam::ResolveSeed(P);
 		FRandomStream Stream = PlateRpc::MakeStream(Seed);
 		const bool bRandomColor = RpcParam::GetBool(P, TEXT("randomColor"), false);
 		TArray<ECarColor> Palette;   // randomColor=true 일 때만 쓴다
@@ -1411,6 +1421,7 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetArrayField(TEXT("notFound"), NotFound);
 		O->SetArrayField(TEXT("removed"), Removed);
 		O->SetBoolField(TEXT("seedHonored"), true);
+		O->SetNumberField(TEXT("seed"), Seed);   // 실효 시드 — 생략했어도 이 값으로 재현된다(보드 #1468)
 		O->SetBoolField(TEXT("colorsHonored"), true);
 		return RpcDto::MakeObject(O);
 	});
@@ -1491,8 +1502,9 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		FString Kind;
 		if (!PlateRpc::KindParam(P, TEXT("kind"), FString(), Kind, E)) return nullptr;
 		const bool bRandom = RpcParam::GetBool(P, TEXT("random"), false);
-		const int32 Seed = RpcParam::GetInt(P, TEXT("seed"), 0);
-		if (bRandom || Kind == PlateRpc::RandomKind())
+		const int32 Seed = RpcParam::ResolveSeed(P);
+		const bool bDraws = bRandom || Kind == PlateRpc::RandomKind();
+		if (bDraws)
 		{
 			FRandomStream Stream = PlateRpc::MakeStream(Seed);
 			if (Number.IsEmpty() && bRandom) { Number = ACarActor::MakeRandomPlateNumber(Stream); }
@@ -1516,6 +1528,7 @@ void FCarRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetStringField(TEXT("plateText"), Car->GetPlateDisplayText());
 		O->SetBoolField(TEXT("rendered"), bRendered);
 		O->SetBoolField(TEXT("applied"), Car->PlateNumberSdf != nullptr && Car->PlateNumberSdf.Get() != Before);
+		if (bDraws) { O->SetNumberField(TEXT("seed"), Seed); }   // 보드 #1468
 		return RpcDto::MakeObject(O);
 	});
 

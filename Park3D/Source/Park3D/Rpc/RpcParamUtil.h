@@ -42,6 +42,12 @@ namespace RpcParam
 	bool    GetBool(const TSharedPtr<FJsonObject>& P, const FString& Key, bool Default = false);
 	FString GetString(const TSharedPtr<FJsonObject>& P, const FString& Key, const FString& Default = FString());
 
+	/**
+	 * 랜덤 RPC 의 실효 시드(보드 #1468). seed > 0 이면 그대로, 생략·0 이하면 지금 양수 하나를 뽑는다.
+	 * 랜덤 메서드는 이 값으로 추첨하고 응답에 `seed` 로 되돌려 준다 → seed 를 안 준 실행도 그 값으로 다시 재현된다.
+	 */
+	int32   ResolveSeed(const TSharedPtr<FJsonObject>& P);
+
 	/** {x?,y?,z?} 서브객체 → FVector(각 필드 없으면 Default 성분). 키 자체가 없으면 Default 반환. */
 	FVector GetVec3(const TSharedPtr<FJsonObject>& P, const FString& Key, const FVector& Default = FVector::ZeroVector);
 

@@ -14,6 +14,12 @@
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
 
+namespace
+{
+	/** 왜곡 와프 격자(출력 픽셀 격자를 PtzWarpGX×PtzWarpGY 칸으로 나눈다). CaptureInto·ComputeWideTan 공용. */
+	constexpr int32 PtzWarpGX = 48, PtzWarpGY = 27;
+}
+
 APTZCameraActor::APTZCameraActor()
 {
 	PrimaryActorTick.bCanEverTick = false;
@@ -174,24 +180,8 @@ void APTZCameraActor::CaptureInto(UTextureRenderTarget2D* Out)
 	// 삼각형 격자(UV = 방향)로 출력 타깃에 그린다. 중심 배율이 같도록 중간 타깃 해상도를 화각 비만큼 키운다.
 	const int32 W = Out->SizeX, H = Out->SizeY;
 	const double T = FMath::Tan(FMath::DegreesToRadians(static_cast<double>(Capture->FOVAngle) * 0.5));
-	const double F = (W * 0.5) / T;
-	constexpr int32 GX = 48, GY = 27;
 	TArray<FVector2D> Dir;
-	Dir.SetNumUninitialized((GX + 1) * (GY + 1));
-	double MaxX = T, MaxY = T * H / W;
-	for (int32 gy = 0; gy <= GY; ++gy)
-	{
-		for (int32 gx = 0; gx <= GX; ++gx)
-		{
-			const FVector2D Xd((W * gx / double(GX) - W * 0.5) / F, (H * gy / double(GY) - H * 0.5) / F);
-			const FVector2D U = CamLens::UndistortTan(Xd, LensK1, LensK2);
-			Dir[gy * (GX + 1) + gx] = U;
-			MaxX = FMath::Max(MaxX, FMath::Abs(U.X));
-			MaxY = FMath::Max(MaxY, FMath::Abs(U.Y));
-		}
-	}
-	// 1% 여유는 가장자리 쌍선형 샘플이 타깃 밖을 집지 않게. 85° 반각이 상한(그 이상은 투영이 무너진다).
-	const double TW = FMath::Min(FMath::Max(MaxX, MaxY * W / H) * 1.01, FMath::Tan(FMath::DegreesToRadians(85.0)));
+	const double TW = ComputeWideTan(W, H, T, &Dir);
 	const int32 Ww = FMath::Clamp(FMath::CeilToInt32(W * TW / T), W, 4096);
 	const int32 Hw = FMath::Max(1, FMath::RoundToInt32(static_cast<double>(Ww) * H / W));
 
@@ -222,14 +212,14 @@ void APTZCameraActor::CaptureInto(UTextureRenderTarget2D* Out)
 	const double TWy = TW * Hw / Ww;
 	auto UvOf = [&](const FVector2D& U) { return FVector2D(0.5 + U.X / (2.0 * TW), 0.5 + U.Y / (2.0 * TWy)); };
 	TArray<FCanvasUVTri> Tris;
-	Tris.Reserve(GX * GY * 2);
-	for (int32 gy = 0; gy < GY; ++gy)
+	Tris.Reserve(PtzWarpGX * PtzWarpGY * 2);
+	for (int32 gy = 0; gy < PtzWarpGY; ++gy)
 	{
-		for (int32 gx = 0; gx < GX; ++gx)
+		for (int32 gx = 0; gx < PtzWarpGX; ++gx)
 		{
-			const int32 I00 = gy * (GX + 1) + gx, I10 = I00 + 1, I01 = I00 + GX + 1, I11 = I01 + 1;
-			const FVector2D P00(W * gx / double(GX), H * gy / double(GY));
-			const FVector2D P11(W * (gx + 1) / double(GX), H * (gy + 1) / double(GY));
+			const int32 I00 = gy * (PtzWarpGX + 1) + gx, I10 = I00 + 1, I01 = I00 + PtzWarpGX + 1, I11 = I01 + 1;
+			const FVector2D P00(W * gx / double(PtzWarpGX), H * gy / double(PtzWarpGY));
+			const FVector2D P11(W * (gx + 1) / double(PtzWarpGX), H * (gy + 1) / double(PtzWarpGY));
 			const FVector2D P10(P11.X, P00.Y), P01(P00.X, P11.Y);
 			// FCanvasUVTri 의 꼭짓점 색 기본값은 (0,0,0,0) 이고 텍스처에 곱해진다 → 흰색을 넣지 않으면 그림이 통째로 검다.
 			FCanvasUVTri A;
@@ -254,6 +244,121 @@ void APTZCameraActor::CaptureInto(UTextureRenderTarget2D* Out)
 	Item.BlendMode = SE_BLEND_Opaque;
 	Canvas.DrawItem(Item);
 	Canvas.Flush_GameThread();
+}
+
+double APTZCameraActor::ComputeWideTan(int32 W, int32 H, double T, TArray<FVector2D>* OutDir) const
+{
+	const double F = (W * 0.5) / T;
+	if (OutDir) { OutDir->SetNumUninitialized((PtzWarpGX + 1) * (PtzWarpGY + 1)); }
+	double MaxX = T, MaxY = T * H / W;
+	for (int32 gy = 0; gy <= PtzWarpGY; ++gy)
+	{
+		for (int32 gx = 0; gx <= PtzWarpGX; ++gx)
+		{
+			const FVector2D Xd((W * gx / double(PtzWarpGX) - W * 0.5) / F, (H * gy / double(PtzWarpGY) - H * 0.5) / F);
+			const FVector2D U = CamLens::UndistortTan(Xd, LensK1, LensK2);
+			if (OutDir) { (*OutDir)[gy * (PtzWarpGX + 1) + gx] = U; }
+			MaxX = FMath::Max(MaxX, FMath::Abs(U.X));
+			MaxY = FMath::Max(MaxY, FMath::Abs(U.Y));
+		}
+	}
+	// 1% 여유는 가장자리 쌍선형 샘플이 타깃 밖을 집지 않게. 85° 반각이 상한(그 이상은 투영이 무너진다).
+	return FMath::Min(FMath::Max(MaxX, MaxY * W / H) * 1.01, FMath::Tan(FMath::DegreesToRadians(85.0)));
+}
+
+APTZCameraActor::FTruthDepthSpace APTZCameraActor::GetTruthDepthSpace(int32 OutW, int32 OutH) const
+{
+	FTruthDepthSpace S;
+	if (!Capture || OutW <= 0 || OutH <= 0)
+	{
+		return S;
+	}
+	const double T = FMath::Tan(FMath::DegreesToRadians(static_cast<double>(Capture->FOVAngle) * 0.5));
+	if (CamLens::IsPinhole(LensK1, LensK2))
+	{
+		S.W = OutW; S.H = OutH; S.Tan = T;
+		return S;
+	}
+	// CaptureInto 의 넓은 중간 렌더와 같은 크기·화각.
+	S.Tan = ComputeWideTan(OutW, OutH, T, nullptr);
+	S.W = FMath::Clamp(FMath::CeilToInt32(OutW * S.Tan / T), OutW, 4096);
+	S.H = FMath::Max(1, FMath::RoundToInt32(static_cast<double>(S.W) * OutH / OutW));
+	return S;
+}
+
+bool APTZCameraActor::CaptureTruthDepth(const FTruthDepthSpace& Space, AActor* OnlyActor, const FIntRect& Rect, TArray<float>& OutDepth)
+{
+	OutDepth.Reset();
+	if (!Capture || Space.W <= 0 || Space.H <= 0 || Rect.Area() <= 0 || !GetWorld())
+	{
+		return false;
+	}
+	if (!TruthCapture)
+	{
+		TruthCapture = NewObject<USceneCaptureComponent2D>(this, TEXT("TruthCapture"));
+		TruthCapture->SetupAttachment(Capture);   // 같은 자리·같은 팬틸트를 따라간다
+		TruthCapture->bCaptureEveryFrame = false;
+		TruthCapture->bCaptureOnMovement = false;
+		TruthCapture->bAlwaysPersistRenderingState = false;
+		TruthCapture->CaptureSource = ESceneCaptureSource::SCS_SceneDepth;
+		// 두 렌더(전체·한 대만)가 같은 픽셀 격자에 떨어져야 깊이를 비교할 수 있다 → 지터(TAA/TSR)를 끈다.
+		// 깊이에는 조명·그림자·GI·안개·후처리가 쓸모없으므로 비용만 덜어 낸다. 이름으로 찾아 없는 플래그는 건너뛴다.
+		static const TCHAR* OffFlags[] = {
+			TEXT("AntiAliasing"), TEXT("TemporalAA"), TEXT("MotionBlur"), TEXT("Bloom"), TEXT("Lighting"),
+			TEXT("GlobalIllumination"), TEXT("LumenGlobalIllumination"), TEXT("LumenReflections"), TEXT("DynamicShadows"),
+			TEXT("AmbientOcclusion"), TEXT("DistanceFieldAO"), TEXT("ScreenSpaceReflections"), TEXT("ReflectionEnvironment"),
+			TEXT("Fog"), TEXT("VolumetricFog"), TEXT("Atmosphere"), TEXT("Translucency"), TEXT("Particles"), TEXT("Cloud"),
+		};
+		for (const TCHAR* Name : OffFlags)
+		{
+			const int32 Idx = FEngineShowFlags::FindIndexByName(Name);
+			if (Idx != INDEX_NONE) { TruthCapture->ShowFlags.SetSingleFlag(Idx, false); }
+		}
+		TruthCapture->RegisterComponent();
+		AddInstanceComponent(TruthCapture);
+	}
+	if (!TruthDepthTarget)
+	{
+		TruthDepthTarget = NewObject<UTextureRenderTarget2D>(this, TEXT("TruthDepthTarget"));
+		TruthDepthTarget->RenderTargetFormat = ETextureRenderTargetFormat::RTF_R32f;   // cm 깊이 — 16비트는 30 m 에서 2 cm 계단
+		TruthDepthTarget->ClearColor = FLinearColor::Black;
+		TruthDepthTarget->bAutoGenerateMips = false;
+	}
+	if (TruthDepthTarget->SizeX != Space.W || TruthDepthTarget->SizeY != Space.H)
+	{
+		TruthDepthTarget->InitAutoFormat(Space.W, Space.H);
+		TruthDepthTarget->UpdateResourceImmediate(true);
+	}
+
+	TruthCapture->TextureTarget = TruthDepthTarget;
+	TruthCapture->FOVAngle = static_cast<float>(2.0 * FMath::RadiansToDegrees(FMath::Atan(Space.Tan)));
+	TruthCapture->ShowOnlyActors.Reset();
+	if (OnlyActor)
+	{
+		TruthCapture->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
+		TruthCapture->ShowOnlyActors.Add(OnlyActor);
+	}
+	else
+	{
+		TruthCapture->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_RenderScenePrimitives;
+	}
+	TruthCapture->CaptureScene();
+	TruthCapture->ShowOnlyActors.Reset();
+
+	FTextureRenderTargetResource* Res = TruthDepthTarget->GameThread_GetRenderTargetResource();
+	if (!Res)
+	{
+		return false;
+	}
+	TArray<FLinearColor> Pixels;
+	// RCM_MinMax: 0..1 로 자르지 않고 깊이 값(cm) 그대로 읽는다.
+	if (!Res->ReadLinearColorPixels(Pixels, FReadSurfaceDataFlags(RCM_MinMax, CubeFace_MAX), Rect) || Pixels.Num() != Rect.Area())
+	{
+		return false;
+	}
+	OutDepth.SetNumUninitialized(Pixels.Num());
+	for (int32 i = 0; i < Pixels.Num(); ++i) { OutDepth[i] = Pixels[i].R; }
+	return true;
 }
 
 void APTZCameraActor::CaptureForViewer()

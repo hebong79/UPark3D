@@ -60,6 +60,12 @@ namespace RpcParam
 		return P->TryGetNumberField(Key, V) ? static_cast<int32>(FMath::RoundToDouble(V)) : Default;
 	}
 
+	int32 ResolveSeed(const TSharedPtr<FJsonObject>& P)
+	{
+		const int32 Requested = GetInt(P, TEXT("seed"), 0);
+		return Requested > 0 ? Requested : FMath::RandRange(1, MAX_int32 - 1);
+	}
+
 	double GetFloat(const TSharedPtr<FJsonObject>& P, const FString& Key, double Default)
 	{
 		MarkRead(P, Key);
@@ -192,6 +198,7 @@ namespace Park3DRpc
 {
 	namespace { std::atomic<int64> GSceneSeq{ 0 }; }
 	int64 SceneSeq() { return GSceneSeq.load(); }
+	double NowMs() { return FMath::RoundToDouble((FPlatformTime::Seconds() - GStartTime) * 10000.0) / 10.0; }
 	int64 BumpSceneSeq() { return ++GSceneSeq; }
 
 	const TCHAR* ErrorKindName(ERpcErrorKind Kind)

@@ -904,6 +904,7 @@ TSharedPtr<FJsonObject> URpcServerSubsystem::ProcessSingle(const TSharedPtr<FJso
 			Resp->SetObjectField(TEXT("revision"), Dispatcher->RevisionJson());
 			// frameId = 이 변경까지 들어간 장면 순번 — 캡처/스트림 프레임의 frameId 가 이 값 이상이면 변경이 보인다(보드 #1101).
 			Resp->SetNumberField(TEXT("frameId"), static_cast<double>(Park3DRpc::SceneSeq()));
+			Resp->SetNumberField(TEXT("timeMs"), Park3DRpc::NowMs());   // 적용 직후 시각(캡처 timeMs 와 같은 시계, 보드 #1468)
 		}
 		// 모르는/무시된 키를 조용히 삼키지 않는다(보드 #1099 1단계 — 경고). result 가 배열일 때도 있어 result 옆에 둔다.
 		// 실패 응답에는 붙이지 않는다: 필수 키 누락으로 일찍 끝나면 뒤에서 읽혔을 정상 키까지 '안 읽음' 이 된다.

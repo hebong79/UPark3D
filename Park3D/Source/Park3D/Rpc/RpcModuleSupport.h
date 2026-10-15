@@ -77,6 +77,8 @@ namespace RpcDto
 	/** ACarActor → CarDto JSON. Unity CarDto 필드 대응(pos 는 내부 Unreal 미터 규약). */
 	TSharedPtr<FJsonObject> CarToDto(ACarActor* Car);
 	TSharedPtr<FJsonValue>  CarToDtoValue(ACarActor* Car);
+	/** 번호판 월드 자세 [{side:"front"|"rear", center{x,y,z} m, normal{x,y,z}, right{x,y,z}, up{x,y,z}, sizeM{w,h}}] — car.list withPlates(보드 #1468). */
+	TArray<TSharedPtr<FJsonValue>> PlatesWorldJson(const ACarActor* Car);
 
 	/** FParkingPreset → SDPresetInfo DTO(offsetPos 는 미터). */
 	TSharedPtr<FJsonObject> PresetToDto(const FParkingPreset& P);

@@ -341,6 +341,12 @@ FLightSettings ULightControlWidget::GetFields() const
 	S.ShadowFillIntensity = ParseOr(Field_ShadowFill, S.ShadowFillIntensity);
 	S.CarFillIntensity = ParseOr(Field_CarFill, S.CarFillIntensity);
 	S.SunColor = FLinearColor(ParseOr(Field_ColorR, 1.f), ParseOr(Field_ColorG, 1.f), ParseOr(Field_ColorB, 1.f), 1.f);
+	// 하늘빛 색은 패널에 칸이 없다 — 지금 값을 이어받아 패널 '적용'·'저장'이 흰색으로 되돌리지 않게 한다.
+	if (const ALightControlManager* M = GetManager())
+	{
+		FLightSettings Cur;
+		S.SkyColor = M->CaptureCurrent(Cur) ? Cur.SkyColor : M->GetLastApplied().SkyColor;
+	}
 	ULightControlLibrary::ClampSettings(S);
 	return S;
 }

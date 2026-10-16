@@ -1,0 +1,143 @@
+[
+ {
+  "name": "base",
+  "light": {
+   "shadowFillIntensity": 0,
+   "exposureEV100": -1.02
+  },
+  "shade": {
+   "bgRGB": [
+    68.0,
+    110.8,
+    143.0
+   ],
+   "bgLuma": 101.7,
+   "B/R": 2.101,
+   "clip": 0.0
+  },
+  "sun": {
+   "bgRGB": [
+    241.1,
+    239.9,
+    235.9
+   ],
+   "bgLuma": 239.8,
+   "B/R": 0.979,
+   "clip": 0.0
+  },
+  "body": {
+   "mean": 0.507,
+   "clipHigh": 0.0249,
+   "meanRGB": [
+    0.508,
+    0.506,
+    0.507
+   ]
+  }
+ },
+ {
+  "name": "fill1",
+  "light": {
+   "shadowFillIntensity": 1
+  },
+  "shade": {
+   "bgRGB": [
+    69.2,
+    111.0,
+    142.5
+   ],
+   "bgLuma": 102.1,
+   "B/R": 2.058,
+   "clip": 0.0
+  },
+  "sun": {
+   "bgRGB": [
+    241.1,
+    239.9,
+    235.9
+   ],
+   "bgLuma": 239.8,
+   "B/R": 0.979,
+   "clip": 0.001
+  },
+  "body": {
+   "mean": 0.557,
+   "clipHigh": 0.031,
+   "meanRGB": [
+    0.556,
+    0.557,
+    0.56
+   ]
+  }
+ },
+ {
+  "name": "fill2",
+  "light": {
+   "shadowFillIntensity": 2
+  },
+  "shade": {
+   "bgRGB": [
+    69.1,
+    110.4,
+    141.5
+   ],
+   "bgLuma": 101.6,
+   "B/R": 2.048,
+   "clip": 0.0
+  },
+  "sun": {
+   "bgRGB": [
+    241.2,
+    240.0,
+    236.0
+   ],
+   "bgLuma": 239.9,
+   "B/R": 0.979,
+   "clip": 0.001
+  },
+  "body": {
+   "mean": 0.595,
+   "clipHigh": 0.0341,
+   "meanRGB": [
+    0.593,
+    0.595,
+    0.599
+   ]
+  }
+ },
+ {
+  "name": "fill3",
+  "light": {
+   "shadowFillIntensity": 3
+  },
+  "shade": {
+   "bgRGB": [
+    71.1,
+    112.0,
+    142.9
+   ],
+   "bgLuma": 103.3,
+   "B/R": 2.01,
+   "clip": 0.0
+  },
+  "sun": {
+   "bgRGB": [
+    241.2,
+    240.0,
+    236.0
+   ],
+   "bgLuma": 239.9,
+   "B/R": 0.979,
+   "clip": 0.001
+  },
+  "body": {
+   "mean": 0.624,
+   "clipHigh": 0.0361,
+   "meanRGB": [
+    0.621,
+    0.624,
+    0.628
+   ]
+  }
+ }
+]

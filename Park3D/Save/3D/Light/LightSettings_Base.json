@@ -6,5 +6,8 @@
 	"SunColorB": 1,
 	"SunAltitudeDeg": 44.477512,
 	"SunAzimuthDeg": 304.535397,
-	"SkyIntensity": 1.0
+	"SkyIntensity": 2.2,
+	"SkyColorR": 0.9,
+	"SkyColorG": 0.6,
+	"SkyColorB": 0.48
 }

@@ -23,6 +23,7 @@ namespace
 		S.SunAltitudeDeg = 42.5f;
 		S.SunAzimuthDeg = 137.25f;
 		S.SkyIntensity = 2.5f;
+		S.SkyColor = FLinearColor(1.0f, 0.85f, 0.6f, 1.0f);
 		return S;
 	}
 
@@ -51,6 +52,18 @@ bool FLightJsonRoundTripTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("색 R"), Out.SunColor.R, In.SunColor.R, 1e-3f);
 	TestEqual(TEXT("색 G"), Out.SunColor.G, In.SunColor.G, 1e-3f);
 	TestEqual(TEXT("색 B"), Out.SunColor.B, In.SunColor.B, 1e-3f);
+	TestEqual(TEXT("하늘빛 색 G"), Out.SkyColor.G, In.SkyColor.G, 1e-3f);
+	TestEqual(TEXT("하늘빛 색 B"), Out.SkyColor.B, In.SkyColor.B, 1e-3f);
+
+	// 하늘빛 색 키가 없는 옛 파일은 흰색(= 기존 화면)으로 읽혀야 한다.
+	FString Old = ULightControlLibrary::ToJson(In);
+	for (const TCHAR* K : { TEXT("\"SkyColorR\""), TEXT("\"SkyColorG\""), TEXT("\"SkyColorB\"") })
+	{
+		Old = Old.Replace(K, TEXT("\"Unused\""));
+	}
+	FLightSettings OldOut;
+	TestTrue(TEXT("옛 파일 역직렬화"), ULightControlLibrary::FromJson(Old, OldOut));
+	TestTrue(TEXT("옛 파일 하늘빛 색 = 흰색"), OldOut.SkyColor.Equals(FLinearColor::White, 1e-3f));
 	return true;
 }
 
@@ -76,6 +89,11 @@ bool FLightClampTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("색 R 상한 1"), S.SunColor.R, 1.f, 1e-3f);
 	TestEqual(TEXT("색 G 하한 0"), S.SunColor.G, 0.f, 1e-3f);
 	TestEqual(TEXT("알파는 항상 1"), S.SunColor.A, 1.f, 1e-3f);
+
+	FLightSettings K;
+	K.SkyColor = FLinearColor(2.f, -0.5f, 0.4f, 0.f);
+	ULightControlLibrary::ClampSettings(K);
+	TestTrue(TEXT("하늘빛 색 클램프"), K.SkyColor.Equals(FLinearColor(1.f, 0.f, 0.4f, 1.f), 1e-3f));
 
 	// 방위는 잘라내지 않고 감는다 — 359°에서 계속 돌려도 자연스럽게 이어져야 한다.
 	FLightSettings W;

@@ -30,10 +30,10 @@ namespace
 		return FPaths::Combine(ULightControlLibrary::GetLightDir(), FileName);
 	}
 
-	/** 조명 값 키 8개(sunColor 포함). set 의 허용 키이자 get 의 출력 키다. */
+	/** 조명 값 키 9개(sunColor·skyColor 포함). set 의 허용 키이자 get 의 출력 키다. */
 	const TCHAR* const ValueKeys[] = {
 		TEXT("exposureEV100"), TEXT("sunIntensity"), TEXT("sunAltitudeDeg"), TEXT("sunAzimuthDeg"),
-		TEXT("skyIntensity"), TEXT("shadowFillIntensity"), TEXT("carFillIntensity"), TEXT("sunColor"),
+		TEXT("skyIntensity"), TEXT("shadowFillIntensity"), TEXT("carFillIntensity"), TEXT("sunColor"), TEXT("skyColor"),
 	};
 
 	/** 시간대·날씨·밤 조명 키(보드 #1326 B1). FLightEnv 필드 순서와 같다. */
@@ -111,7 +111,7 @@ namespace
 	bool IsIgnoredOnExternalSky(const FString& Key)
 	{
 		return Key == TEXT("exposureEV100") || Key == TEXT("sunIntensity") || Key == TEXT("sunAltitudeDeg")
-			|| Key == TEXT("sunAzimuthDeg") || Key == TEXT("skyIntensity") || Key == TEXT("sunColor");
+			|| Key == TEXT("sunAzimuthDeg") || Key == TEXT("skyIntensity") || Key == TEXT("sunColor") || Key == TEXT("skyColor");
 	}
 
 	/** 허용 목록 밖의 키가 있으면 -32602 로 거절한다(받고 무시하는 것이 가장 나쁜 실패다 - 보드 #1099). */
@@ -152,6 +152,7 @@ namespace
 		O->SetNumberField(TEXT("shadowFillIntensity"), S.ShadowFillIntensity);
 		O->SetNumberField(TEXT("carFillIntensity"), S.CarFillIntensity);
 		O->SetObjectField(TEXT("sunColor"), RpcDto::Vec3(S.SunColor.R, S.SunColor.G, S.SunColor.B));
+		O->SetObjectField(TEXT("skyColor"), RpcDto::Vec3(S.SkyColor.R, S.SkyColor.G, S.SkyColor.B));
 		return O;
 	}
 
@@ -209,6 +210,7 @@ namespace
 		C->SetStringField(TEXT("unit"), TEXT("linear RGB 0..1"));
 		C->SetObjectField(TEXT("default"), RpcDto::Vec3(1.0, 1.0, 1.0));
 		M->SetObjectField(TEXT("sunColor"), C);
+		M->SetObjectField(TEXT("skyColor"), C);   // 같은 범위·기본(흰색 = 캡처한 하늘 그대로)
 		// 시간대·날씨(보드 #1326). default = 기동 시 값(음수 키는 "건드리지 않음" 이라 meta 에선 0).
 		struct FEnvMeta { const TCHAR* Key; float Min, Max, Step; const TCHAR* Unit; float Default; };
 		const FLightEnv D;
@@ -247,6 +249,11 @@ namespace
 			const FVector C = RpcParam::GetVec3(P, TEXT("sunColor"), FVector(S.SunColor.R, S.SunColor.G, S.SunColor.B));
 			S.SunColor = FLinearColor(static_cast<float>(C.X), static_cast<float>(C.Y), static_cast<float>(C.Z), 1.f);
 		}
+		if (RpcParam::Has(P, TEXT("skyColor")))
+		{
+			const FVector C = RpcParam::GetVec3(P, TEXT("skyColor"), FVector(S.SkyColor.R, S.SkyColor.G, S.SkyColor.B));
+			S.SkyColor = FLinearColor(static_cast<float>(C.X), static_cast<float>(C.Y), static_cast<float>(C.Z), 1.f);
+		}
 	}
 
 	FString StripJson(const FString& Name)
@@ -273,7 +280,7 @@ void FLightRpcModule::Register(URpcDispatcher& Dispatcher)
 	});
 	Dispatcher.SetMethodMeta(TEXT("light.get"), { /*bMutating=*/false, /*bDestructive=*/false,
 		TEXT("withMeta?=false"),
-		TEXT("조명 8값(exposureEV100 EV100·sunIntensity lux·sunAltitudeDeg 0..90°·sunAzimuthDeg 0..360°·skyIntensity·shadowFillIntensity lux·carFillIntensity lux·sunColor{x,y,z} 선형 0..1) + "
+		TEXT("조명 9값(exposureEV100 EV100·sunIntensity lux·sunAltitudeDeg 0..90°·sunAzimuthDeg 0..360°·skyIntensity·shadowFillIntensity lux·carFillIntensity lux·sunColor{x,y,z} 선형 0..1·skyColor{x,y,z} 하늘빛 색 배율 0..1) + "
 		     "fromWorld(태양 컴포넌트를 찾아 되읽음 - 화면 일치 보증이 아니다) · source(world|override|file) · fileName(마지막 적용·저장 파일, 없으면 null) · "
 		     "externalSkySystem(true 면 UDS 같은 하늘 시스템이 태양·하늘빛·노출을 쥐고 있어 그 값들은 이 RPC 로 바뀌지 않고 되읽은 값도 화면과 다를 수 있다 - 채움광 2종만 유효). "
 		     "withMeta:true 면 meta.<키>={min,max,step(UI 권장),unit,default(구조체 기본값)} 를 더한다. "
@@ -284,7 +291,7 @@ void FLightRpcModule::Register(URpcDispatcher& Dispatcher)
 	// 전달한 항목만 바꿔 즉시 적용한다(가림률 측정 중 노출을 고정하는 용도).
 	Dispatcher.Register(TEXT("light.set"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
-		if (!RejectUnknownKeys(P, { ValueKeys[0], ValueKeys[1], ValueKeys[2], ValueKeys[3], ValueKeys[4], ValueKeys[5], ValueKeys[6], ValueKeys[7],
+		if (!RejectUnknownKeys(P, { ValueKeys[0], ValueKeys[1], ValueKeys[2], ValueKeys[3], ValueKeys[4], ValueKeys[5], ValueKeys[6], ValueKeys[7], ValueKeys[8],
 			EnvValueKeys[0], EnvValueKeys[1], EnvValueKeys[2], EnvValueKeys[3], EnvValueKeys[4], EnvValueKeys[5] }, E)) { return nullptr; }
 		ALightControlManager* Mgr = ALightControlManager::GetOrSpawn(GetWorldPtr());
 		if (!Mgr) { E.FailDomain(TEXT("조명 매니저 없음(월드 미로드)")); return nullptr; }
@@ -338,7 +345,7 @@ void FLightRpcModule::Register(URpcDispatcher& Dispatcher)
 		return RpcDto::MakeObject(O);
 	});
 	Dispatcher.SetMethodMeta(TEXT("light.set"), { true, false,
-		TEXT("exposureEV100? sunIntensity? sunAltitudeDeg? sunAzimuthDeg? skyIntensity? shadowFillIntensity? carFillIntensity? sunColor{x,y,z}?"),
+		TEXT("exposureEV100? sunIntensity? sunAltitudeDeg? sunAzimuthDeg? skyIntensity? shadowFillIntensity? carFillIntensity? sunColor{x,y,z}? skyColor{x,y,z}?"),
 		TEXT("보낸 키만 바꾸고 나머지는 지금 화면(월드에서 되읽은 값) 그대로 둔다. 범위는 light.get {withMeta:true}, 밖의 값은 잘린다. "
 		     "응답은 light.get 모양의 적용 후 상태. 알 수 없는 키는 -32602(키 이름 포함). "
 		     "UDS 같은 하늘 시스템 레벨에서는 태양·하늘빛·노출 키가 적용되지 않으며 응답 ignoredKeys 에 이름이 담긴다(채움광 2종만 적용). "

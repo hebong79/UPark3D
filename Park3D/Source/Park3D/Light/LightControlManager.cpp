@@ -401,6 +401,8 @@ void ALightControlManager::ApplySettings(const FLightSettings& Settings)
 	{
 		bLightingChanged |= !FMath::IsNearlyEqual(Sky->Intensity, S.SkyIntensity, 0.001f);
 		Sky->SetIntensity(S.SkyIntensity);
+		// 색은 캡처 결과에 곱해지는 배율이라 재캡처가 필요 없다.
+		Sky->SetLightColor(S.SkyColor);
 		// RealTimeCapture 가 꺼져 있는 레벨에서도 태양 변경이 하늘빛에 반영되도록 재캡처한다.
 		if (bLightingChanged)
 		{
@@ -919,6 +921,7 @@ bool ALightControlManager::CaptureCurrent(FLightSettings& Out) const
 	if (const USkyLightComponent* Sky = FindSky())
 	{
 		S.SkyIntensity = Sky->Intensity;
+		S.SkyColor = Sky->GetLightColor();
 	}
 
 	if (const APostProcessVolume* V = FindExposureVolume())

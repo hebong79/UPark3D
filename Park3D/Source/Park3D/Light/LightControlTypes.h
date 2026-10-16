@@ -53,6 +53,14 @@ struct PARK3D_API FLightSettings
 	 * 기본 0 = 끔.
 	 */
 	UPROPERTY(BlueprintReadWrite, Category = "Light") float CarFillIntensity = 0.0f;
+
+	/**
+	 * 하늘빛(SkyLight) 색 배율(선형 0..1). 하늘빛은 대기를 실시간 캡처해 그늘을 밝히는데, 기본맵에서는
+	 * 그 빛이 진한 파랑이라 그늘의 흰 번호판이 B/R 2.1 로 파랗게 나왔다(2026-10-16 실측, UDS 레벨은 1.0 부근).
+	 * 파랑을 덜어 그늘을 중립에 가깝게 한다. 기본 흰색 = 기존 화면 그대로.
+	 * UPROPERTY 가 아니다 — 블루프린트에 노출할 이유가 없고 쿠킹 에셋과 무관하게 C++ 에서만 쓴다.
+	 */
+	FLinearColor SkyColor = FLinearColor::White;
 };
 
 /**

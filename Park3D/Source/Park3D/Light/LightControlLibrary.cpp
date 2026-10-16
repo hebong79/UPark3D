@@ -31,6 +31,9 @@ namespace
 	const TCHAR* KeySkyIntensity = TEXT("SkyIntensity");
 	const TCHAR* KeyShadowFill = TEXT("ShadowFillIntensity");
 	const TCHAR* KeyCarFill = TEXT("CarFillIntensity");
+	const TCHAR* KeySkyColorR = TEXT("SkyColorR");
+	const TCHAR* KeySkyColorG = TEXT("SkyColorG");
+	const TCHAR* KeySkyColorB = TEXT("SkyColorB");
 }
 
 void ULightControlLibrary::ClampSettings(FLightSettings& S)
@@ -53,6 +56,11 @@ void ULightControlLibrary::ClampSettings(FLightSettings& S)
 	S.SunColor.G = FMath::Clamp(S.SunColor.G, 0.0f, 1.0f);
 	S.SunColor.B = FMath::Clamp(S.SunColor.B, 0.0f, 1.0f);
 	S.SunColor.A = 1.0f;
+
+	S.SkyColor.R = FMath::Clamp(S.SkyColor.R, 0.0f, 1.0f);
+	S.SkyColor.G = FMath::Clamp(S.SkyColor.G, 0.0f, 1.0f);
+	S.SkyColor.B = FMath::Clamp(S.SkyColor.B, 0.0f, 1.0f);
+	S.SkyColor.A = 1.0f;
 }
 
 TArray<ULightControlLibrary::FKeyMeta> ULightControlLibrary::GetKeyMeta()
@@ -82,6 +90,9 @@ FString ULightControlLibrary::ToJson(const FLightSettings& S)
 	Root->SetNumberField(KeySkyIntensity, S.SkyIntensity);
 	Root->SetNumberField(KeyShadowFill, S.ShadowFillIntensity);
 	Root->SetNumberField(KeyCarFill, S.CarFillIntensity);
+	Root->SetNumberField(KeySkyColorR, S.SkyColor.R);
+	Root->SetNumberField(KeySkyColorG, S.SkyColor.G);
+	Root->SetNumberField(KeySkyColorB, S.SkyColor.B);
 
 	FString Out;
 	const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Out);
@@ -132,6 +143,10 @@ bool ULightControlLibrary::FromJson(const FString& Json, FLightSettings& Out)
 	Parsed.SunColor.G = Root->TryGetNumberField(KeySunColorG, C) ? static_cast<float>(C) : 1.0f;
 	Parsed.SunColor.B = Root->TryGetNumberField(KeySunColorB, C) ? static_cast<float>(C) : 1.0f;
 	Parsed.SunColor.A = 1.0f;
+	Parsed.SkyColor.R = Root->TryGetNumberField(KeySkyColorR, C) ? static_cast<float>(C) : 1.0f;
+	Parsed.SkyColor.G = Root->TryGetNumberField(KeySkyColorG, C) ? static_cast<float>(C) : 1.0f;
+	Parsed.SkyColor.B = Root->TryGetNumberField(KeySkyColorB, C) ? static_cast<float>(C) : 1.0f;
+	Parsed.SkyColor.A = 1.0f;
 
 	ClampSettings(Parsed);
 	Out = Parsed;

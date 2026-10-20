@@ -160,6 +160,17 @@ AMapFloorActor* AMapFloorActor::GetOrSpawn(UWorld* World, bool bBackdropIfSpawne
 	return Spawned;
 }
 
+void AMapFloorActor::SetPlateSize(float InWidthM, float InDepthM)
+{
+	WidthM = UMapFloorLibrary::ClampPlateSizeMeters(InWidthM);
+	DepthM = UMapFloorLibrary::ClampPlateSizeMeters(InDepthM);
+	if (FloorMesh)
+	{
+		FloorMesh->SetRelativeScale3D(
+			UMapFloorLibrary::MapSizeToPlaneScale(WidthM, DepthM, MetersToUU));
+	}
+}
+
 void AMapFloorActor::SetPlacement(const FVector2D& CenterM, float YawDeg, float SurfaceZCm)
 {
 	// 바닥 메시는 액터 기준 FloorZ 위에 있으므로 표면이 SurfaceZCm 에 오도록 액터를 그만큼 내린다.
@@ -224,7 +235,7 @@ bool AMapFloorActor::LoadPlacementForWorld(UWorld* World)
 	}
 	AMapFloorActor* Floor = GetOrSpawn(World, /*bBackdropIfSpawned=*/false);
 	if (!Floor) return false;
-	Floor->SetFloorSize(P.SizeXM, P.SizeYM);
+	Floor->SetPlateSize(P.SizeXM, P.SizeYM);
 	Floor->SetPlacement(P.CenterM, P.YawDeg, P.ZM * Floor->MetersToUU);
 	UE_LOG(LogTemp, Log, TEXT("[MapFloor] 바닥판 %.1f×%.1f m, 중심 (%.2f, %.2f) m, yaw %.1f°, z %.3f m 복원 ← %s"),
 		Floor->WidthM, Floor->DepthM, P.CenterM.X, P.CenterM.Y, P.YawDeg, P.ZM, *Path);

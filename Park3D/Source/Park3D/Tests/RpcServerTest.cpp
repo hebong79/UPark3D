@@ -565,8 +565,8 @@ bool FRpcMapModuleTest::RunTest(const FString& Parameters)
 		const TSharedPtr<FJsonObject> G = GR->AsObject();
 		TestTrue(TEXT("exists"), G->GetBoolField(TEXT("exists")));
 		TestEqual(TEXT("sizeX 40"), G->GetNumberField(TEXT("sizeX")), 40.0, 1e-3);
-		TestEqual(TEXT("sizeY 하한 10"), G->GetNumberField(TEXT("sizeY")), 10.0, 1e-3);
-		TestEqual(TEXT("sizeZ = sizeY"), G->GetNumberField(TEXT("sizeZ")), 10.0, 1e-3);
+		TestEqual(TEXT("sizeY 5(판 하한 1 m)"), G->GetNumberField(TEXT("sizeY")), 5.0, 1e-3);
+		TestEqual(TEXT("sizeZ = sizeY"), G->GetNumberField(TEXT("sizeZ")), 5.0, 1e-3);
 		TestEqual(TEXT("center.x 12"), G->GetObjectField(TEXT("center"))->GetNumberField(TEXT("x")), 12.0, 1e-3);
 		TestEqual(TEXT("center.y -3.5"), G->GetObjectField(TEXT("center"))->GetNumberField(TEXT("y")), -3.5, 1e-3);
 		TestEqual(TEXT("yaw 30"), G->GetNumberField(TEXT("yaw")), 30.0, 1e-3);

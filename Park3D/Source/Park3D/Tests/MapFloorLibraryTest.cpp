@@ -160,10 +160,11 @@ bool FMapFloorPlacementJsonTest::RunTest(const FString& Parameters)
 	// 크기는 읽을 때도 클램프, center·yaw·z 는 없으면 기본값.
 	TSharedPtr<FJsonObject> Min = MakeShared<FJsonObject>();
 	Min->SetNumberField(TEXT("sizeX"), 9000.0);
-	Min->SetNumberField(TEXT("sizeY"), 1.0);
+	Min->SetNumberField(TEXT("sizeY"), 0.2);
 	TestTrue(TEXT("최소 키만 성공"), UMapFloorLibrary::PlacementFromJson(Min, Out));
 	TestEqual(TEXT("sizeX 상한 500"), Out.SizeXM, 500.f, 1e-4f);
-	TestEqual(TEXT("sizeY 하한 10"), Out.SizeYM, 10.f, 1e-4f);
+	TestEqual(TEXT("sizeY 판 하한 1"), Out.SizeYM, 1.f, 1e-4f);
+	TestEqual(TEXT("판 하한 6 m 유지(맵 하한 10 과 별개)"), UMapFloorLibrary::ClampPlateSizeMeters(6.f), 6.f, 1e-4f);
 	TestEqual(TEXT("center 기본 0"), Out.CenterM.X, 0.0, 1e-9);
 	TestEqual(TEXT("z 기본 0.02"), Out.ZM, 0.02f, 1e-6f);
 

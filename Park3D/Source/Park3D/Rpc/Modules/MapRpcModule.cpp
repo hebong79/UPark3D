@@ -172,7 +172,7 @@ void FMapRpcModule::Register(URpcDispatcher& Dispatcher)
 
 		AMapFloorActor* Floor = Existing ? Existing : AMapFloorActor::GetOrSpawn(World, /*bBackdropIfSpawned=*/false);
 		if (!Floor) { E.FailDomain(TEXT("맵 바닥 액터를 생성할 수 없습니다")); return nullptr; }
-		Floor->SetFloorSize(static_cast<float>(SizeX), static_cast<float>(SizeY));
+		Floor->SetPlateSize(static_cast<float>(SizeX), static_cast<float>(SizeY));
 
 		// z 생략 = 클램프된 크기의 사각형 아래 노면 + 0.5 cm, 노면을 못 찾으면 기본 2 cm(빈 기본맵과 같은 높이).
 		FString ZSource;
@@ -208,7 +208,7 @@ void FMapRpcModule::Register(URpcDispatcher& Dispatcher)
 	});
 	Dispatcher.SetMethodMeta(TEXT("map.setFloor"), { true, false,
 		TEXT("{sizeX?, sizeY?(=sizeZ), center?:{x,y}, yaw?, z?, save?=true}"),
-		TEXT("주차장 바닥판(m·도) — 크기 10..500 클램프, z 생략 = 노면+0.5 cm. 레벨별 파일에 저장돼 재기동 후 복원. 응답 {exists, sizeX, sizeY, center, yaw, z, backdrop, created, saved, zSource, file}") });
+		TEXT("주차장 바닥판(m·도) — 크기 1..500 클램프, z 생략 = 노면+0.5 cm. 레벨별 파일에 저장돼 재기동 후 복원. 응답 {exists, sizeX, sizeY, center, yaw, z, backdrop, created, saved, zSource, file}") });
 
 	// map.clearFloor {keepFile?=false} — RPC 로 깐 바닥판은 지우고, 기본맵 바닥(원경 있음)은 160 m·원점으로 되돌린다.
 	Dispatcher.Register(TEXT("map.clearFloor"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>

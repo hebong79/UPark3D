@@ -51,6 +51,12 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Map|Floor")
 	static float ClampSizeMeters(float Meters);
 
+	/** 바닥판(map.setFloor) 크기 하한(m). 주차장 띠처럼 좁은 판을 허용하려고 맵 크기(MinSizeM)와 따로 둔다. */
+	static constexpr float MinPlateSizeM = 1.f;
+
+	/** [MinPlateSizeM, MaxSizeM] 로 클램프. NaN/Inf 는 DefaultSizeM. C++ 전용. */
+	static float ClampPlateSizeMeters(float Meters);
+
 	/**
 	 * 맵 크기(m) → 평면 메시 로컬 스케일.
 	 * 축 규약: 가로(Unity X)=UE X, 세로(Unity Z)=UE Y (CarPlacementLibrary 규약과 동일). Z 스케일은 항상 1(평면).
@@ -71,6 +77,6 @@ public:
 	/** 배치 → JSON {sizeX, sizeY, center{x,y}, yaw, z} (m·도). */
 	static TSharedPtr<FJsonObject> PlacementToJson(const FMapFloorPlacement& In);
 
-	/** JSON → 배치. sizeX·sizeY 필수(크기는 클램프), 나머지는 없으면 기본값. 실패 시 false(Out 미변경). */
+	/** JSON → 배치. sizeX·sizeY 필수(크기는 ClampPlateSizeMeters), 나머지는 없으면 기본값. 실패 시 false(Out 미변경). */
 	static bool PlacementFromJson(const TSharedPtr<FJsonObject>& Json, FMapFloorPlacement& Out);
 };

@@ -26,6 +26,15 @@ float UMapFloorLibrary::ClampSizeMeters(float Meters)
 	return FMath::Clamp(Meters, MinSizeM, MaxSizeM);
 }
 
+float UMapFloorLibrary::ClampPlateSizeMeters(float Meters)
+{
+	if (!FMath::IsFinite(Meters))
+	{
+		return DefaultSizeM;
+	}
+	return FMath::Clamp(Meters, MinPlateSizeM, MaxSizeM);
+}
+
 FVector UMapFloorLibrary::MapSizeToPlaneScale(float WidthM, float DepthM, float MetersToUU, float PlaneBaseUU)
 {
 	if (FMath::IsNearlyZero(PlaneBaseUU))
@@ -99,8 +108,8 @@ bool UMapFloorLibrary::PlacementFromJson(const TSharedPtr<FJsonObject>& Json, FM
 		return false;
 	}
 	FMapFloorPlacement P;
-	P.SizeXM = ClampSizeMeters(static_cast<float>(W));
-	P.SizeYM = ClampSizeMeters(static_cast<float>(D));
+	P.SizeXM = ClampPlateSizeMeters(static_cast<float>(W));
+	P.SizeYM = ClampPlateSizeMeters(static_cast<float>(D));
 	const TSharedPtr<FJsonObject>* C = nullptr;
 	if (Json->TryGetObjectField(TEXT("center"), C) && C && C->IsValid())
 	{

@@ -66,7 +66,10 @@ public:
 
 	// ---- 바닥판 배치(map.setFloor) — C++ 전용 ----
 
-	/** 중심(UE 지면 m)·yaw(도)·표면 높이(cm)로 액터를 옮긴다. 크기는 SetFloorSize. */
+	/** 바닥판 크기 — SetFloorSize 와 같되 하한이 1 m(ClampPlateSizeMeters). */
+	void SetPlateSize(float InWidthM, float InDepthM);
+
+	/** 중심(UE 지면 m)·yaw(도)·표면 높이(cm)로 액터를 옮긴다. 크기는 SetFloorSize/SetPlateSize. */
 	void SetPlacement(const FVector2D& CenterM, float YawDeg, float SurfaceZCm);
 
 	/** 현재 크기·중심·yaw·표면 높이. */

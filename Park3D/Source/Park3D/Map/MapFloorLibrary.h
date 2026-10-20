@@ -8,6 +8,21 @@
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "MapFloorLibrary.generated.h"
 
+class FJsonObject;
+
+/**
+ * 바닥판 배치(map.setFloor) — 크기(m)·중심(UE 지면 m)·yaw(도)·표면 높이(m).
+ * 레벨별 파일 Save/3D/MapFloor/MapFloor_<레벨>.json 의 내용. C++ 전용(UPROPERTY 아님).
+ */
+struct FMapFloorPlacement
+{
+	float SizeXM = 160.f;
+	float SizeYM = 160.f;
+	FVector2D CenterM = FVector2D::ZeroVector;
+	float YawDeg = 0.f;
+	float ZM = 0.02f;
+};
+
 UCLASS()
 class PARK3D_API UMapFloorLibrary : public UBlueprintFunctionLibrary
 {
@@ -36,6 +51,12 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Map|Floor")
 	static float ClampSizeMeters(float Meters);
 
+	/** 바닥판(map.setFloor) 크기 하한(m). 주차장 띠처럼 좁은 판을 허용하려고 맵 크기(MinSizeM)와 따로 둔다. */
+	static constexpr float MinPlateSizeM = 1.f;
+
+	/** [MinPlateSizeM, MaxSizeM] 로 클램프. NaN/Inf 는 DefaultSizeM. C++ 전용. */
+	static float ClampPlateSizeMeters(float Meters);
+
 	/**
 	 * 맵 크기(m) → 평면 메시 로컬 스케일.
 	 * 축 규약: 가로(Unity X)=UE X, 세로(Unity Z)=UE Y (CarPlacementLibrary 규약과 동일). Z 스케일은 항상 1(평면).
@@ -52,4 +73,10 @@ public:
 	/** JSON 파일 → 맵 크기(m). 실패 시 false(Out 미변경). */
 	UFUNCTION(BlueprintCallable, Category = "Map|Floor")
 	static bool LoadMapSizeFromJson(const FString& FilePath, float& OutWidthM, float& OutDepthM);
+
+	/** 배치 → JSON {sizeX, sizeY, center{x,y}, yaw, z} (m·도). */
+	static TSharedPtr<FJsonObject> PlacementToJson(const FMapFloorPlacement& In);
+
+	/** JSON → 배치. sizeX·sizeY 필수(크기는 ClampPlateSizeMeters), 나머지는 없으면 기본값. 실패 시 false(Out 미변경). */
+	static bool PlacementFromJson(const TSharedPtr<FJsonObject>& Json, FMapFloorPlacement& Out);
 };

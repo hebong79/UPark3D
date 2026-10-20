@@ -1,12 +1,16 @@
 ﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "MapFloorActor.h"
+#include "../Park3DDataPaths.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInterface.h"
+#include "Misc/FileHelper.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace
@@ -131,7 +135,12 @@ void AMapFloorActor::ResetFloorSize()
 	SetFloorSize(UMapFloorLibrary::DefaultSizeM, UMapFloorLibrary::DefaultSizeM);
 }
 
-AMapFloorActor* AMapFloorActor::GetOrSpawn(UWorld* World)
+AMapFloorActor* AMapFloorActor::Find(UWorld* World)
+{
+	return World ? Cast<AMapFloorActor>(UGameplayStatics::GetActorOfClass(World, AMapFloorActor::StaticClass())) : nullptr;
+}
+
+AMapFloorActor* AMapFloorActor::GetOrSpawn(UWorld* World, bool bBackdropIfSpawned)
 {
 	if (!World)
 	{
@@ -139,10 +148,96 @@ AMapFloorActor* AMapFloorActor::GetOrSpawn(UWorld* World)
 	}
 
 	// CameraControlWidget::GetCameraManager 의 "있으면 재사용, 없으면 스폰" 선례를 static 으로 승격(중복 스폰 방지).
-	if (AMapFloorActor* Existing = Cast<AMapFloorActor>(
-		UGameplayStatics::GetActorOfClass(World, AMapFloorActor::StaticClass())))
+	if (AMapFloorActor* Existing = Find(World))
 	{
 		return Existing;
 	}
-	return World->SpawnActor<AMapFloorActor>();
+	AMapFloorActor* Spawned = World->SpawnActor<AMapFloorActor>();
+	if (Spawned && !bBackdropIfSpawned)
+	{
+		Spawned->SetBackdropVisible(false);
+	}
+	return Spawned;
+}
+
+void AMapFloorActor::SetPlateSize(float InWidthM, float InDepthM)
+{
+	WidthM = UMapFloorLibrary::ClampPlateSizeMeters(InWidthM);
+	DepthM = UMapFloorLibrary::ClampPlateSizeMeters(InDepthM);
+	if (FloorMesh)
+	{
+		FloorMesh->SetRelativeScale3D(
+			UMapFloorLibrary::MapSizeToPlaneScale(WidthM, DepthM, MetersToUU));
+	}
+}
+
+void AMapFloorActor::SetPlacement(const FVector2D& CenterM, float YawDeg, float SurfaceZCm)
+{
+	// 바닥 메시는 액터 기준 FloorZ 위에 있으므로 표면이 SurfaceZCm 에 오도록 액터를 그만큼 내린다.
+	SetActorLocationAndRotation(
+		FVector(CenterM.X * MetersToUU, CenterM.Y * MetersToUU, SurfaceZCm - FloorZ),
+		FRotator(0.f, YawDeg, 0.f));
+}
+
+FMapFloorPlacement AMapFloorActor::GetPlacement() const
+{
+	FMapFloorPlacement P;
+	const FVector L = GetActorLocation();
+	P.SizeXM = WidthM;
+	P.SizeYM = DepthM;
+	P.CenterM = FVector2D(L.X / MetersToUU, L.Y / MetersToUU);
+	P.YawDeg = GetActorRotation().Yaw;
+	P.ZM = (L.Z + FloorZ) / MetersToUU;
+	return P;
+}
+
+void AMapFloorActor::SetBackdropVisible(bool bVisible)
+{
+	if (BackdropMesh)
+	{
+		BackdropMesh->SetVisibility(bVisible);
+	}
+}
+
+bool AMapFloorActor::IsBackdropVisible() const
+{
+	return BackdropMesh && BackdropMesh->IsVisible();
+}
+
+FString AMapFloorActor::GetPlacementFilePath(const UWorld* World)
+{
+	const FString Level = World ? UWorld::RemovePIEPrefix(World->GetMapName()) : FString(TEXT("NoWorld"));
+	return Park3DDataPaths::GetDataFilePath(TEXT("MapFloor"), *FString::Printf(TEXT("MapFloor_%s.json"), *Level));
+}
+
+bool AMapFloorActor::SavePlacement(FString& OutPath) const
+{
+	OutPath = GetPlacementFilePath(GetWorld());
+	TSharedPtr<FJsonObject> O = UMapFloorLibrary::PlacementToJson(GetPlacement());
+	O->SetStringField(TEXT("level"), UWorld::RemovePIEPrefix(GetWorld()->GetMapName()));
+	FString Text;
+	TSharedRef<TJsonWriter<>> W = TJsonWriterFactory<>::Create(&Text);
+	FJsonSerializer::Serialize(O.ToSharedRef(), W);
+	return FFileHelper::SaveStringToFile(Text, *OutPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+}
+
+bool AMapFloorActor::LoadPlacementForWorld(UWorld* World)
+{
+	const FString Path = GetPlacementFilePath(World);
+	FString Text;
+	if (!World || !FFileHelper::LoadFileToString(Text, *Path)) return false;
+	TSharedPtr<FJsonObject> O;
+	FMapFloorPlacement P;
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), O) || !UMapFloorLibrary::PlacementFromJson(O, P))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[MapFloor] 바닥판 파일을 읽지 못했습니다: %s"), *Path);
+		return false;
+	}
+	AMapFloorActor* Floor = GetOrSpawn(World, /*bBackdropIfSpawned=*/false);
+	if (!Floor) return false;
+	Floor->SetPlateSize(P.SizeXM, P.SizeYM);
+	Floor->SetPlacement(P.CenterM, P.YawDeg, P.ZM * Floor->MetersToUU);
+	UE_LOG(LogTemp, Log, TEXT("[MapFloor] 바닥판 %.1f×%.1f m, 중심 (%.2f, %.2f) m, yaw %.1f°, z %.3f m 복원 ← %s"),
+		Floor->WidthM, Floor->DepthM, P.CenterM.X, P.CenterM.Y, P.YawDeg, P.ZM, *Path);
+	return true;
 }

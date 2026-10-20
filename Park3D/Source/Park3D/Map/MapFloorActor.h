@@ -54,6 +54,36 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Map|Floor")
 	void ResetFloorSize();
 
-	/** 월드의 바닥 액터를 얻는다(없으면 스폰). GameMode·위젯 공용 — 멱등(중복 스폰 없음). */
-	static AMapFloorActor* GetOrSpawn(UWorld* World);
+	/**
+	 * 월드의 바닥 액터를 얻는다(없으면 스폰). GameMode·위젯 공용 — 멱등(중복 스폰 없음).
+	 * bBackdropIfSpawned=false 면 새로 스폰한 바닥의 원경 지면을 숨긴다 — 레벨이 자기 지형을 가진
+	 * 주차장(map_floor:false)에 바닥판만 얹을 때. 이미 있던 바닥은 그대로 둔다.
+	 */
+	static AMapFloorActor* GetOrSpawn(UWorld* World, bool bBackdropIfSpawned = true);
+
+	/** 월드의 바닥 액터(없으면 nullptr, 스폰하지 않는다). */
+	static AMapFloorActor* Find(UWorld* World);
+
+	// ---- 바닥판 배치(map.setFloor) — C++ 전용 ----
+
+	/** 바닥판 크기 — SetFloorSize 와 같되 하한이 1 m(ClampPlateSizeMeters). */
+	void SetPlateSize(float InWidthM, float InDepthM);
+
+	/** 중심(UE 지면 m)·yaw(도)·표면 높이(cm)로 액터를 옮긴다. 크기는 SetFloorSize/SetPlateSize. */
+	void SetPlacement(const FVector2D& CenterM, float YawDeg, float SurfaceZCm);
+
+	/** 현재 크기·중심·yaw·표면 높이. */
+	FMapFloorPlacement GetPlacement() const;
+
+	void SetBackdropVisible(bool bVisible);
+	bool IsBackdropVisible() const;
+
+	/** Save/3D/MapFloor/MapFloor_<레벨>.json */
+	static FString GetPlacementFilePath(const UWorld* World);
+
+	/** 현재 배치를 레벨 파일에 쓴다. */
+	bool SavePlacement(FString& OutPath) const;
+
+	/** 레벨 파일이 있으면 바닥판을 그 배치로 둔다(없던 바닥은 원경 없이 스폰). 파일 없음 = false. */
+	static bool LoadPlacementForWorld(UWorld* World);
 };

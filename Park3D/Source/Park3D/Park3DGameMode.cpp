@@ -551,6 +551,8 @@ void APark3DGameMode::ApplyStartupConfig()
 	ARpcOverlayActor::LoadLotForWorld(GetWorld());
 	// 가로등(lamp.create 가 남긴 Save/3D/Lamp/Lamp_<레벨>.json, 보드 #1326) — 같은 규약.
 	ALotLampActor::LoadForWorld(GetWorld());
+	// 바닥판(map.setFloor 가 남긴 Save/3D/MapFloor/MapFloor_<레벨>.json) — 같은 규약.
+	AMapFloorActor::LoadPlacementForWorld(GetWorld());
 
 	FPark3DAppConfig Config;
 	if (!UPark3DAppConfigLibrary::Load(Config))

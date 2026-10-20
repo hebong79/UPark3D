@@ -26,6 +26,15 @@ float UMapFloorLibrary::ClampSizeMeters(float Meters)
 	return FMath::Clamp(Meters, MinSizeM, MaxSizeM);
 }
 
+float UMapFloorLibrary::ClampPlateSizeMeters(float Meters)
+{
+	if (!FMath::IsFinite(Meters))
+	{
+		return DefaultSizeM;
+	}
+	return FMath::Clamp(Meters, MinPlateSizeM, MaxSizeM);
+}
+
 FVector UMapFloorLibrary::MapSizeToPlaneScale(float WidthM, float DepthM, float MetersToUU, float PlaneBaseUU)
 {
 	if (FMath::IsNearlyZero(PlaneBaseUU))
@@ -74,5 +83,44 @@ bool UMapFloorLibrary::LoadMapSizeFromJson(const FString& FilePath, float& OutWi
 	}
 	OutWidthM = static_cast<float>(W);
 	OutDepthM = static_cast<float>(D);
+	return true;
+}
+
+TSharedPtr<FJsonObject> UMapFloorLibrary::PlacementToJson(const FMapFloorPlacement& In)
+{
+	TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+	O->SetNumberField(TEXT("sizeX"), In.SizeXM);
+	O->SetNumberField(TEXT("sizeY"), In.SizeYM);
+	TSharedPtr<FJsonObject> C = MakeShared<FJsonObject>();
+	C->SetNumberField(TEXT("x"), In.CenterM.X);
+	C->SetNumberField(TEXT("y"), In.CenterM.Y);
+	O->SetObjectField(TEXT("center"), C);
+	O->SetNumberField(TEXT("yaw"), In.YawDeg);
+	O->SetNumberField(TEXT("z"), In.ZM);
+	return O;
+}
+
+bool UMapFloorLibrary::PlacementFromJson(const TSharedPtr<FJsonObject>& Json, FMapFloorPlacement& Out)
+{
+	double W = 0.0, D = 0.0;
+	if (!Json.IsValid() || !Json->TryGetNumberField(TEXT("sizeX"), W) || !Json->TryGetNumberField(TEXT("sizeY"), D))
+	{
+		return false;
+	}
+	FMapFloorPlacement P;
+	P.SizeXM = ClampPlateSizeMeters(static_cast<float>(W));
+	P.SizeYM = ClampPlateSizeMeters(static_cast<float>(D));
+	const TSharedPtr<FJsonObject>* C = nullptr;
+	if (Json->TryGetObjectField(TEXT("center"), C) && C && C->IsValid())
+	{
+		double X = 0.0, Y = 0.0;
+		(*C)->TryGetNumberField(TEXT("x"), X);
+		(*C)->TryGetNumberField(TEXT("y"), Y);
+		P.CenterM = FVector2D(X, Y);
+	}
+	double V = 0.0;
+	if (Json->TryGetNumberField(TEXT("yaw"), V)) { P.YawDeg = static_cast<float>(V); }
+	if (Json->TryGetNumberField(TEXT("z"), V)) { P.ZM = static_cast<float>(V); }
+	Out = P;
 	return true;
 }

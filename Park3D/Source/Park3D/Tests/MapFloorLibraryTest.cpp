@@ -6,6 +6,7 @@
 
 #include "Misc/AutomationTest.h"
 #include "../Map/MapFloorLibrary.h"
+#include "Dom/JsonObject.h"
 #include <limits>
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -135,6 +136,43 @@ bool FMapFloorUnitChainTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("120m → 12000uu"), S2.X * PlaneBaseUU, 12000.0, 1e-2);
 	TestEqual(TEXT("200m → 20000uu"), S2.Y * PlaneBaseUU, 20000.0, 1e-2);
 
+	return true;
+}
+
+// ===== TP-6 바닥판 배치 JSON 왕복 (map.setFloor 레벨 파일) =====
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMapFloorPlacementJsonTest,
+	"Park3D.MapFloor.PlacementJson",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FMapFloorPlacementJsonTest::RunTest(const FString& Parameters)
+{
+	FMapFloorPlacement In;
+	In.SizeXM = 42.5f; In.SizeYM = 18.f; In.CenterM = FVector2D(-7.25, 31.5); In.YawDeg = 72.09f; In.ZM = 0.013f;
+	FMapFloorPlacement Out;
+	TestTrue(TEXT("왕복 성공"), UMapFloorLibrary::PlacementFromJson(UMapFloorLibrary::PlacementToJson(In), Out));
+	TestEqual(TEXT("sizeX"), Out.SizeXM, 42.5f, 1e-4f);
+	TestEqual(TEXT("sizeY"), Out.SizeYM, 18.f, 1e-4f);
+	TestEqual(TEXT("center.x"), Out.CenterM.X, -7.25, 1e-6);
+	TestEqual(TEXT("center.y"), Out.CenterM.Y, 31.5, 1e-6);
+	TestEqual(TEXT("yaw"), Out.YawDeg, 72.09f, 1e-4f);
+	TestEqual(TEXT("z"), Out.ZM, 0.013f, 1e-6f);
+
+	// 크기는 읽을 때도 클램프, center·yaw·z 는 없으면 기본값.
+	TSharedPtr<FJsonObject> Min = MakeShared<FJsonObject>();
+	Min->SetNumberField(TEXT("sizeX"), 9000.0);
+	Min->SetNumberField(TEXT("sizeY"), 0.2);
+	TestTrue(TEXT("최소 키만 성공"), UMapFloorLibrary::PlacementFromJson(Min, Out));
+	TestEqual(TEXT("sizeX 상한 500"), Out.SizeXM, 500.f, 1e-4f);
+	TestEqual(TEXT("sizeY 판 하한 1"), Out.SizeYM, 1.f, 1e-4f);
+	TestEqual(TEXT("판 하한 6 m 유지(맵 하한 10 과 별개)"), UMapFloorLibrary::ClampPlateSizeMeters(6.f), 6.f, 1e-4f);
+	TestEqual(TEXT("center 기본 0"), Out.CenterM.X, 0.0, 1e-9);
+	TestEqual(TEXT("z 기본 0.02"), Out.ZM, 0.02f, 1e-6f);
+
+	// sizeY 가 없으면 실패하고 Out 은 그대로.
+	TSharedPtr<FJsonObject> Bad = MakeShared<FJsonObject>();
+	Bad->SetNumberField(TEXT("sizeX"), 30.0);
+	TestFalse(TEXT("sizeY 없음 실패"), UMapFloorLibrary::PlacementFromJson(Bad, Out));
+	TestEqual(TEXT("실패 시 Out 미변경"), Out.SizeXM, 500.f, 1e-4f);
 	return true;
 }
 

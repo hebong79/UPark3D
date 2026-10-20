@@ -169,6 +169,48 @@ namespace
 		OutH = FMath::Clamp(OutH, 16, 2160);
 	}
 
+	/**
+	 * 슈퍼샘플 배율(보드 #1638). 한 장씩 찍는 CaptureScene 은 TAA 이력이 없어 계단이 생기고, 그 계단이
+	 * 번호판 한글(무·모의 ㅁ)을 메워 LPR 이 우·오 로 읽었다 — 2배로 찍어 줄이면 같은 장면 정확 판독 13/40 → 24/40.
+	 * params `supersample`(1..4) > config `capture_supersample` > 2. 렌더 크기가 3840×2160 을 넘지 않게 낮추고,
+	 * 렌즈 왜곡 카메라는 1(넓은 중간 타깃이 4096 에서 잘려 중심 배율이 틀어진다).
+	 */
+	int32 ResolveSupersample(const TSharedPtr<FJsonObject>& P, const APTZCameraActor* Cam, int32 W, int32 H)
+	{
+		static const int32 ConfigSs = []
+		{
+			FPark3DAppConfig Config;
+			return (UPark3DAppConfigLibrary::Load(Config) && Config.CaptureSupersample > 0) ? Config.CaptureSupersample : 2;
+		}();
+		int32 Ss = FMath::Clamp(RpcParam::GetInt(P, TEXT("supersample"), ConfigSs), 1, 4);
+		while (Ss > 1 && (W * Ss > 3840 || H * Ss > 2160)) { --Ss; }
+		if (!CamLens::IsPinhole(Cam->GetLensK1(), Cam->GetLensK2())) { Ss = 1; }
+		return Ss;
+	}
+
+	/** Ss×Ss 블록 평균(감마 공간 — 카메라 JPEG 와 같은 공간에서 섞는다). */
+	TArray<FColor> DownsampleBox(const TArray<FColor>& Src, int32 W, int32 H, int32 Ss)
+	{
+		const int32 SrcW = W * Ss;
+		const int32 N = Ss * Ss;
+		TArray<FColor> Out;
+		Out.SetNumUninitialized(W * H);
+		for (int32 Y = 0; Y < H; ++Y)
+		{
+			for (int32 X = 0; X < W; ++X)
+			{
+				int32 R = 0, G = 0, B = 0;
+				for (int32 Dy = 0; Dy < Ss; ++Dy)
+				{
+					const FColor* Row = &Src[(Y * Ss + Dy) * SrcW + X * Ss];
+					for (int32 Dx = 0; Dx < Ss; ++Dx) { R += Row[Dx].R; G += Row[Dx].G; B += Row[Dx].B; }
+				}
+				Out[Y * W + X] = FColor((R + N / 2) / N, (G + N / 2) / N, (B + N / 2) / N, 255);
+			}
+		}
+		return Out;
+	}
+
 	/** 카메라 렌더타깃 → JPEG/PNG base64 응답. RHI 없으면(-nullrhi) -32000. width/height 가 다르면 별도 타깃에 1장. */
 	TSharedPtr<FJsonValue> DoCapture(APTZCameraActor* Cam, int32 CamId, bool bPng, int32 Quality, const TSharedPtr<FJsonObject>& P, FRpcError& E)
 	{
@@ -187,8 +229,9 @@ namespace
 		}
 		int32 W = 0, H = 0;
 		ResolveCaptureSize(P, Cam->RenderTarget, W, H);
+		const int32 Ss = ResolveSupersample(P, Cam, W, H);
 		const double T0 = FPlatformTime::Seconds();
-		UTextureRenderTarget2D* RT = Cam->CaptureAtSize(W, H); // 프레시 프레임(선택 전환 직후 stale 방지).
+		UTextureRenderTarget2D* RT = Cam->CaptureAtSize(W * Ss, H * Ss); // 프레시 프레임(선택 전환 직후 stale 방지).
 		if (!RT) { E.FailDomain(TEXT("렌더타깃 없음(InitRenderTarget 미호출)")); return nullptr; }
 		FTextureRenderTargetResource* Res = RT->GameThread_GetRenderTargetResource();
 		if (!Res) { E.FailDomain(TEXT("렌더 리소스 없음 — 실RHI 필요(-nullrhi 캡처 불가)")); return nullptr; }
@@ -196,12 +239,16 @@ namespace
 		TArray<FColor> Bitmap;
 		FReadSurfaceDataFlags Flags(RCM_UNorm, CubeFace_MAX);
 		Flags.SetLinearToGamma(false);
-		if (!Res->ReadPixels(Bitmap, Flags) || Bitmap.Num() == 0)
+		if (!Res->ReadPixels(Bitmap, Flags) || Bitmap.Num() != RT->SizeX * RT->SizeY || RT->SizeX != W * Ss || RT->SizeY != H * Ss)
 		{
 			E.FailDomain(TEXT("렌더타깃 픽셀 읽기 실패"));
 			return nullptr;
 		}
-		const double RenderMs = (FPlatformTime::Seconds() - T0) * 1000.0; // 렌더 + 리드백(인코딩 제외)
+		if (Ss > 1)
+		{
+			Bitmap = DownsampleBox(Bitmap, W, H, Ss);
+		}
+		const double RenderMs = (FPlatformTime::Seconds() - T0) * 1000.0; // 렌더 + 리드백 + 축소(인코딩 제외)
 		const double CaptureTimeMs = Park3DRpc::NowMs();   // 그림을 읽어 낸 시각(mutating 응답 timeMs 와 같은 시계, 보드 #1468)
 
 		// 정답(보드 #1468) — 방금 찍은 그림과 같은 프레임·같은 자세로 깊이 패스를 더 찍는다. 스트림·뷰어는 이 렌더를 보지 않는다.
@@ -212,7 +259,7 @@ namespace
 		if (bWithTruth)
 		{
 			FString TruthError;
-			if (!CaptureTruth::Build(Cam, CamId, RT->SizeX, RT->SizeY, bWithMask, Truth, Mask, TruthError))
+			if (!CaptureTruth::Build(Cam, CamId, W, H, bWithMask, Truth, Mask, TruthError))
 			{
 				E.FailDomain(TruthError);
 				return nullptr;
@@ -222,7 +269,7 @@ namespace
 		}
 
 		TArray<uint8> Bytes;
-		if (!RpcImage::EncodeColors(Bitmap, RT->SizeX, RT->SizeY, bPng, Quality, Bytes))
+		if (!RpcImage::EncodeColors(Bitmap, W, H, bPng, Quality, Bytes))
 		{
 			E.FailDomain(TEXT("이미지 인코딩 실패"));
 			return nullptr;
@@ -230,10 +277,11 @@ namespace
 
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetStringField(TEXT("img_bytes"), RpcImage::ToBase64(Bytes));
-		O->SetNumberField(TEXT("width"), RT->SizeX);
-		O->SetNumberField(TEXT("height"), RT->SizeY);
+		O->SetNumberField(TEXT("width"), W);
+		O->SetNumberField(TEXT("height"), H);
 		O->SetStringField(TEXT("format"), bPng ? TEXT("png") : TEXT("jpg"));
 		O->SetNumberField(TEXT("camId"), CamId);
+		O->SetNumberField(TEXT("supersample"), Ss);
 		O->SetNumberField(TEXT("renderMs"), FMath::RoundToDouble(RenderMs * 10.0) / 10.0);
 		O->SetNumberField(TEXT("frameId"), static_cast<double>(FrameId));
 		O->SetNumberField(TEXT("timeMs"), CaptureTimeMs);
@@ -244,7 +292,7 @@ namespace
 		if (bWithMask)
 		{
 			TArray<uint8> MaskPng;
-			if (!RpcImage::EncodeGray8Png(Mask, RT->SizeX, RT->SizeY, MaskPng))
+			if (!RpcImage::EncodeGray8Png(Mask, W, H, MaskPng))
 			{
 				E.FailDomain(TEXT("마스크 PNG 인코딩 실패"));
 				return nullptr;

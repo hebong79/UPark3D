@@ -196,7 +196,8 @@ bool FPark3DAppConfigStreamSlotsTest::RunTest(const FString& Parameters)
 {
 	FPark3DAppConfig Ok;
 	TestTrue(TEXT("파싱 성공"), UPark3DAppConfigLibrary::FromJson(
-		TEXT(R"({"stream_slots":10,"stream_hard_max_slots":16,"stream_total_fps":12.5,"stream_main_fps":20})"), Ok));
+		TEXT(R"({"stream_slots":10,"stream_hard_max_slots":16,"stream_total_fps":12.5,"stream_main_fps":20,"capture_supersample":1})"), Ok));
+	TestEqual(TEXT("capture supersample"), Ok.CaptureSupersample, 1);
 	TestEqual(TEXT("slots"), Ok.StreamSlots, 10);
 	TestEqual(TEXT("hard max"), Ok.StreamHardMaxSlots, 16);
 	TestEqual(TEXT("total fps"), Ok.StreamTotalFps, 12.5f);
@@ -209,6 +210,7 @@ bool FPark3DAppConfigStreamSlotsTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("미지정 hard max"), None.StreamHardMaxSlots, 0);
 	TestEqual(TEXT("미지정 total fps"), None.StreamTotalFps, 0.f);
 	TestEqual(TEXT("미지정 main fps"), None.StreamMainFps, 0.f);
+	TestEqual(TEXT("미지정 capture supersample"), None.CaptureSupersample, 0);
 	TestTrue(TEXT("미지정 plate kind"), None.PlateLatestKind.IsEmpty());
 	TestTrue(TEXT("미지정 plate ratio < 0"), None.PlateLatestRatio < 0.0);
 

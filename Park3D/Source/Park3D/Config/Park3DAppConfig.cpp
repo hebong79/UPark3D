@@ -103,6 +103,10 @@ bool UPark3DAppConfigLibrary::FromJson(const FString& Json, FPark3DAppConfig& Ou
 		const float V = static_cast<float>(Num);
 		Parsed.StreamMainFps = (V > 0.f) ? V : 0.f;
 	}
+	if (Root->TryGetNumberField(TEXT("capture_supersample"), Num))
+	{
+		Parsed.CaptureSupersample = FMath::Max(0, FMath::RoundToInt32(Num));
+	}
 
 	// 번호판 종류 가중치. 값 검증(0..1, ev 금지)은 적용하는 쪽(PlateKinds::SetKindWeights)이 한다 — 틀리면 경고 후 기본값.
 	const TSharedPtr<FJsonObject>* PlateWeights = nullptr;

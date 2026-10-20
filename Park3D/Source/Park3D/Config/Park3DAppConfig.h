@@ -237,6 +237,13 @@ struct FPark3DAppConfig
 	double PlateLatestRatio = -1.0;   // double: float 이면 0.65 가 응답에 0.6499999761 로 나온다
 
 	/**
+	 * `cam.captureJPG/PNG` 슈퍼샘플 배율(보드 #1638) — `capture_supersample`. 0 이하 = 미지정(코드 기본 2), 1 = 끔.
+	 * 한 장씩 찍는 SceneCapture 는 TAA 이력이 없어 가장자리가 계단이 된다 → 작은 번호판 한글(무·모)이 LPR 에서 무너졌다.
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = "Config")
+	int32 CaptureSupersample = 0;
+
+	/**
 	 * RPC 리스너 바인드 주소. "any" = 모든 인터페이스, "localhost" = 루프백 전용. 빈 문자열 = 기본값("any").
 	 * 이 값이 곧 [HTTPServer.Listeners] 의 포트별 override 로 런타임에 등록된다 —
 	 * ini 에 포트를 박아 두면 rpc_port 를 바꿀 때마다 목록이 빗나가 조용히 루프백으로 떨어지기 때문이다.

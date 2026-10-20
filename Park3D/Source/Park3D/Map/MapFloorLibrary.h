@@ -8,6 +8,21 @@
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "MapFloorLibrary.generated.h"
 
+class FJsonObject;
+
+/**
+ * 바닥판 배치(map.setFloor) — 크기(m)·중심(UE 지면 m)·yaw(도)·표면 높이(m).
+ * 레벨별 파일 Save/3D/MapFloor/MapFloor_<레벨>.json 의 내용. C++ 전용(UPROPERTY 아님).
+ */
+struct FMapFloorPlacement
+{
+	float SizeXM = 160.f;
+	float SizeYM = 160.f;
+	FVector2D CenterM = FVector2D::ZeroVector;
+	float YawDeg = 0.f;
+	float ZM = 0.02f;
+};
+
 UCLASS()
 class PARK3D_API UMapFloorLibrary : public UBlueprintFunctionLibrary
 {
@@ -52,4 +67,10 @@ public:
 	/** JSON 파일 → 맵 크기(m). 실패 시 false(Out 미변경). */
 	UFUNCTION(BlueprintCallable, Category = "Map|Floor")
 	static bool LoadMapSizeFromJson(const FString& FilePath, float& OutWidthM, float& OutDepthM);
+
+	/** 배치 → JSON {sizeX, sizeY, center{x,y}, yaw, z} (m·도). */
+	static TSharedPtr<FJsonObject> PlacementToJson(const FMapFloorPlacement& In);
+
+	/** JSON → 배치. sizeX·sizeY 필수(크기는 클램프), 나머지는 없으면 기본값. 실패 시 false(Out 미변경). */
+	static bool PlacementFromJson(const TSharedPtr<FJsonObject>& Json, FMapFloorPlacement& Out);
 };

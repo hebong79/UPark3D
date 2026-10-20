@@ -542,6 +542,65 @@ bool FRpcMapModuleTest::RunTest(const FString& Parameters)
 		double X = 0; LR->AsObject()->TryGetNumberField(TEXT("sizeX"), X);
 		TestEqual(TEXT("load 복원 200"), (int32)X, 200);
 	}
+
+	// setFloor — 크기·중심·yaw·z 를 주고(save:false) get 으로 같은 값, 크기는 클램프.
+	TSharedPtr<FJsonObject> FP = MakeShared<FJsonObject>();
+	FP->SetNumberField(TEXT("sizeX"), 40.0);
+	FP->SetNumberField(TEXT("sizeY"), 5.0);
+	TSharedPtr<FJsonObject> C = MakeShared<FJsonObject>(); C->SetNumberField(TEXT("x"), 12.0); C->SetNumberField(TEXT("y"), -3.5);
+	FP->SetObjectField(TEXT("center"), C);
+	FP->SetNumberField(TEXT("yaw"), 30.0);
+	FP->SetNumberField(TEXT("z"), 0.15);
+	FP->SetBoolField(TEXT("save"), false);
+	TSharedPtr<FJsonValue> FR;
+	TestTrue(TEXT("map.setFloor 성공"), Dispatch(TEXT("map.setFloor"), FP, FR));
+	if (FR.IsValid() && FR->Type == EJson::Object)
+	{
+		TestEqual(TEXT("setFloor zSource param"), FR->AsObject()->GetStringField(TEXT("zSource")), FString(TEXT("param")));
+		TestFalse(TEXT("save:false 면 저장 안 함"), FR->AsObject()->GetBoolField(TEXT("saved")));
+	}
+	TestTrue(TEXT("map.get 성공(2)"), Dispatch(TEXT("map.get"), nullptr, GR));
+	if (GR.IsValid() && GR->Type == EJson::Object)
+	{
+		const TSharedPtr<FJsonObject> G = GR->AsObject();
+		TestTrue(TEXT("exists"), G->GetBoolField(TEXT("exists")));
+		TestEqual(TEXT("sizeX 40"), G->GetNumberField(TEXT("sizeX")), 40.0, 1e-3);
+		TestEqual(TEXT("sizeY 하한 10"), G->GetNumberField(TEXT("sizeY")), 10.0, 1e-3);
+		TestEqual(TEXT("sizeZ = sizeY"), G->GetNumberField(TEXT("sizeZ")), 10.0, 1e-3);
+		TestEqual(TEXT("center.x 12"), G->GetObjectField(TEXT("center"))->GetNumberField(TEXT("x")), 12.0, 1e-3);
+		TestEqual(TEXT("center.y -3.5"), G->GetObjectField(TEXT("center"))->GetNumberField(TEXT("y")), -3.5, 1e-3);
+		TestEqual(TEXT("yaw 30"), G->GetNumberField(TEXT("yaw")), 30.0, 1e-3);
+		TestEqual(TEXT("z 0.15"), G->GetNumberField(TEXT("z")), 0.15, 1e-4);
+	}
+
+	// 바닥이 있으면 크기 생략 = 유지, yaw 만 바꾼다.
+	TSharedPtr<FJsonObject> YP = MakeShared<FJsonObject>();
+	YP->SetNumberField(TEXT("yaw"), -45.0); YP->SetNumberField(TEXT("z"), 0.15); YP->SetBoolField(TEXT("save"), false);
+	TestTrue(TEXT("map.setFloor yaw 만"), Dispatch(TEXT("map.setFloor"), YP, FR));
+	if (FR.IsValid() && FR->Type == EJson::Object)
+	{
+		TestEqual(TEXT("크기 유지 40"), FR->AsObject()->GetNumberField(TEXT("sizeX")), 40.0, 1e-3);
+		TestEqual(TEXT("yaw -45"), FR->AsObject()->GetNumberField(TEXT("yaw")), -45.0, 1e-3);
+	}
+
+	// clearFloor(keepFile) → 원경 없는 판은 제거, get 은 스폰하지 않고 exists:false. 그 상태에서 크기 없는 setFloor 는 거절.
+	TSharedPtr<FJsonObject> CP = MakeShared<FJsonObject>(); CP->SetBoolField(TEXT("keepFile"), true);
+	TSharedPtr<FJsonValue> CR;
+	TestTrue(TEXT("map.clearFloor 성공"), Dispatch(TEXT("map.clearFloor"), CP, CR));
+	if (AMapFloorActor* Left = AMapFloorActor::Find(World))
+	{
+		// 테스트 월드가 원경 있는 바닥(기본맵 규약)을 갖고 있었다면 제거가 아니라 원점 복귀다.
+		TestTrue(TEXT("남은 바닥은 원경 있는 바닥"), Left->IsBackdropVisible());
+	}
+	else
+	{
+		TestTrue(TEXT("map.get 성공(3)"), Dispatch(TEXT("map.get"), nullptr, GR));
+		TestFalse(TEXT("제거 후 exists:false"), GR->AsObject()->GetBoolField(TEXT("exists")));
+		TestNull(TEXT("get 이 스폰하지 않음"), AMapFloorActor::Find(World));
+		TSharedPtr<FJsonValue> NR;
+		FRpcError NE;
+		TestFalse(TEXT("바닥 없을 때 크기 없는 setFloor 거절"), D->Dispatch(TEXT("map.setFloor"), YP, NR, NE));
+	}
 	return true;
 }
 

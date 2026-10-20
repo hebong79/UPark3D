@@ -93,7 +93,8 @@ AMapFloorActor* FRpcModuleBase::GetMapFloor(FRpcError& OutError) const
 		OutError.FailDomain(TEXT("월드 컨텍스트 없음"));
 		return nullptr;
 	}
-	AMapFloorActor* Floor = AMapFloorActor::GetOrSpawn(W);
+	// 레벨 노면이 있는 주차장(바닥 없음)에서 새로 깔 때는 원경 지면을 숨긴다 — 20 km 판이 지형을 덮지 않게.
+	AMapFloorActor* Floor = AMapFloorActor::GetOrSpawn(W, /*bBackdropIfSpawned=*/false);
 	if (!Floor)
 	{
 		OutError.FailDomain(TEXT("맵 바닥 액터를 찾거나 생성할 수 없습니다"));

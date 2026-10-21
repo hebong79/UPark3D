@@ -476,6 +476,7 @@ namespace ParkSimLot
 			S.PresetIdx = I.PresetIdx;
 			S.SlotId = I.SlotId;
 			S.Center = FVector2D(I.Center.X, I.Center.Y) / 100.0;
+			S.FloorZ = I.Center.Z / 100.0;
 			S.Axis = FVector2D(I.AxisDir.X, I.AxisDir.Y).GetSafeNormal();
 			if (S.Axis.IsNearlyZero()) { S.Axis = FVector2D(1, 0); }
 			S.LengthM = I.LengthCm > 1.f ? I.LengthCm / 100.0 : 5.0;

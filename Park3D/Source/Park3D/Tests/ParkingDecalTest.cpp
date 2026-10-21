@@ -8,6 +8,8 @@
 #include "../ParkingPresetManager.h"
 #include "../ParkingPresetTypes.h"
 #include "../PresetMakerWidget.h"
+#include "../Sim/ParkSimLot.h"
+#include "EngineUtils.h"
 #include "Components/DecalComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Engine/World.h"
@@ -733,6 +735,71 @@ bool FParkingSlotNumberTest::RunTest(const FString& Parameters)
 	}
 
 	Mgr->Destroy();
+	return true;
+}
+
+// ===== sim.slots 면 높이(보드 #1718) =====
+// ParkSimLot::CollectSlots 가 면 중심 높이를 버리지 않는지 — 바닥 번호 목록(preset.numbers 백엔드)의 Z 와 같아야 한다.
+// 서신(LV_Park_01) 레벨 면은 z=0.101 m 인데 sim.slots 가 0 을 내서 판정 ROI 가 페인트보다 아래로 그려졌다.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FParkSimLotFloorZTest,
+	"Park3D.Sim.SlotsFloorZ",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FParkSimLotFloorZTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = (GEngine && GEngine->GetWorldContexts().Num() > 0) ? GWorld : nullptr;
+	if (!World)
+	{
+		AddWarning(TEXT("에디터 월드 없음 — sim.slots 높이 테스트 건너뜀."));
+		return true;
+	}
+
+	// CollectSlots 는 GetOrSpawn 으로 매니저를 찾는다 → 같은 매니저에 프리셋을 넣고 끝나면 되돌린다.
+	bool bHadManager = false;
+	for (TActorIterator<AParkingPresetManager> It(World); It; ++It) { bHadManager = true; break; }
+	AParkingPresetManager* Mgr = AParkingPresetManager::GetOrSpawn(World);
+	if (!TestNotNull(TEXT("매니저(SlotsFloorZ)"), Mgr)) return false;
+	const TArray<FParkingPreset> SavedPresets = Mgr->StoredPresets;
+
+	// 레벨 면과 겹치지 않는 먼 자리, 바닥보다 0.3 m 높게.
+	FParkingPreset P;
+	P.PresetIdx = 7;
+	P.FaceCount = 3;
+	P.BoxSizeX = 2.5f;
+	P.BoxSizeZ = 5.0f;
+	P.Offset = FVector(500.f, 500.f, 0.3f);
+	Mgr->StoredPresets = { P };
+
+	TArray<FParkingSlotNumberInfo> Infos;
+	Mgr->CollectSlotNumbers(Mgr->ResolvePresets(), Infos);
+	TArray<FParkSimLotSlot> Slots;
+	ParkSimLot::CollectSlots(World, Slots);
+	TestEqual(TEXT("FZ-1 면 수 = 바닥 번호 수"), Slots.Num(), Infos.Num());
+
+	int32 PresetFaces = 0, LevelFaces = 0;
+	for (const FParkSimLotSlot& S : Slots)
+	{
+		const FParkingSlotNumberInfo* I = Infos.FindByPredicate([&S](const FParkingSlotNumberInfo& X) { return X.FaceKey() == S.FaceKey; });
+		if (!TestNotNull(*FString::Printf(TEXT("FZ-2 %s 가 바닥 번호 목록에 있다"), *S.FaceKey), I)) continue;
+		TestEqual(*FString::Printf(TEXT("FZ-2 %s FloorZ = 바닥 번호 Z/100"), *S.FaceKey), S.FloorZ, I->Center.Z / 100.0, 1e-4);
+		if (S.bFromPreset)
+		{
+			++PresetFaces;
+			TestTrue(*FString::Printf(TEXT("FZ-3 %s 프리셋 면은 0.3 m 근처(got %.3f)"), *S.FaceKey, S.FloorZ), S.FloorZ > 0.2);
+		}
+		else
+		{
+			++LevelFaces;
+		}
+	}
+	TestEqual(TEXT("FZ-3 프리셋 면 3개"), PresetFaces, 3);
+	if (LevelFaces == 0)
+	{
+		AddInfo(TEXT("에디터 월드에 레벨 면 없음 — 레벨 면 높이는 실기(sim.slots)로 확인."));
+	}
+
+	Mgr->StoredPresets = SavedPresets;
+	if (!bHadManager) { Mgr->Destroy(); }
 	return true;
 }
 

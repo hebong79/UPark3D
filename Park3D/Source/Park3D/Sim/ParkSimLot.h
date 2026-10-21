@@ -24,6 +24,7 @@ struct FParkSimLotSlot
 	int32 SlotId = -1;
 
 	FVector2D Center = FVector2D::ZeroVector;
+	double FloorZ = 0.0;                   // 면 중심 높이(월드 미터) — 레벨 면은 ISM 인스턴스 Z(서신 0.101)
 	FVector2D Axis = FVector2D(1, 0);      // 긴 변 방향(단위)
 	double LengthM = 5.0;
 	double WidthM = 2.5;

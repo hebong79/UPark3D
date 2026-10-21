@@ -36,7 +36,8 @@ namespace
 		O->SetStringField(TEXT("lotType"), ParkPlan::LotTypeName(S.Type));
 		O->SetStringField(TEXT("lotTypeLabel"), ParkPlan::LotTypeLabel(S.Type));
 		O->SetNumberField(TEXT("angleDeg"), S.AngleDeg);
-		O->SetObjectField(TEXT("center"), RpcDto::Vec3(S.Center.X, S.Center.Y, 0.0));
+		// z = 면의 실제 바닥 높이(preset.numbers pos.z 와 같다). 0 으로 내면 판정 ROI 가 페인트보다 아래로 그려진다(보드 #1718).
+		O->SetObjectField(TEXT("center"), RpcDto::Vec3(S.Center.X, S.Center.Y, S.FloorZ));
 		O->SetNumberField(TEXT("axisYaw"), SimYawOf(S.Axis));
 		O->SetNumberField(TEXT("rowYaw"), SimYawOf(S.RowDir));
 		O->SetNumberField(TEXT("aisleYaw"), SimYawOf(S.AisleDir));
@@ -560,7 +561,7 @@ void FSimRpcModule::Register(URpcDispatcher& Dispatcher)
 		return RpcDto::MakeObject(O);
 	});
 	Dispatcher.SetMethodMeta(TEXT("sim.slots"), { false, false, TEXT(""),
-		TEXT("주행용 주차면 목록(프리셋 면 + 레벨 면, 바닥 번호와 같다). {count, occupiedCount, slots[{number, faceKey, source, lotType, angleDeg, center, axisYaw, rowYaw, aisleYaw, lengthM, widthM, aisleWidthM(0=맞은편 줄 없음), occupied, carNameId}], entrance, exit}") });
+		TEXT("주행용 주차면 목록(프리셋 면 + 레벨 면, 바닥 번호와 같다). {count, occupiedCount, slots[{number, faceKey, source, lotType, angleDeg, center(z=면 바닥 높이), axisYaw, rowYaw, aisleYaw, lengthM, widthM, aisleWidthM(0=맞은편 줄 없음), occupied, carNameId}], entrance, exit}") });
 
 	// 입구·출구 조회 / 지정.
 	Dispatcher.Register(TEXT("sim.gates"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>

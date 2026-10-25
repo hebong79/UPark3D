@@ -37,6 +37,14 @@ APTZCameraActor::APTZCameraActor()
 	// 엔진(USceneCaptureComponent::GetViewState)이 뷰 스테이트를 파괴해 Lumen GI/리플렉션/TSR
 	// 히스토리가 사라진다 — /stream 만 간접광이 빠져 어둡고 갈색으로 보이던 원인.
 	Capture->bAlwaysPersistRenderingState = true;
+	// UE 5.8 USceneCaptureComponent2D 생성자가 ShowFlags.TemporalAA 를 끈다(SceneCaptureComponent.cpp:684-686)
+	// → 스트림이 FXAA 로 떨어져 Lumen/VSM 프레임 잡음이 그대로 나가 지글거렸다(보드 #1764·#1765).
+	// ShowFlags 만 켜면 OnRegister 의 UpdateShowFlags() 가 아키타입 값으로 되돌리므로 ShowFlagSettings 에도 넣는다.
+	FEngineShowFlagsSetting TemporalAASetting;
+	TemporalAASetting.ShowFlagName = TEXT("TemporalAA");
+	TemporalAASetting.Enabled = true;
+	Capture->ShowFlagSettings.Add(TemporalAASetting);
+	Capture->ShowFlags.SetTemporalAA(true);
 	Capture->FOVAngle = DefaultHFov;       // zoom=1 기준(설계 §7.3)
 
 	// 폴대: 바닥 Z=0 시각 표시. 높이(Z)·팬틸트(회전)를 상속하지 않도록 절대 위치/회전 사용.
@@ -85,7 +93,13 @@ void APTZCameraActor::SetCameraWorldLocation(float X_ue, float Y_ue, float Heigh
 {
 	if (Root)
 	{
-		Root->SetWorldLocation(FVector(X_ue, Y_ue, HeightZ_ue));
+		const FVector NewLoc(X_ue, Y_ue, HeightZ_ue);
+		// 위치가 바뀌면 TSR 히스토리를 버린다(옛 자리 그림이 번지는 고스팅 방지). 같은 값 재지정은 컷 아님.
+		if (Capture && !Root->GetComponentLocation().Equals(NewLoc, 1.0))
+		{
+			Capture->bCameraCutThisFrame = true;
+		}
+		Root->SetWorldLocation(NewLoc);
 	}
 	UpdatePolePosition();
 }
@@ -95,7 +109,14 @@ void APTZCameraActor::SetPanTilt(float Pan, float Tilt)
 	// 회전은 Capture 에만 적용(Root 는 미회전 → 폴대 수직 유지). Root 미회전이므로 relative==world.
 	if (Capture)
 	{
-		Capture->SetRelativeRotation(UCameraControlLibrary::PanTiltToRotator(Pan, Tilt));
+		const FRotator NewRot = UCameraControlLibrary::PanTiltToRotator(Pan, Tilt);
+		// 프리셋 호출·큰 cam.setPTZ 점프는 컷, 연속 PTZ 추적(호출당 작은 변화)은 히스토리 유지(엔진도 75° 넘으면 자체 컷).
+		const FQuat Delta = Capture->GetRelativeRotation().Quaternion().Inverse() * NewRot.Quaternion();
+		if (FMath::RadiansToDegrees(Delta.GetAngle()) > CameraCutAngleDeg)
+		{
+			Capture->bCameraCutThisFrame = true;
+		}
+		Capture->SetRelativeRotation(NewRot);
 	}
 }
 
@@ -104,7 +125,13 @@ void APTZCameraActor::SetZoom(float Zoom)
 	// UE FOVAngle 은 이미 수평 화각 → 라이브러리 값 직접 대입(aspect 변환 불필요, 설계 §7.3).
 	if (Capture)
 	{
-		Capture->FOVAngle = UCameraControlLibrary::ZoomToHFov(Zoom, MaxZoom, DefaultHFov);
+		const float NewFov = UCameraControlLibrary::ZoomToHFov(Zoom, MaxZoom, DefaultHFov);
+		// 줌 단계 이동(화각 비 변화가 큼)은 컷 — 배율이 다른 히스토리를 재투영하면 번진다.
+		if (FMath::Abs(NewFov / FMath::Max(Capture->FOVAngle, 0.01f) - 1.f) > CameraCutFovRatio)
+		{
+			Capture->bCameraCutThisFrame = true;
+		}
+		Capture->FOVAngle = NewFov;
 	}
 }
 
@@ -395,7 +422,11 @@ UTextureRenderTarget2D* APTZCameraActor::CaptureAtSize(int32 W, int32 H)
 	}
 
 	// CaptureInto 가 타깃을 바꿔 찍고 RenderTarget 으로 되돌린다 — 스트림에 섞이지 않는다.
+	// 크기가 다른 단발(번호판 판독·#1638 슈퍼샘플)은 예전처럼 TemporalAA 없이 찍는다 — 히스토리 없는 TSR 첫 프레임이 되지 않고
+	// 스트림 크기의 TSR 히스토리도 건드리지 않게(보드 #1765 항목 4). 같은 크기는 위 CaptureOnce = 스트림 프레임 그대로.
+	Capture->ShowFlags.SetTemporalAA(false);
 	CaptureInto(SizedCaptureTarget);
+	Capture->ShowFlags.SetTemporalAA(true);
 	return SizedCaptureTarget;
 }
 

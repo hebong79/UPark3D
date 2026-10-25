@@ -56,6 +56,32 @@ bool FPTZCameraCapturePersistStateTest::RunTest(const FString& Parameters)
 		static_cast<int32>(Cam->Capture->CaptureSource),
 		static_cast<int32>(ESceneCaptureSource::SCS_FinalColorLDR));
 
+	// 5) 등록 뒤에도 TemporalAA 가 켜져 있다 — 엔진 생성자가 끄고 UpdateShowFlags 가 되돌리므로 ShowFlagSettings 로 지킨다(보드 #1765).
+	//    꺼지면 스트림이 FXAA 로 떨어져 Lumen/VSM 잡음이 프레임마다 지글거린다.
+	//    SpawnActor 가 이미 RegisterComponent(→ UpdateShowFlags)를 거쳤으므로 이 값이 곧 "등록 뒤" 값이다.
+	TestTrue(TEXT("등록 뒤 ShowFlags.TemporalAA=true"), Cam->Capture->ShowFlags.TemporalAA != 0);
+	const bool bSettingKept = Cam->Capture->ShowFlagSettings.ContainsByPredicate([](const FEngineShowFlagsSetting& S)
+		{ return S.ShowFlagName == TEXT("TemporalAA") && S.Enabled; });
+	TestTrue(TEXT("ShowFlagSettings 에 TemporalAA=true(UpdateShowFlags 가 다시 적용)"), bSettingKept);
+
+	// 6) 카메라 컷: 작은 PTZ 변화는 히스토리 유지, 큰 점프·줌 단계·위치 이동은 컷.
+	Cam->SetPanTilt(0.f, 30.f);
+	Cam->SetZoom(1.f);
+	Cam->Capture->bCameraCutThisFrame = false;
+	Cam->SetPanTilt(2.f, 31.f);
+	TestFalse(TEXT("작은 팬틸트 변화는 컷 아님"), Cam->Capture->bCameraCutThisFrame);
+	Cam->SetPanTilt(90.f, 31.f);
+	TestTrue(TEXT("88° 점프는 컷"), Cam->Capture->bCameraCutThisFrame);
+	Cam->Capture->bCameraCutThisFrame = false;
+	Cam->SetZoom(4.f);
+	TestTrue(TEXT("줌 1→4 는 컷"), Cam->Capture->bCameraCutThisFrame);
+	Cam->Capture->bCameraCutThisFrame = false;
+	const FVector L = Cam->Root->GetComponentLocation();
+	Cam->SetCameraWorldLocation(L.X, L.Y, L.Z);
+	TestFalse(TEXT("같은 위치 재지정은 컷 아님"), Cam->Capture->bCameraCutThisFrame);
+	Cam->SetCameraWorldLocation(L.X + 500.f, L.Y, L.Z);
+	TestTrue(TEXT("위치 이동은 컷"), Cam->Capture->bCameraCutThisFrame);
+
 	Cam->Destroy();
 	return true;
 }

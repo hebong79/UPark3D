@@ -29,6 +29,269 @@
 DEFINE_LOG_CATEGORY_STATIC(LogCamStreamSub, Log, All);
 
 //======================================================================================
+// 비동기 리드백 렌더 스레드 단계 — 메인 뷰 링과 카메라 채널 링(보드 #1766)이 함께 쓴다.
+// 이름공간은 유니티 빌드에서 다른 .cpp 의 익명 함수와 부딪히지 않게 붙였다(C2084 전례).
+//======================================================================================
+namespace CamStreamReadback
+{
+	using FSlotPtr = TSharedPtr<FCamStreamMainReadback, ESPMode::ThreadSafe>;
+
+	/** Res 의 GPU→CPU 복사를 건다. CaptureScene() 뒤에 부르면 렌더 커맨드 순서상 항상 캡처 "뒤에" 실행된다. */
+	static void EnqueueCopy(const FSlotPtr& State, FTextureRenderTargetResource* Res, FName DebugName)
+	{
+		ENQUEUE_RENDER_COMMAND(Park3DCamStreamReadbackEnqueue)(
+			[State, Res, DebugName](FRHICommandListImmediate& RHICmdList)
+			{
+				{
+					FScopeLock Lock(&State->Mutex);
+					if (State->bAbandoned)
+					{
+						return;
+					}
+				}
+
+				FRHITexture* Source = Res->GetRenderTargetTexture();
+				if (!Source)
+				{
+					// 실패를 Pending 으로 남기면 스트림이 조용히 멈춘다. 게임 스레드가 수거하도록 Ready 로 올린다.
+					FScopeLock Lock(&State->Mutex);
+					State->bFailed = true;
+					State->Stage = FCamStreamMainReadback::EStage::Ready;
+					return;
+				}
+
+				if (!State->Readback)
+				{
+					State->Readback = new FRHIGPUTextureReadback(DebugName);
+				}
+
+				// 복사 전후로 소스 상태를 명시한다. 스테이징 쪽 전이는 EnqueueCopy 가 스스로 처리한다.
+				RHICmdList.Transition(FRHITransitionInfo(Source, ERHIAccess::Unknown, ERHIAccess::CopySrc));
+				State->Readback->EnqueueCopy(RHICmdList, Source, FIntVector::ZeroValue, 0, FIntVector::ZeroValue);
+				RHICmdList.Transition(FRHITransitionInfo(Source, ERHIAccess::CopySrc, ERHIAccess::SRVMask));
+			});
+	}
+
+	/** 슬롯 1개가 끝났는지 렌더 스레드에서 확인시킨다. 끝났으면 픽셀까지 복사해 Ready 로 올린다. */
+	static void EnqueuePoll(const FSlotPtr& State)
+	{
+		ENQUEUE_RENDER_COMMAND(Park3DCamStreamReadbackPoll)(
+			[State](FRHICommandListImmediate& RHICmdList)
+			{
+				{
+					FScopeLock Lock(&State->Mutex);
+					if (State->bAbandoned || State->Stage != FCamStreamMainReadback::EStage::Pending)
+					{
+						return;
+					}
+				}
+
+				if (!State->Readback || !State->Readback->IsReady())
+				{
+					return;   // 아직 GPU 가 끝나지 않았다. 다음 틱에 다시 본다.
+				}
+
+				int32 RowPitchInPixels = 0;
+				int32 BufferHeight = 0;
+				const FColor* Src = static_cast<const FColor*>(State->Readback->Lock(RowPitchInPixels, &BufferHeight));
+
+				const int32 W = State->Width;
+				const int32 H = State->Height;
+
+				// row pitch(행 간격)는 폭보다 클 수 있다 — GPU 가 행 시작을 정렬 경계에 맞추기 때문이다.
+				// 이걸 무시하고 버퍼를 통째로 넘기면 행마다 시작점이 밀려 영상이 비스듬해진다.
+				if (!Src || RowPitchInPixels < W || W <= 0 || H <= 0)
+				{
+					if (Src)
+					{
+						State->Readback->Unlock();
+					}
+					FScopeLock Lock(&State->Mutex);
+					State->bFailed = true;
+					State->Stage = FCamStreamMainReadback::EStage::Ready;   // 게임 스레드가 실패를 수거하게 한다
+					return;
+				}
+
+				TArray<FColor> Pixels;
+				Pixels.SetNumUninitialized(W * H);
+
+				// 스테이징 버퍼 높이가 요청보다 작을 이유는 없지만, 작으면 남는 행을 검게 채운다
+				// (초기화되지 않은 메모리를 인코더에 넘기지 않기 위해서다).
+				const int32 CopyH = (BufferHeight > 0) ? FMath::Min(H, BufferHeight) : H;
+				for (int32 Y = 0; Y < CopyH; ++Y)
+				{
+					FMemory::Memcpy(Pixels.GetData() + Y * W, Src + Y * RowPitchInPixels, W * sizeof(FColor));
+				}
+				if (CopyH < H)
+				{
+					FMemory::Memzero(Pixels.GetData() + CopyH * W, (H - CopyH) * sizeof(FColor));
+				}
+
+				State->Readback->Unlock();
+
+				FScopeLock Lock(&State->Mutex);
+				State->Pixels = MoveTemp(Pixels);
+				State->Stage = FCamStreamMainReadback::EStage::Ready;
+			});
+	}
+
+	/** 게임 스레드가 놓은 슬롯을 정리한다 — 마지막 참조를 렌더 커맨드가 쥐고 앞선 복사·폴링 뒤에 파괴한다. */
+	static void Abandon(FSlotPtr State)
+	{
+		{
+			FScopeLock Lock(&State->Mutex);
+			State->bAbandoned = true;
+			State->Stage = FCamStreamMainReadback::EStage::Idle;
+			State->Pixels.Empty();
+		}
+		ENQUEUE_RENDER_COMMAND(Park3DCamStreamReadbackRelease)(
+			[State](FRHICommandListImmediate&)
+			{
+				if (State->Readback)
+				{
+					delete State->Readback;
+					State->Readback = nullptr;
+				}
+			});
+	}
+}
+
+//======================================================================================
+// 카메라 채널 리드백 링(보드 #1766) — 메인 뷰 링과 같은 규약
+//======================================================================================
+bool FCamStreamReadbackRing::HasFreeSlot(int32 N) const
+{
+	if (Slots.Num() != N || !Slots.IsValidIndex(Write) || !Slots[Write].IsValid())
+	{
+		return true;   // 아직 링을 안 잡았거나 한 번도 안 쓴 슬롯 — Request 가 잡는다.
+	}
+	FScopeLock Lock(&Slots[Write]->Mutex);
+	return Slots[Write]->Stage == FCamStreamMainReadback::EStage::Idle;
+}
+
+int32 FCamStreamReadbackRing::InFlight() const
+{
+	int32 Count = 0;
+	for (const CamStreamReadback::FSlotPtr& Slot : Slots)
+	{
+		if (!Slot.IsValid())
+		{
+			continue;
+		}
+		FScopeLock Lock(&Slot->Mutex);
+		if (Slot->Stage != FCamStreamMainReadback::EStage::Idle)
+		{
+			++Count;
+		}
+	}
+	return Count;
+}
+
+bool FCamStreamReadbackRing::Request(int32 N, FTextureRenderTargetResource* Res, int32 W, int32 H, int64 SceneSeq)
+{
+	N = FMath::Max(1, N);
+	if (Slots.Num() != N)
+	{
+		// 깊이가 바뀌었다 — 크기를 살린 채 늘리면 Read/Write 의 의미가 어긋나 순서가 뒤집힌다.
+		Release();
+		Slots.SetNum(N);
+	}
+
+	CamStreamReadback::FSlotPtr& Ref = Slots[Write];
+	if (!Ref.IsValid())
+	{
+		Ref = MakeShared<FCamStreamMainReadback, ESPMode::ThreadSafe>();
+	}
+	const CamStreamReadback::FSlotPtr State = Ref;
+	{
+		FScopeLock Lock(&State->Mutex);
+		if (State->Stage != FCamStreamMainReadback::EStage::Idle)
+		{
+			return false;
+		}
+		State->Width = W;
+		State->Height = H;
+		State->Pixels.Reset();
+		State->bFailed = false;
+		State->Stage = FCamStreamMainReadback::EStage::Pending;
+	}
+	State->SceneSeq = SceneSeq;
+	Write = (Write + 1) % N;
+
+	CamStreamReadback::EnqueueCopy(State, Res, TEXT("Park3DCamStreamReadback"));
+	return true;
+}
+
+void FCamStreamReadbackRing::Poll(int32 W, int32 H)
+{
+	// 렌더타깃 크기가 바뀌었으면 진행 중인 요청을 전부 버린다(스테이징 크기가 슬롯마다 달라지면 못 맞춘다).
+	for (const CamStreamReadback::FSlotPtr& Slot : Slots)
+	{
+		if (Slot.IsValid() && (Slot->Width != 0 || Slot->Height != 0) && (Slot->Width != W || Slot->Height != H))
+		{
+			Release();
+			return;
+		}
+	}
+	for (const CamStreamReadback::FSlotPtr& Slot : Slots)
+	{
+		if (!Slot.IsValid())
+		{
+			continue;
+		}
+		{
+			FScopeLock Lock(&Slot->Mutex);
+			if (Slot->Stage != FCamStreamMainReadback::EStage::Pending)
+			{
+				continue;
+			}
+		}
+		CamStreamReadback::EnqueuePoll(Slot);
+	}
+}
+
+bool FCamStreamReadbackRing::TakeReady(TArray<FColor>& OutPixels, int32& OutW, int32& OutH, int64& OutSceneSeq)
+{
+	if (!Slots.IsValidIndex(Read) || !Slots[Read].IsValid())
+	{
+		return false;
+	}
+	const CamStreamReadback::FSlotPtr State = Slots[Read];
+	bool bFailed = false;
+	{
+		FScopeLock Lock(&State->Mutex);
+		if (State->Stage != FCamStreamMainReadback::EStage::Ready)
+		{
+			return false;   // 아직 진행 중 — 실패가 아니라 "이번 틱은 프레임이 없다".
+		}
+		bFailed = State->bFailed;
+		OutW = State->Width;
+		OutH = State->Height;
+		OutPixels = MoveTemp(State->Pixels);
+		OutSceneSeq = State->SceneSeq;
+		State->bFailed = false;
+		State->Stage = FCamStreamMainReadback::EStage::Idle;   // 리드백 객체는 재사용한다
+	}
+	Read = (Read + 1) % Slots.Num();
+	return !bFailed && OutW > 0 && OutH > 0 && OutPixels.Num() == OutW * OutH;
+}
+
+void FCamStreamReadbackRing::Release()
+{
+	for (CamStreamReadback::FSlotPtr& SlotRef : Slots)
+	{
+		if (SlotRef.IsValid())
+		{
+			CamStreamReadback::Abandon(SlotRef);
+			SlotRef.Reset();
+		}
+	}
+	Slots.Reset();
+	Write = 0;
+	Read = 0;
+}
+
+//======================================================================================
 // 수명
 //======================================================================================
 bool UCamStreamSubsystem::DoesSupportWorldType(const EWorldType::Type WorldType) const
@@ -172,6 +435,7 @@ void UCamStreamSubsystem::StopAllChannels()
 {
 	for (FCamStreamChannel& Ch : Channels)
 	{
+		Ch.Readback.Release();
 		if (Ch.Server)
 		{
 			Ch.Server->StopServer();
@@ -229,6 +493,7 @@ void UCamStreamSubsystem::SyncChannels(ACameraControlManager* Mgr)
 		{
 			continue;
 		}
+		Channels[Index].Readback.Release();
 		if (Channels[Index].Server)
 		{
 			Channels[Index].Server->StopServer();
@@ -408,30 +673,63 @@ void UCamStreamSubsystem::Tick(float DeltaTime)
 		// (연결은 유지된다. 클라이언트 화면엔 마지막 프레임이 남는다.)
 		if (!Ch.Server || !Ch.bHoldsSlot || !Ch.Server->HasClients())
 		{
+			Ch.Readback.Release();   // 안 그리는 채널은 스테이징 버퍼를 들고 있지 않는다(비어 있으면 공짜)
 			continue;
 		}
 
 		Ch.Accum += DeltaTime;
 		Ch.FpsWindowAccum += DeltaTime;
 
-		// 만기지만 이 틱의 몫이 다 찼으면 Accum 을 그대로 두고 넘긴다 — 다음 틱에 잡힌다.
-		if (Ch.Accum >= Interval && CapturesLeft > 0)
+		APTZCameraActor* Cam = Mgr ? Mgr->GetCamera(Ch.CamId - 1) : nullptr;
+
+		// 1) 걸어둔 리드백이 끝났으면 페이싱과 무관하게 바로 내보낸다(GPU 는 이미 끝났다). 틱당 1장.
+		if (Cam && Cam->RenderTarget)
 		{
-			--CapturesLeft;
-			// 다음 틱은 이 채널 다음부터 훑는다(항상 0번부터면 뒤 채널이 굶는다).
-			NextCursor = (Index + 1) % ChannelNum;
-
-			// 잔여 시간을 보존해야 실효 fps 가 목표에 수렴한다(0 리셋은 틱 경계로 양자화되어 항상 미달).
-			// 게임 fps < 목표인 구간에서 부채가 무한 누적되지 않도록 한 프레임치로 클램프.
-			Ch.Accum = FMath::Min(Ch.Accum - Interval, Interval);
-
-			APTZCameraActor* Cam = Mgr ? Mgr->GetCamera(Ch.CamId - 1) : nullptr;
+			Ch.Readback.Poll(Cam->RenderTarget->SizeX, Cam->RenderTarget->SizeY);
+		}
+		{
+			TArray<FColor> Pixels;
+			int32 W = 0, H = 0;
+			int64 Seq = -1;
 			TArray<uint8> Jpeg;
-			const int64 Seq = Park3DRpc::SceneSeq();   // ProduceJpeg 은 동기 렌더 — 지금까지의 변경이 다 들어간다
-			if (Cam && ProduceJpeg(Cam, Jpeg))
+			if (Ch.Readback.TakeReady(Pixels, W, H, Seq)
+				&& RpcImage::EncodeColors(Pixels, W, H, /*bPng=*/false, JpegQuality, Jpeg))
 			{
 				Ch.Server->UpdateFrame(Jpeg, Seq);
 				++Ch.FpsWindowFrames;
+			}
+		}
+
+		// 2) 만기지만 이 틱의 몫이 다 찼으면 Accum 을 그대로 두고 넘긴다 — 다음 틱에 잡힌다.
+		if (Ch.Accum >= Interval && CapturesLeft > 0)
+		{
+			if (!Ch.Readback.HasFreeSlot(ChannelReadbackSlots))
+			{
+				// 슬롯이 전부 GPU 를 기다리는 중 — 더 걸면 지연만 쌓인다. 부채 없이 다음 틱에 다시 본다(메인 뷰와 같은 규약).
+				Ch.Accum = Interval;
+				++Ch.Readback.SkippedNoSlot;
+			}
+			else
+			{
+				--CapturesLeft;
+				// 다음 틱은 이 채널 다음부터 훑는다(항상 0번부터면 뒤 채널이 굶는다).
+				NextCursor = (Index + 1) % ChannelNum;
+
+				// 잔여 시간을 보존해야 실효 fps 가 목표에 수렴한다(0 리셋은 틱 경계로 양자화되어 항상 미달).
+				// 게임 fps < 목표인 구간에서 부채가 무한 누적되지 않도록 한 프레임치로 클램프.
+				Ch.Accum = FMath::Min(Ch.Accum - Interval, Interval);
+
+				if (Cam && !RequestChannelCapture(Cam, Ch))
+				{
+					// 비동기를 못 거는 렌더타깃(BGRA8 아님)이면 예전 동기 경로로 — 화면이 멈추는 것보다 낫다.
+					TArray<uint8> Jpeg;
+					const int64 Seq = Park3DRpc::SceneSeq();
+					if (ProduceJpeg(Cam, Jpeg))
+					{
+						Ch.Server->UpdateFrame(Jpeg, Seq);
+						++Ch.FpsWindowFrames;
+					}
+				}
 			}
 		}
 
@@ -916,37 +1214,7 @@ bool UCamStreamSubsystem::RequestMainCapture()
 	MainRingWrite = (MainRingWrite + 1) % MainReadbackRing.Num();
 
 	// CaptureScene() 이 이미 렌더 커맨드를 넣었으므로, 뒤이어 넣는 이 커맨드는 항상 캡처 "뒤에" 실행된다.
-	ENQUEUE_RENDER_COMMAND(Park3DMainViewReadbackEnqueue)(
-		[State, Res](FRHICommandListImmediate& RHICmdList)
-		{
-			{
-				FScopeLock Lock(&State->Mutex);
-				if (State->bAbandoned)
-				{
-					return;
-				}
-			}
-
-			FRHITexture* Source = Res->GetRenderTargetTexture();
-			if (!Source)
-			{
-				// 실패를 Pending 으로 남기면 스트림이 조용히 멈춘다. 게임 스레드가 수거하도록 Ready 로 올린다.
-				FScopeLock Lock(&State->Mutex);
-				State->bFailed = true;
-				State->Stage = FCamStreamMainReadback::EStage::Ready;
-				return;
-			}
-
-			if (!State->Readback)
-			{
-				State->Readback = new FRHIGPUTextureReadback(TEXT("Park3DMainViewReadback"));
-			}
-
-			// 복사 전후로 소스 상태를 명시한다. 스테이징 쪽 전이는 EnqueueCopy 가 스스로 처리한다.
-			RHICmdList.Transition(FRHITransitionInfo(Source, ERHIAccess::Unknown, ERHIAccess::CopySrc));
-			State->Readback->EnqueueCopy(RHICmdList, Source, FIntVector::ZeroValue, 0, FIntVector::ZeroValue);
-			RHICmdList.Transition(FRHITransitionInfo(Source, ERHIAccess::CopySrc, ERHIAccess::SRVMask));
-		});
+	CamStreamReadback::EnqueueCopy(State, Res, TEXT("Park3DMainViewReadback"));
 
 	State->ReadbackGameMs += static_cast<float>((FPlatformTime::Seconds() - ReadbackStart) * 1000.0);
 	return true;
@@ -991,66 +1259,7 @@ void UCamStreamSubsystem::PollMainReadback()
 void UCamStreamSubsystem::PollMainReadbackSlot(const TSharedPtr<FCamStreamMainReadback, ESPMode::ThreadSafe>& State)
 {
 	const double PollStart = FPlatformTime::Seconds();
-
-	ENQUEUE_RENDER_COMMAND(Park3DMainViewReadbackPoll)(
-		[State](FRHICommandListImmediate& RHICmdList)
-		{
-			{
-				FScopeLock Lock(&State->Mutex);
-				if (State->bAbandoned || State->Stage != FCamStreamMainReadback::EStage::Pending)
-				{
-					return;
-				}
-			}
-
-			if (!State->Readback || !State->Readback->IsReady())
-			{
-				return;   // 아직 GPU 가 끝나지 않았다. 다음 틱에 다시 본다.
-			}
-
-			int32 RowPitchInPixels = 0;
-			int32 BufferHeight = 0;
-			const FColor* Src = static_cast<const FColor*>(State->Readback->Lock(RowPitchInPixels, &BufferHeight));
-
-			const int32 W = State->Width;
-			const int32 H = State->Height;
-
-			// row pitch(행 간격)는 폭보다 클 수 있다 — GPU 가 행 시작을 정렬 경계에 맞추기 때문이다.
-			// 이걸 무시하고 버퍼를 통째로 넘기면 행마다 시작점이 밀려 영상이 비스듬해진다.
-			if (!Src || RowPitchInPixels < W || W <= 0 || H <= 0)
-			{
-				if (Src)
-				{
-					State->Readback->Unlock();
-				}
-				FScopeLock Lock(&State->Mutex);
-				State->bFailed = true;
-				State->Stage = FCamStreamMainReadback::EStage::Ready;   // 게임 스레드가 실패를 수거하게 한다
-				return;
-			}
-
-			TArray<FColor> Pixels;
-			Pixels.SetNumUninitialized(W * H);
-
-			// 스테이징 버퍼 높이가 요청보다 작을 이유는 없지만, 작으면 남는 행을 검게 채운다
-			// (초기화되지 않은 메모리를 인코더에 넘기지 않기 위해서다).
-			const int32 CopyH = (BufferHeight > 0) ? FMath::Min(H, BufferHeight) : H;
-			for (int32 Y = 0; Y < CopyH; ++Y)
-			{
-				FMemory::Memcpy(Pixels.GetData() + Y * W, Src + Y * RowPitchInPixels, W * sizeof(FColor));
-			}
-			if (CopyH < H)
-			{
-				FMemory::Memzero(Pixels.GetData() + CopyH * W, (H - CopyH) * sizeof(FColor));
-			}
-
-			State->Readback->Unlock();
-
-			FScopeLock Lock(&State->Mutex);
-			State->Pixels = MoveTemp(Pixels);
-			State->Stage = FCamStreamMainReadback::EStage::Ready;
-		});
-
+	CamStreamReadback::EnqueuePoll(State);
 	State->ReadbackGameMs += static_cast<float>((FPlatformTime::Seconds() - PollStart) * 1000.0);
 }
 
@@ -1144,25 +1353,8 @@ void UCamStreamSubsystem::ReleaseMainReadback()
 			continue;
 		}
 
-		TSharedPtr<FCamStreamMainReadback, ESPMode::ThreadSafe> State = SlotRef;
+		CamStreamReadback::Abandon(SlotRef);
 		SlotRef.Reset();
-
-		{
-			FScopeLock Lock(&State->Mutex);
-			State->bAbandoned = true;
-			State->Stage = FCamStreamMainReadback::EStage::Idle;
-			State->Pixels.Empty();
-		}
-
-		ENQUEUE_RENDER_COMMAND(Park3DMainViewReadbackRelease)(
-			[State](FRHICommandListImmediate&)
-			{
-				if (State->Readback)
-				{
-					delete State->Readback;
-					State->Readback = nullptr;
-				}
-			});
 	}
 
 	MainReadbackRing.Reset();
@@ -1201,8 +1393,29 @@ void UCamStreamSubsystem::StopMainChannel()
 }
 
 //======================================================================================
-// 프레임 생산 — PTZ 카메라 채널(아직 동기 리드백. 메인 뷰만 비동기로 전환됐다)
+// 프레임 생산 — PTZ 카메라 채널. 기본은 비동기(RequestChannelCapture, 보드 #1766), 동기 ProduceJpeg 는 폴백
 //======================================================================================
+bool UCamStreamSubsystem::RequestChannelCapture(APTZCameraActor* Cam, FCamStreamChannel& Ch)
+{
+	UTextureRenderTarget2D* RT = Cam ? Cam->RenderTarget : nullptr;
+	// 리드백 버퍼를 FColor 로 그대로 재해석하려면 BGRA8 이어야 한다(메인 뷰와 같은 조건). 아니면 호출자가 동기 폴백.
+	if (!RT || RT->GetFormat() != PF_B8G8R8A8)
+	{
+		return false;
+	}
+	FTextureRenderTargetResource* Res = RT->GameThread_GetRenderTargetResource();
+	if (!Res)
+	{
+		return false;   // 실RHI 없음(-nullrhi)
+	}
+
+	const int64 Seq = Park3DRpc::SceneSeq();   // CaptureScene 을 건 순간 — 이 뒤의 변경은 이 그림에 없다
+	// cam.captureJPG / 기존 /stream 과 같은 렌더(선택 상태 불변). 같은 렌더타깃에 뒤이어 찍는 캡처(뷰어·captureJPG)는
+	// 렌더 커맨드 순서상 이 복사 "뒤에" 실행되므로 이 프레임을 덮지 않는다.
+	Cam->CaptureOnce();
+	return Ch.Readback.Request(ChannelReadbackSlots, Res, RT->SizeX, RT->SizeY, Seq);
+}
+
 bool UCamStreamSubsystem::ProduceJpeg(APTZCameraActor* Cam, TArray<uint8>& OutJpeg) const
 {
 	if (!Cam)
@@ -1328,6 +1541,9 @@ TSharedPtr<FJsonObject> UCamStreamSubsystem::BuildStatusJson() const
 		O->SetBoolField(TEXT("pinned"), Ch.bPinned);
 		O->SetNumberField(TEXT("fps"), Ch.MeasuredFps);
 		O->SetBoolField(TEXT("serving"), Ch.Server != nullptr);
+		// 비동기 리드백(보드 #1766) — 슬롯이 늘 차 있으면(skippedNoSlot 증가) GPU 가 채널 fps 를 못 따라온다.
+		O->SetNumberField(TEXT("inFlight"), Ch.Readback.InFlight());
+		O->SetNumberField(TEXT("skippedNoSlot"), static_cast<double>(Ch.Readback.SkippedNoSlot));
 		Arr.Add(MakeShared<FJsonValueObject>(O));
 	}
 
@@ -1343,6 +1559,7 @@ TSharedPtr<FJsonObject> UCamStreamSubsystem::BuildStatusJson() const
 	Root->SetNumberField(TEXT("channelFps"), Park3DCamStream::ResolveChannelFps(TotalFps, ActiveChannels, bShareFpsBudget));
 	Root->SetNumberField(TEXT("basePort"), BasePort);
 	Root->SetNumberField(TEXT("maxCameras"), MaxCameras);
+	Root->SetNumberField(TEXT("channelReadbackSlots"), FMath::Max(1, ChannelReadbackSlots));
 
 	// 메인 뷰는 슬롯 스케줄러 밖이라 channels 배열이 아니라 별도 필드로 낸다.
 	TSharedPtr<FJsonObject> Main = MakeShared<FJsonObject>();

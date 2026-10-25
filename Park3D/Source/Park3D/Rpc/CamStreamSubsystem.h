@@ -30,26 +30,7 @@ class FJsonObject;
 class FRHIGPUTextureReadback;
 class USceneCaptureComponent2D;
 class UTextureRenderTarget2D;
-
-/** 카메라 1대에 대응하는 스트림 채널(게임 스레드 소유). */
-struct FCamStreamChannel
-{
-	int32 CamId = 0;                    // 1-based (= 카메라 인덱스 + 1)
-	int32 Port = 0;
-	FMjpegStreamServer* Server = nullptr;
-
-	float Accum = 0.f;                  // 페이싱 누적
-	float FpsWindowAccum = 0.f;         // 1초 창 실측용
-	int32 FpsWindowFrames = 0;
-	float MeasuredFps = 0.f;
-
-	// --- 슬롯 스케줄러 상태(설계 §15) ---
-	bool   bHoldsSlot = false;
-	double SlotSince = 0.0;
-	double LastServedTime = 0.0;
-	double LastPtzTime = -1.0e9;        // 센티널 음수 — 월드 t≈0 에서 "방금 조작"으로 오탐하지 않게
-	bool   bPinned = false;
-};
+class FTextureRenderTargetResource;
 
 /**
  * ms 표본 링 버퍼. 최근 창(MainStatWindow)의 평균/최대를 낸다.
@@ -116,6 +97,63 @@ struct FCamStreamMainReadback
 
 	/** 이 요청의 리드백 관련 게임 스레드 누적(커맨드 등록 + 픽셀 인수인계). */
 	float ReadbackGameMs = 0.f;
+};
+
+/**
+ * 카메라 채널 1개의 비동기 리드백 슬롯 링(보드 #1766). 메인 뷰 링과 같은 규약이다 —
+ * 요청은 Write 에서 앞으로만, 수거는 Read(가장 오래된 것)에서만 해서 영상이 뒤로 튀지 않는다.
+ * 동기 ReadPixels 는 GPU 가 캡처(TemporalAA 로 더 길어졌다)를 끝낼 때까지 게임 스레드를 세웠다.
+ * 게임 스레드 전용. 슬롯 상태 자체는 FCamStreamMainReadback 의 뮤텍스가 지킨다.
+ */
+struct FCamStreamReadbackRing
+{
+	TArray<TSharedPtr<FCamStreamMainReadback, ESPMode::ThreadSafe>> Slots;
+	int32 Write = 0;
+	int32 Read = 0;
+
+	/** 빈 슬롯이 없어 요청을 건너뛴 누적 횟수(처리량이 슬롯 수에 막혔는지 보는 지표). */
+	int64 SkippedNoSlot = 0;
+
+	/** 슬롯 N 개 기준으로 다음 요청을 걸 자리가 비었는가. */
+	bool HasFreeSlot(int32 N) const;
+
+	/** 요청했지만 아직 프레임으로 나가지 않은 슬롯 수. */
+	int32 InFlight() const;
+
+	/** Write 슬롯을 Pending 으로 잡고 Res 의 GPU→CPU 복사를 건다. CaptureScene 직후에 불러야 캡처 "뒤에" 복사된다. */
+	bool Request(int32 N, FTextureRenderTargetResource* Res, int32 W, int32 H, int64 SceneSeq);
+
+	/** Pending 슬롯마다 완료 확인 커맨드를 건다. 렌더타깃 크기가 바뀌었으면 전부 버린다. */
+	void Poll(int32 W, int32 H);
+
+	/** 가장 오래된 슬롯이 Ready 면 픽셀을 꺼내 true(실패 슬롯은 비우고 false). */
+	bool TakeReady(TArray<FColor>& OutPixels, int32& OutW, int32& OutH, int64& OutSceneSeq);
+
+	/** 진행 중인 슬롯을 전부 안전하게 버린다(Readback 파괴는 렌더 스레드에서). */
+	void Release();
+};
+
+/** 카메라 1대에 대응하는 스트림 채널(게임 스레드 소유). */
+struct FCamStreamChannel
+{
+	int32 CamId = 0;                    // 1-based (= 카메라 인덱스 + 1)
+	int32 Port = 0;
+	FMjpegStreamServer* Server = nullptr;
+
+	float Accum = 0.f;                  // 페이싱 누적
+	float FpsWindowAccum = 0.f;         // 1초 창 실측용
+	int32 FpsWindowFrames = 0;
+	float MeasuredFps = 0.f;
+
+	// --- 슬롯 스케줄러 상태(설계 §15) ---
+	bool   bHoldsSlot = false;
+	double SlotSince = 0.0;
+	double LastServedTime = 0.0;
+	double LastPtzTime = -1.0e9;        // 센티널 음수 — 월드 t≈0 에서 "방금 조작"으로 오탐하지 않게
+	bool   bPinned = false;
+
+	/** 비동기 리드백 슬롯(보드 #1766). 보는 사람이 없으면 비운다. */
+	FCamStreamReadbackRing Readback;
 };
 
 UCLASS(config = Game)
@@ -211,6 +249,13 @@ public:
 	 */
 	UPROPERTY(config, EditAnywhere, Category = "CamStream", meta = (ClampMin = "1"))
 	int32 MaxCapturesPerTick = 1;
+
+	/**
+	 * 카메라 채널마다 동시에 진행하는 GPU 리드백 수(보드 #1766). 메인 뷰의 MainReadbackSlots 와 같은 뜻이다 —
+	 * 게임 스레드는 GPU 를 기다리지 않고, 프레임은 1~N 틱 늦게 나간다.
+	 */
+	UPROPERTY(config, EditAnywhere, Category = "CamStream", meta = (ClampMin = "1"))
+	int32 ChannelReadbackSlots = 3;
 
 	/** 스트림 JPEG 품질(1~100). 메인 뷰 채널도 같은 값을 쓴다. */
 	UPROPERTY(config, EditAnywhere, Category = "CamStream", meta = (ClampMin = "1", ClampMax = "100"))
@@ -395,8 +440,11 @@ private:
 	 */
 	int32 CountCapturingChannels() const;
 
-	/** 카메라 1대 캡처 → JPEG. 실패 시 false(렌더타깃 없음, -nullrhi 등). */
+	/** 카메라 1대 캡처 → JPEG(동기). 렌더타깃이 BGRA8 이 아니어서 비동기 리드백을 못 걸 때만 쓴다. 실패 시 false. */
 	bool ProduceJpeg(APTZCameraActor* Cam, TArray<uint8>& OutJpeg) const;
+
+	/** 카메라 1대 캡처 → 채널 링에 비동기 리드백을 건다. 게임 스레드는 GPU 를 기다리지 않는다. 걸었으면 true. */
+	bool RequestChannelCapture(APTZCameraActor* Cam, FCamStreamChannel& Ch);
 
 	/** 월드에서 카메라 매니저를 "찾기만" 한다(스폰하지 않는다). */
 	ACameraControlManager* FindCameraManager() const;

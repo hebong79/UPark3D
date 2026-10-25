@@ -672,6 +672,11 @@ void UCamStreamSubsystem::ApplyMainCaptureGuards()
 		Flags.SetAntiAliasing(false);
 		Flags.SetTemporalAA(false);
 	}
+	else
+	{
+		// 엔진이 SceneCapture2D 의 TemporalAA 를 꺼 두므로(보드 #1765) AA 를 켜는 설정이면 TSR 로 되돌린다 — 안 켜면 FXAA 뿐이다.
+		Flags.SetTemporalAA(true);
+	}
 
 	// ---- Lumen: 끄지 않고 "품질만" 낮춘다 ----
 	// LumenGlobalIllumination / LumenReflections 쇼플래그는 의도적으로 건드리지 않는다.

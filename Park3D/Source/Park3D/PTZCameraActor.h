@@ -71,6 +71,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PTZ")
 	TObjectPtr<UMaterialInterface> PoleHighlightMaterial;
 
+	/** 이보다 크게 돌거나(도) 화각 비가 이보다 크게 바뀌면 TSR 히스토리를 버린다(bCameraCutThisFrame, 보드 #1765). UPROPERTY 아님. */
+	static constexpr float CameraCutAngleDeg = 10.f;
+	static constexpr float CameraCutFovRatio = 0.1f;
+
 	// ---- API (설계 §4.3) ----
 
 	/** 렌더타겟 런타임 생성(기본 1280x720) 후 Capture 에 연결. 재호출 시 크기만 재초기화. */

@@ -9,6 +9,8 @@
 #include "../UnityUnrealCoordinateConverter.h"
 #include "../ParkingCarTypes.h"
 #include "../Plate/PlateKinds.h"
+#include "../Plate/PlateGlyphAtlas.h"
+#include "Components/WidgetComponent.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "Engine/StaticMesh.h"
@@ -291,6 +293,74 @@ bool FCarActorPlateNumberTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("같은 JSON 재로드 번호 결정성"), ReloadedCar->GetPlateNumber(), Expected);
 		ReloadedCar->Destroy();
 	}
+	Car->Destroy();
+	return true;
+}
+
+// ===== 번호판 종류 변경: SDF 합성이 실패해도 판 재질은 새 종류로 바뀐다 =====
+// 2026-10-21 정본: commercial 로 바꾸자 아틀라스에 없는 '자' 로 SDF 가 실패했고, 슬롯에 직전 종류의 MID(옛 번호)가
+// 남아 폴백 위젯 글자와 겹쳤다. 실패 여부는 아틀라스에 달렸으므로 결과와 무관한 불변식을 본다.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCarActorPlateKindSwapTest,
+	"Park3D.CarPlacement.PlateKindSwap",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCarActorPlateKindSwapTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = (GEngine && GEngine->GetWorldContexts().Num() > 0) ? GWorld : nullptr;
+	UStaticMesh* VehicleMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Actors/Car/Meshs/기아_K5.기아_K5"));
+	if (!World || !VehicleMesh)
+	{
+		AddWarning(TEXT("에디터 월드 또는 실차 메시 없음 — 건너뜀."));
+		return true;
+	}
+	UPlateGlyphAtlasSubsystem* Atlas = UPlateGlyphAtlasSubsystem::Resolve(World);
+	ACarActor* Car = World->SpawnActor<ACarActor>();
+	if (!TestNotNull(TEXT("차량 스폰"), Car) || !TestNotNull(TEXT("아틀라스"), Atlas))
+	{
+		if (Car) Car->Destroy();
+		return false;
+	}
+
+	FCarPos Source;
+	Source.id = TEXT("5-16.25.43");
+	Source.pos = {0.f, 0.f, 0.f};
+	Car->InitFromPos(Source, VehicleMesh, 100.f);
+
+	// 판 앞면 슬롯(NumberSDF 를 가진 슬롯 = 1)의 재질이 지금 종류의 것인가 — MID 면 부모를 본다.
+	auto FaceMaterialOf = [](UStaticMeshComponent* Plate) -> UMaterialInterface*
+	{
+		UMaterialInterface* Mat = Plate ? Plate->GetMaterial(1) : nullptr;
+		if (UMaterialInstanceDynamic* Mid = Cast<UMaterialInstanceDynamic>(Mat))
+		{
+			return Mid->Parent;
+		}
+		return Mat;
+	};
+
+	const TCHAR* Sequence[] = { TEXT("normal_paint8"), TEXT("commercial"), TEXT("ev"), TEXT("commercial"), TEXT("normal_film") };
+	for (const TCHAR* Kind : Sequence)
+	{
+		Car->SetPlate(TEXT("457가1087"), Kind);
+		TestEqual(*FString::Printf(TEXT("%s 종류 기록"), Kind), Car->GetPlateKind(), FString(Kind));
+		UMaterialInterface* const Expected = Atlas->GetKindMaterial(Kind);
+		if (Expected == nullptr)
+		{
+			AddWarning(FString::Printf(TEXT("%s 종류 재질 없음 — 이 종류는 판정 생략"), Kind));
+			continue;
+		}
+		const bool bSdf = Car->PlateNumberSdf != nullptr;
+		AddInfo(FString::Printf(TEXT("%s SDF %s"), Kind, bSdf ? TEXT("성공") : TEXT("실패")));
+		for (UStaticMeshComponent* Plate : { Car->FrontPlateComp, Car->BackPlateComp })
+		{
+			TestTrue(*FString::Printf(TEXT("%s 판 앞면 재질 = MI_Plate_%s"), Kind, Kind), FaceMaterialOf(Plate) == Expected);
+			// SDF 가 없으면 MID 를 만들지 않는다 — 옛 번호가 구워진 MID 가 남으면 위젯 글자와 겹친다.
+			TestEqual(*FString::Printf(TEXT("%s MID 유무 = SDF 유무"), Kind),
+				Cast<UMaterialInstanceDynamic>(Plate->GetMaterial(1)) != nullptr, bSdf);
+		}
+		TestEqual(*FString::Printf(TEXT("%s 폴백 위젯 표시 = SDF 실패"), Kind),
+			Car->FrontPlateWidget && Car->FrontPlateWidget->IsVisible(), !bSdf);
+	}
+
 	Car->Destroy();
 	return true;
 }

@@ -543,9 +543,14 @@ void ACarActor::ApplyPlateNumberSdf(const FCarPlateFrame& Frame)
 	// **슬롯 1 이 M_PlateFront(판 앞면)** 다 — 0 을 쓰면 테두리 머티리얼의 MID 를 만들어
 	// `NumberSDF` 를 조용히 아무 데도 안 넣는다(실측: 판정 로그가 front=0 back=0 으로 나왔다).
 	// 그래서 **파라미터가 있는 슬롯을 찾는다** — 메시 슬롯 순서가 바뀌어도 따라간다.
+	//
+	// 판 재질은 SDF 성공 여부와 **무관하게** 이번 종류로 맞춘다. 예전엔 SDF 가 없으면 여기서 바로 돌아가
+	// 슬롯에 직전 종류의 MID(옛 번호가 구워진 채)가 남았고, 켜진 폴백 위젯 글자와 겹쳤다(보드 #1718 덤 —
+	// 아틀라스에 없는 글자 '자' 로 commercial 합성이 실패한 차). 두 베이스 재질의 NumberSDF 기본값은 검정이라
+	// MID 없이 재질만 갈면 판에 글자가 안 그려지고 번호는 폴백 위젯만 보인다.
 	auto Bind = [this, KindMaterial](UStaticMeshComponent* Plate, TObjectPtr<UMaterialInstanceDynamic>& OutMid)
 	{
-		if (Plate == nullptr || PlateNumberSdf == nullptr)
+		if (Plate == nullptr)
 		{
 			return false;
 		}
@@ -558,16 +563,20 @@ void ACarActor::ApplyPlateNumberSdf(const FCarPlateFrame& Frame)
 				UTexture* Existing = nullptr;
 				if (Mat != nullptr && Mat->GetTextureParameterValue(FHashedMaterialParameterInfo(FMaterialParameterInfo(TEXT("NumberSDF"))), Existing))
 				{
-					if (KindMaterial != nullptr && Mat != KindMaterial)
+					// null = 오버라이드 해제 → 메시에 박힌 M_PlateFront(종류별 판이 아닐 때).
+					if (Mat != KindMaterial)
 					{
 						Plate->SetMaterial(Slot, KindMaterial);
 					}
-					OutMid = Plate->CreateDynamicMaterialInstance(Slot);
+					if (PlateNumberSdf != nullptr)
+					{
+						OutMid = Plate->CreateDynamicMaterialInstance(Slot);
+					}
 					break;
 				}
 			}
 		}
-		if (OutMid == nullptr)
+		if (OutMid == nullptr || PlateNumberSdf == nullptr)
 		{
 			return false;
 		}

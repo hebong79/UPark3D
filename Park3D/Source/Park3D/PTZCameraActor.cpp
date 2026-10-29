@@ -45,6 +45,13 @@ APTZCameraActor::APTZCameraActor()
 	TemporalAASetting.Enabled = true;
 	Capture->ShowFlagSettings.Add(TemporalAASetting);
 	Capture->ShowFlags.SetTemporalAA(true);
+	// UE 5.8 은 SceneCapture 의 GI·반사 방식을 기본으로 None 으로 덮는다(SceneCaptureRendering.cpp:796-801
+	// "By default, Lumen is disabled in scene captures"). 그래서 캡처만 간접광이 빠져 그늘이 검고 반사면이
+	// 하늘색으로 떴다(2026-08-06 진단의 실제 원인, 2026-10-29 확인). 화면과 같은 Lumen 으로 되돌린다.
+	Capture->PostProcessSettings.bOverride_DynamicGlobalIlluminationMethod = true;
+	Capture->PostProcessSettings.DynamicGlobalIlluminationMethod = EDynamicGlobalIlluminationMethod::Lumen;
+	Capture->PostProcessSettings.bOverride_ReflectionMethod = true;
+	Capture->PostProcessSettings.ReflectionMethod = EReflectionMethod::Lumen;
 	Capture->FOVAngle = DefaultHFov;       // zoom=1 기준(설계 §7.3)
 
 	// 폴대: 바닥 Z=0 시각 표시. 높이(Z)·팬틸트(회전)를 상속하지 않도록 절대 위치/회전 사용.

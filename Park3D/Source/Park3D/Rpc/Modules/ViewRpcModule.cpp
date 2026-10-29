@@ -14,11 +14,77 @@
 #include "Camera/PlayerCameraManager.h"
 #include "CollisionQueryParams.h"
 #include "Engine/World.h"
+#include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
+#include "Components/SceneCaptureComponent2D.h"
+#include "ShowFlags.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 
 namespace
 {
+	/** view.captureDebug — 화면(게임 뷰포트)과 메인 캡처의 ShowFlag 가 다른 것만 모은다. */
+	struct FShowFlagDiffSink
+	{
+		const FEngineShowFlags& Viewport;
+		const FEngineShowFlags& Capture;
+		TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+
+		bool Add(uint32 Index, const FString& Name)
+		{
+			const bool bV = Viewport.GetSingleFlag(Index);
+			const bool bC = Capture.GetSingleFlag(Index);
+			if (bV != bC)
+			{
+				TSharedPtr<FJsonObject> Pair = MakeShared<FJsonObject>();
+				Pair->SetBoolField(TEXT("viewport"), bV);
+				Pair->SetBoolField(TEXT("capture"), bC);
+				Out->SetObjectField(Name, Pair);
+			}
+			return true;
+		}
+		bool OnEngineShowFlag(uint32 Index, const FString& Name) { return Add(Index, Name); }
+		bool OnCustomShowFlag(uint32 Index, const FString& Name) { return Add(Index, Name); }
+	};
+
+	/** FPostProcessSettings 필드 하나를 이름으로 쓰고 bOverride_<이름> 을 세운다. 실패 사유를 돌려준다(성공이면 빈 문자열). */
+	FString SetPostProcessField(FPostProcessSettings& PP, const FString& Name, const TSharedPtr<FJsonValue>& Value)
+	{
+		UScriptStruct* Struct = FPostProcessSettings::StaticStruct();
+		FProperty* Prop = Struct->FindPropertyByName(*Name);
+		if (!Prop) { return FString::Printf(TEXT("pp 필드 없음: %s"), *Name); }
+		void* Ptr = Prop->ContainerPtrToValuePtr<void>(&PP);
+
+		double Num = 0.0;
+		bool bFlag = false;
+		if (FBoolProperty* BP = CastField<FBoolProperty>(Prop))
+		{
+			if (!Value->TryGetBool(bFlag)) { return FString::Printf(TEXT("pp.%s 는 bool"), *Name); }
+			BP->SetPropertyValue(Ptr, bFlag);
+		}
+		else if (FEnumProperty* EP = CastField<FEnumProperty>(Prop))
+		{
+			if (!Value->TryGetNumber(Num)) { return FString::Printf(TEXT("pp.%s 는 enum 정수"), *Name); }
+			EP->GetUnderlyingProperty()->SetIntPropertyValue(Ptr, static_cast<int64>(Num));
+		}
+		else if (FNumericProperty* NP = CastField<FNumericProperty>(Prop))
+		{
+			if (!Value->TryGetNumber(Num)) { return FString::Printf(TEXT("pp.%s 는 숫자"), *Name); }
+			if (NP->IsFloatingPoint()) { NP->SetFloatingPointPropertyValue(Ptr, Num); }
+			else { NP->SetIntPropertyValue(Ptr, static_cast<int64>(Num)); }
+		}
+		else
+		{
+			return FString::Printf(TEXT("pp.%s 는 지원하지 않는 형식(숫자·bool·enum 만)"), *Name);
+		}
+
+		if (FBoolProperty* Ov = CastField<FBoolProperty>(Struct->FindPropertyByName(*(TEXT("bOverride_") + Name))))
+		{
+			Ov->SetPropertyValue(Ov->ContainerPtrToValuePtr<void>(&PP), true);
+		}
+		return FString();
+	}
+
 	/** view.pick 라인트레이스 사거리(cm). measure.cameraHeight 와 같은 10km. */
 	constexpr double ViewPickTraceCm = 1.0e6;
 
@@ -591,5 +657,82 @@ void FViewRpcModule::Register(URpcDispatcher& Dispatcher)
 		PC->GetPlayerViewPoint(CurLoc, CurRot);
 		ApplyViewRotation(PC, FRotator(-89.0, CurRot.Yaw, 0.0));   // view.set 과 같은 ±89 한계
 		return BuildViewState(World, PC, U);
+	});
+
+	// view.captureDebug {showFlags?{이름:bool}, pp?{필드:값}, exec?[명령]} — 진단 전용(2026-10-29).
+	// 메인 뷰 스트림(13600)이 화면과 색이 다른 원인을 재기동 없이 A/B 하려고 만들었다.
+	// 메인 캡처의 ShowFlag·PostProcessSettings 를 실행 중에 바꾸고 콘솔 명령을 실행한다. 저장하지 않으므로 재기동하면 원래대로다.
+	// 응답의 showFlagDiff 는 화면(게임 뷰포트)과 캡처의 ShowFlag 중 다른 것 전부다.
+	Dispatcher.Register(TEXT("view.captureDebug"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		UWorld* World = GetWorldPtr();
+		UCamStreamSubsystem* S = GetMainStreamSubsystem(World);
+		USceneCaptureComponent2D* Cap = S ? S->GetMainCapture() : nullptr;
+		if (!Cap)
+		{
+			E.FailDomain(TEXT("메인 뷰 캡처가 아직 없습니다 — 메인 뷰 스트림을 한 번 열어 주세요."), ERpcErrorKind::NotFound);
+			return nullptr;
+		}
+
+		TArray<TSharedPtr<FJsonValue>> Errors;
+
+		const TSharedPtr<FJsonObject>* Flags = nullptr;
+		RpcParam::MarkRead(P, TEXT("showFlags"));
+		if (P->TryGetObjectField(TEXT("showFlags"), Flags) && Flags && Flags->IsValid())
+		{
+			for (const TPair<FString, TSharedPtr<FJsonValue>>& KV : (*Flags)->Values)
+			{
+				const int32 Idx = FEngineShowFlags::FindIndexByName(*KV.Key);
+				bool bOn = false;
+				if (Idx == INDEX_NONE || !KV.Value->TryGetBool(bOn))
+				{
+					Errors.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("showFlag 없음 또는 bool 아님: %s"), *KV.Key)));
+					continue;
+				}
+				Cap->ShowFlags.SetSingleFlag(Idx, bOn);
+			}
+		}
+
+		const TSharedPtr<FJsonObject>* Pp = nullptr;
+		RpcParam::MarkRead(P, TEXT("pp"));
+		if (P->TryGetObjectField(TEXT("pp"), Pp) && Pp && Pp->IsValid())
+		{
+			for (const TPair<FString, TSharedPtr<FJsonValue>>& KV : (*Pp)->Values)
+			{
+				const FString Err = SetPostProcessField(Cap->PostProcessSettings, KV.Key, KV.Value);
+				if (!Err.IsEmpty()) { Errors.Add(MakeShared<FJsonValueString>(Err)); }
+			}
+			Cap->PostProcessBlendWeight = 1.f;
+		}
+
+		TArray<TSharedPtr<FJsonValue>> ExecResults;
+		const TArray<TSharedPtr<FJsonValue>>* Cmds = nullptr;
+		RpcParam::MarkRead(P, TEXT("exec"));
+		if (P->TryGetArrayField(TEXT("exec"), Cmds) && Cmds)
+		{
+			for (const TSharedPtr<FJsonValue>& C : *Cmds)
+			{
+				FString Cmd;
+				if (!C->TryGetString(Cmd) || Cmd.IsEmpty()) { continue; }
+				const bool bHandled = GEngine && GEngine->Exec(World, *Cmd);
+				TSharedPtr<FJsonObject> R = MakeShared<FJsonObject>();
+				R->SetStringField(TEXT("cmd"), Cmd);
+				R->SetBoolField(TEXT("handled"), bHandled);
+				ExecResults.Add(MakeShared<FJsonValueObject>(R));
+			}
+		}
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		if (GEngine && GEngine->GameViewport)
+		{
+			FShowFlagDiffSink Sink{ GEngine->GameViewport->EngineShowFlags, Cap->ShowFlags };
+			FEngineShowFlags::IterateAllFlags(Sink);
+			O->SetObjectField(TEXT("showFlagDiff"), Sink.Out);
+		}
+		O->SetNumberField(TEXT("captureFov"), Cap->FOVAngle);
+		O->SetNumberField(TEXT("captureSource"), static_cast<int32>(Cap->CaptureSource.GetValue()));
+		O->SetArrayField(TEXT("exec"), ExecResults);
+		O->SetArrayField(TEXT("errors"), Errors);
+		return RpcDto::MakeObject(O);
 	});
 }

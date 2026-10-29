@@ -427,6 +427,9 @@ public:
 	/** cam.streamStatus 응답 JSON. */
 	TSharedPtr<FJsonObject> BuildStatusJson() const;
 
+	/** 메인 뷰 캡처 컴포넌트(진단용 view.captureDebug). 아직 안 만들어졌으면 nullptr. */
+	USceneCaptureComponent2D* GetMainCapture() const { return MainCapture; }
+
 private:
 	/** 카메라 수에 맞춰 채널을 증감한다(전체 재기동 없음 — 살아있는 스트림 보존). */
 	void SyncChannels(ACameraControlManager* Mgr);

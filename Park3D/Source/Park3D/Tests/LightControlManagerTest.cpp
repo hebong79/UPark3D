@@ -82,6 +82,7 @@ bool FLightManagerApplyTest::RunTest(const FString& Parameters)
 	APostProcessVolume* Volume = nullptr;
 	for (TActorIterator<APostProcessVolume> It(World); It; ++It)
 	{
+		if (It->ActorHasTag(ALightControlManager::GetExposureTrimTag())) { continue; }
 		if (It->bUnbound) { Volume = *It; break; }
 		if (!Volume) { Volume = *It; }
 	}
@@ -131,6 +132,84 @@ bool FLightManagerApplyTest::RunTest(const FString& Parameters)
 		}
 	}
 	Mgr->Destroy();
+	return true;
+}
+
+// 노출 보정(ExposureBiasTrim): 우리 볼륨이 「레벨 값 + 보정」 을 최상위 우선순위로 넣고, 0 이면 꺼진다.
+// 레벨 값은 월드마다 달라 직접 단언하지 않고, 보정 두 값의 차이로 「더해진다」 는 것을 본다.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLightManagerExposureTrimTest,
+	"Park3D.Light.ExposureTrim",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FLightManagerExposureTrimTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = (GEngine && GEngine->GetWorldContexts().Num() > 0) ? GWorld : nullptr;
+	if (!World)
+	{
+		AddWarning(TEXT("에디터 월드 없음 — 노출 보정 테스트 건너뜀."));
+		return true;
+	}
+
+	// ApplySettings 가 달·채움광 같은 보조 액터를 함께 만든다 — 끝에 지워 다른 테스트(첫 DirectionalLight 를 태양으로 잡는 ManagerApply)를 흐리지 않게 한다.
+	TSet<AActor*> ActorsBefore;
+	for (TActorIterator<AActor> It(World); It; ++It) { ActorsBefore.Add(*It); }
+
+	ALightControlManager* Mgr = ALightControlManager::GetOrSpawn(World);
+	if (!TestNotNull(TEXT("매니저 조달"), Mgr))
+	{
+		return false;
+	}
+	const float OriginalTrim = Mgr->ExposureBiasTrim;
+	// 월드 조명을 바꾸지 않도록 지금 값을 그대로 다시 적용한다.
+	FLightSettings Settings = Mgr->GetLastApplied();
+	Mgr->CaptureCurrent(Settings);
+
+	auto FindTrim = [World]() -> APostProcessVolume*
+	{
+		for (TActorIterator<APostProcessVolume> It(World); It; ++It)
+		{
+			if (It->ActorHasTag(ALightControlManager::GetExposureTrimTag())) { return *It; }
+		}
+		return nullptr;
+	};
+
+	Mgr->ExposureBiasTrim = -0.5f;
+	Mgr->ApplySettings(Settings);
+	APostProcessVolume* Trim = FindTrim();
+	if (TestNotNull(TEXT("보정 볼륨 생성"), Trim))
+	{
+		TestTrue(TEXT("보정 볼륨 켜짐"), Trim->bEnabled);
+		TestTrue(TEXT("보정 볼륨 unbound"), Trim->bUnbound);
+		TestTrue(TEXT("노출 보정 오버라이드"), Trim->Settings.bOverride_AutoExposureBias);
+		TestTrue(TEXT("최상위 우선순위"), Trim->Priority >= 1.0e5f);
+		// 우선순위 값만이 아니라 월드의 정렬 순서(오름차순)에서 실제로 마지막이어야 한다 — 월드는 등록 순간의
+		// 우선순위로 자리를 정하므로, 스폰 뒤에 Priority 를 바꾸면 값은 크지만 자리는 0 이라 보정이 안 걸린다.
+		IInterface_PostProcessVolume* Last = nullptr;
+		for (IInterface_PostProcessVolume& V : World->GetPostProcessVolumeIterator()) { Last = &V; }
+		TestTrue(TEXT("월드 볼륨 순서에서 마지막(가장 나중에 블렌드)"),
+			Last == static_cast<IInterface_PostProcessVolume*>(Trim));
+		const float Half = Trim->Settings.AutoExposureBias;
+
+		Mgr->ExposureBiasTrim = -1.0f;
+		Mgr->ApplySettings(Settings);
+		TestEqual(TEXT("같은 볼륨 재사용"), FindTrim(), Trim);
+		TestEqual(TEXT("보정이 레벨 값에 더해진다"), Half - Trim->Settings.AutoExposureBias, 0.5f, 1e-4f);
+
+		Mgr->ExposureBiasTrim = 0.0f;
+		Mgr->ApplySettings(Settings);
+		TestFalse(TEXT("보정 0 → 볼륨 꺼짐"), Trim->bEnabled);
+	}
+
+	// ---- 복원 — 테스트가 만든 보정 볼륨은 에디터 월드에 남기지 않는다 ----
+	Mgr->ExposureBiasTrim = OriginalTrim;
+	if (APostProcessVolume* T = FindTrim()) { T->Destroy(); }
+	Mgr->Destroy();
+	TArray<AActor*> Spawned;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		if (!ActorsBefore.Contains(*It)) { Spawned.Add(*It); }
+	}
+	for (AActor* A : Spawned) { A->Destroy(); }
 	return true;
 }
 

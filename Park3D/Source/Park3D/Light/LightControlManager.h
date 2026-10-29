@@ -17,13 +17,24 @@ class ASkyAtmosphere;
 class UDirectionalLightComponent;
 class USkyLightComponent;
 
-UCLASS()
+UCLASS(Config = Game)
 class PARK3D_API ALightControlManager : public AActor
 {
 	GENERATED_BODY()
 
 public:
 	ALightControlManager();
+
+	/**
+	 * 노출 보정(EV). 화면과 모든 캡처(메인 뷰·카메라 채널·captureJPG)에 함께 걸린다 — 우리가 스폰한
+	 * 최상위 우선순위 unbound 볼륨에 「레벨의 노출 보정 + 이 값」 을 넣는다. 0 이면 그 볼륨을 끈다.
+	 * ini [/Script/Park3D.LightControlManager] ExposureBiasTrim. ApplySettings 때 반영된다.
+	 */
+	UPROPERTY(Config)
+	float ExposureBiasTrim = 0.0f;
+
+	/** 노출 보정 볼륨 태그. FindExposureVolume·테스트가 이 볼륨을 레벨 노출 볼륨으로 오인하지 않게 거른다. */
+	static FName GetExposureTrimTag();
 
 	/** 월드에 있으면 반환, 없으면 스폰. */
 	static ALightControlManager* GetOrSpawn(UWorld* World);
@@ -140,6 +151,12 @@ private:
 	 * 여기서 월드의 ACarActor 를 훑어 채널을 맞춰 준다(이미 맞으면 아무 일도 하지 않는다).
 	 */
 	void ApplyFillLights(const FLightSettings& S);
+
+	/**
+	 * ExposureBiasTrim 을 노출 보정 볼륨에 건다. 채움광과 같은 이유로 통합 하늘 시스템 판정 앞에서 실행된다.
+	 * 기준값은 우리 볼륨을 뺀 unbound 볼륨 중 노출 보정을 덮는 최고 우선순위의 값(없으면 엔진 기본)이다.
+	 */
+	void ApplyExposureTrim();
 
 	UPROPERTY()
 	FLightSettings LastApplied;

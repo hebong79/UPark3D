@@ -11,6 +11,7 @@
 #include "Engine/SkyLight.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "HAL/IConsoleManager.h"
 #include "LightControlLibrary.h"
 #include "../CarActor.h"
 #include "Components/StaticMeshComponent.h"
@@ -24,6 +25,10 @@ namespace
 	static const FName GFillTag(TEXT("Park3D_FillLight"));
 	static const FName GShadowFillTag(TEXT("Park3D_ShadowFill"));
 	static const FName GCarFillTag(TEXT("Park3D_CarFill"));
+
+	/** 노출 보정 볼륨. 레벨·UDS 의 어떤 볼륨보다 위에 오도록 우선순위를 크게 둔다. */
+	static const FName GExposureTrimTag(TEXT("Park3D_ExposureTrim"));
+	constexpr float GExposureTrimPriority = 1.0e6f;
 
 	/**
 	 * 채움광 방향. 위에서 비스듬히 내리쬐게 두어 차량 지붕·보닛이 고르게 받도록 한다.
@@ -246,7 +251,7 @@ APostProcessVolume* ALightControlManager::FindExposureVolume() const
 	for (TActorIterator<APostProcessVolume> It(World); It; ++It)
 	{
 		APostProcessVolume* V = *It;
-		if (!V)
+		if (!V || V->ActorHasTag(GExposureTrimTag))
 		{
 			continue;
 		}
@@ -364,6 +369,7 @@ void ALightControlManager::ApplySettings(const FLightSettings& Settings)
 	// 채움광은 통합 하늘 시스템 판정보다 먼저 건다. 우리가 소유한 액터라 그 시스템이 덮어쓰지
 	// 않고 빛을 더하기만 하므로, UDS 레벨에서 그늘 밝기를 조절할 수 있는 유일한 수단이다.
 	ApplyFillLights(S);
+	ApplyExposureTrim();
 
 	// 통합 하늘 시스템이 있는 레벨에서는 적용하지 않는다 — 그 시스템이 자기 시간대로 태양·하늘·
 	// 노출을 계속 갱신하므로, 여기서 값을 넣어도 화면은 그쪽을 따른다(넣은 값만 되읽히고 그림은
@@ -900,6 +906,85 @@ void ALightControlManager::ApplyFillLights(const FLightSettings& S)
 			}
 		}
 	}
+}
+
+FName ALightControlManager::GetExposureTrimTag()
+{
+	return GExposureTrimTag;
+}
+
+void ALightControlManager::ApplyExposureTrim()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	APostProcessVolume* Trim = nullptr;
+	for (TActorIterator<APostProcessVolume> It(World); It; ++It)
+	{
+		if (It->ActorHasTag(GExposureTrimTag))
+		{
+			Trim = *It;
+			break;
+		}
+	}
+
+	if (FMath::IsNearlyZero(ExposureBiasTrim))
+	{
+		if (Trim)
+		{
+			Trim->bEnabled = false;
+		}
+		return;
+	}
+
+	// AutoExposureBias 는 볼륨끼리 더해지지 않고 우선순위가 높은 쪽이 덮는다 — 그래서 「보정」 이 되려면
+	// 레벨(또는 UDS)이 쓰던 값을 읽어 거기에 더한 값을 넣어야 한다.
+	static const auto CVarDefaultBias = IConsoleManager::Get().FindTConsoleVariableDataFloat(TEXT("r.DefaultFeature.AutoExposure.Bias"));
+	float Base = CVarDefaultBias ? CVarDefaultBias->GetValueOnGameThread() : 1.0f;
+	float BestPriority = -FLT_MAX;
+	for (IInterface_PostProcessVolume& PPV : World->GetPostProcessVolumeIterator())
+	{
+		if (Trim && &PPV == static_cast<IInterface_PostProcessVolume*>(Trim))
+		{
+			continue;
+		}
+		const FPostProcessVolumeProperties Props = PPV.GetProperties();
+		if (Props.bIsEnabled && Props.bIsUnbound && Props.Settings && Props.Settings->bOverride_AutoExposureBias
+			&& Props.Priority > BestPriority)
+		{
+			BestPriority = Props.Priority;
+			Base = Props.Settings->AutoExposureBias;
+		}
+	}
+
+	if (!Trim)
+	{
+		// 월드는 볼륨이 등록되는 순간의 우선순위로 정렬 위치를 정하고 다시 정렬하지 않는다
+		// (UWorld::InsertPostProcessVolumeEntry). 스폰 뒤에 Priority 만 바꾸면 0 자리 그대로라 레벨 볼륨이 이겨
+		// 보정이 화면에 안 걸렸다(2026-10-29 실측). 아래 빼고 다시 넣기가 그 자리를 옮기는 부분이다.
+		Trim = World->SpawnActorDeferred<APostProcessVolume>(APostProcessVolume::StaticClass(), FTransform::Identity,
+			nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+		if (!Trim)
+		{
+			return;
+		}
+		Trim->Tags.Add(GExposureTrimTag);
+		Trim->bUnbound = true;
+		Trim->Priority = GExposureTrimPriority;
+		Trim->FinishSpawning(FTransform::Identity);
+		// 지연 스폰이어도 컴포넌트는 이미 우선순위 0 으로 월드에 등록돼 있었다(실측: 우선순위 1 인 BP 볼륨보다 앞) — 빼고 다시 넣어 1e6 자리로 옮긴다.
+		World->RemovePostProcessVolume(Trim);
+		World->AddPostProcessVolume(Trim);
+	}
+
+	Trim->bEnabled = true;
+	Trim->Settings.bOverride_AutoExposureBias = true;
+	Trim->Settings.AutoExposureBias = Base + ExposureBiasTrim;
+	UE_LOG(LogTemp, Log, TEXT("[Light] 노출 보정 %+.2f EV 적용: 레벨 %.2f → %.2f (화면·모든 캡처 공통)"),
+		ExposureBiasTrim, Base, Trim->Settings.AutoExposureBias);
 }
 
 bool ALightControlManager::CaptureCurrent(FLightSettings& Out) const

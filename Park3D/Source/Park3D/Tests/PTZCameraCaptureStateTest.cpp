@@ -64,6 +64,13 @@ bool FPTZCameraCapturePersistStateTest::RunTest(const FString& Parameters)
 		{ return S.ShowFlagName == TEXT("TemporalAA") && S.Enabled; });
 	TestTrue(TEXT("ShowFlagSettings 에 TemporalAA=true(UpdateShowFlags 가 다시 적용)"), bSettingKept);
 
+	// 5-1) 엔진이 SceneCapture 의 GI·반사를 None 으로 덮으므로 Lumen 오버라이드가 있어야 화면과 같은 조명이 나온다(2026-10-29).
+	const FPostProcessSettings& PP = Cam->Capture->PostProcessSettings;
+	TestTrue(TEXT("GI 방식 오버라이드 = Lumen"),
+		PP.bOverride_DynamicGlobalIlluminationMethod && PP.DynamicGlobalIlluminationMethod == EDynamicGlobalIlluminationMethod::Lumen);
+	TestTrue(TEXT("반사 방식 오버라이드 = Lumen"),
+		PP.bOverride_ReflectionMethod && PP.ReflectionMethod == EReflectionMethod::Lumen);
+
 	// 6) 카메라 컷: 작은 PTZ 변화는 히스토리 유지, 큰 점프·줌 단계·위치 이동은 컷.
 	Cam->SetPanTilt(0.f, 30.f);
 	Cam->SetZoom(1.f);

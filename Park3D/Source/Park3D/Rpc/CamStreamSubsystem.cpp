@@ -915,6 +915,12 @@ bool UCamStreamSubsystem::EnsureMainCapture()
 		Capture->bCaptureOnMovement = false;
 		Capture->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
 		Capture->bAlwaysPersistRenderingState = true;
+		// 엔진이 SceneCapture 의 GI·반사를 None 으로 덮으므로 Lumen 으로 되돌린다(APTZCameraActor 생성자와 같은 이유).
+		// 이게 없으면 Lumen 이 아예 돌지 않아 그늘이 검고 반사면이 하늘색이다 — 아래 가드의 Lumen 품질 설정도 효과가 없다.
+		Capture->PostProcessSettings.bOverride_DynamicGlobalIlluminationMethod = true;
+		Capture->PostProcessSettings.DynamicGlobalIlluminationMethod = EDynamicGlobalIlluminationMethod::Lumen;
+		Capture->PostProcessSettings.bOverride_ReflectionMethod = true;
+		Capture->PostProcessSettings.ReflectionMethod = EReflectionMethod::Lumen;
 		Actor->SetRootComponent(Capture);
 		Capture->RegisterComponent();
 

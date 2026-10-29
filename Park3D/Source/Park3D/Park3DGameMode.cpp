@@ -727,6 +727,11 @@ void APark3DGameMode::ApplyMainViewFov()
 	// "아무도 건드리지 않았을 때의 값"을 이 화각으로 만든다.
 	PC->PlayerCameraManager->DefaultFOV = HorizontalFov;
 
+	// 창은 엔진 기본 AspectRatio_MaintainYFOV 라 FOV 를 "POV.AspectRatio 에서의 수평각"으로 읽고 수직각을 정한다
+	// (CameraStackTypes.cpp). PCM 기본 AspectRatio 가 4:3 이면 창의 수직각이 45° 가 아니라 ≈57.8° 가 되어
+	// 16:9 수평각으로 그리는 메인 뷰 스트림보다 1.36배 넓게 보였다(2026-10-29). 16:9 로 맞춰 창 = 스트림 = 수직 45°.
+	PC->PlayerCameraManager->DefaultAspectRatio = 16.f / 9.f;
+
 	UE_LOG(LogTemp, Log, TEXT("[Park3DGameMode] 메인 뷰 화각 고정: 수직 %.2f° → 수평 %.2f°(16:9)"),
 		VerticalFov, HorizontalFov);
 }

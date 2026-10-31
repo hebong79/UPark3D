@@ -2,7 +2,9 @@
 
 #include "ParkSimLot.h"
 
+#include "ParkHybridPlanner.h"
 #include "ParkLaneGraph.h"
+#include "ParkingSimManager.h"
 #include "../CarActor.h"
 #include "../CarPlacementManager.h"
 #include "../Config/Park3DAppConfig.h"
@@ -422,6 +424,265 @@ namespace
 	double PsLookahead(const FCarDims& Car) { return FMath::Max(3.0, Car.MinRadius * 0.9); }
 	double PsKMax(const FCarDims& Car) { return 1.0 / (Car.MinRadius * 1.05); }
 	FVector2D PsYawDir(double YawDeg) { const double Y = FMath::DegreesToRadians(YawDeg); return FVector2D(FMath::Cos(Y), FMath::Sin(Y)); }
+
+	/** 통로 주행 구간이 서 있는 차와 지킬 간격(m) — 이보다 붙으면 실주행에서 정체중단이 난다(.125 2026-10-31 실측). */
+	constexpr double PsTransitClearOk = 0.25;
+
+	/** 정해진 기동·통로 추종이 실패했거나, 성공했어도 통로 주행이 서 있는 차에 PsTransitClearOk 보다 붙으면 격자 탐색으로 다시 풀어 본다. */
+	bool PsNeedHybrid(const FParkSimWorldPlan& W)
+	{
+		return !W.bOk || (W.TransitClearanceM >= 0.0 && W.TransitClearanceM < PsTransitClearOk);
+	}
+
+	/**
+	 * 실주행 전방 감시(AParkingSimManager::ApplyAvoidance)를 계획 위에서 흉내 낸다. 통로 구간(bTransit)을 달리는 동안
+	 * 진행 방향 직선 옆 AvoidCorridorHalfM 안, 앞 min(AvoidLookAheadM, 이 기어 구간 남은 거리 + 1) 안에 서 있는 차 중심이
+	 * AvoidSafeGapM 까지 다가오면 차가 멈추고 AvoidDeadlockSec 뒤 정체중단이 된다(.125 2026-10-31 밤 운행에서 실제로 난 것).
+	 */
+	bool PsPredictStall(UWorld* World, const FParkSimWorldPlan& W, const TSet<const ACarActor*>& Ignore, FString& OutWhy)
+	{
+		const AParkingSimManager* Def = GetDefault<AParkingSimManager>();
+		TArray<TPair<FVector2D, FString>> Cars;
+		if (ACarPlacementManager* CarMgr = PsCarManager(World))
+		{
+			for (const TObjectPtr<ACarActor>& C : CarMgr->GetCars())
+			{
+				if (!IsValid(C) || C->IsHidden() || Ignore.Contains(C.Get())) { continue; }
+				Cars.Add({ FVector2D(C->CarData.pos.x, C->CarData.pos.y), C->CarData.id });
+			}
+		}
+		if (Cars.Num() == 0 || W.Segs.Num() == 0) { return false; }
+
+		struct FPsSample { FPose P; int32 Gear; bool bTransit; double S; };
+		TArray<FPsSample> Smp;
+		FPose Q = W.Start;
+		double S = 0.0;
+		for (const FSeg& Sg : W.Segs)
+		{
+			const int32 N = FMath::Max(1, FMath::CeilToInt(Sg.Len / 0.25));
+			for (int32 i = 0; i < N; ++i)
+			{
+				Smp.Add({ Q, Sg.Gear, Sg.bTransit, S });
+				Q = Step(Q, Sg, Sg.Len / N);
+				S += Sg.Len / N;
+			}
+		}
+		// 표본마다 그 기어 구간이 끝나는 거리.
+		TArray<double> MoveEnd;
+		MoveEnd.SetNumUninitialized(Smp.Num());
+		double End = S;
+		for (int32 i = Smp.Num() - 1; i >= 0; --i)
+		{
+			if (i + 1 < Smp.Num() && Smp[i + 1].Gear != Smp[i].Gear) { End = Smp[i + 1].S; }
+			MoveEnd[i] = End;
+		}
+		for (int32 i = 0; i < Smp.Num(); ++i)
+		{
+			if (!Smp[i].bTransit) { continue; }
+			const FPose& P = Smp[i].P;
+			const FVector2D Dir = FVector2D(FMath::Cos(P.Th), FMath::Sin(P.Th)) * double(Smp[i].Gear);
+			const FVector2D Center = CenterFromRearAxle(P, W.Car);
+			const double Range = FMath::Min<double>(Def->AvoidLookAheadM, MoveEnd[i] - Smp[i].S + 1.0);
+			for (const TPair<FVector2D, FString>& C : Cars)
+			{
+				const FVector2D Rel = C.Key - Center;
+				const double Along = FVector2D::DotProduct(Rel, Dir);
+				if (Along <= 0.0 || Along > Range || FMath::Abs(FVector2D::CrossProduct(Dir, Rel)) > Def->AvoidCorridorHalfM) { continue; }
+				if (Along <= Def->AvoidSafeGapM + 0.02)
+				{
+					OutWhy = FString::Printf(TEXT("(%.1f, %.1f) 에서 서 있는 차량 %s 이 진행 방향 %.1f m 앞 — 실주행 전방 감시로 멈춰 정체중단이 납니다"),
+						Center.X, Center.Y, *C.Value, Along);
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * 격자 탐색(Hybrid A*)으로 다시 푼다 — 후진·전진을 섞어 빼고 넣으며, 모퉁이는 주행 영역 안에서 크게 돈다(ParkHybridPlanner).
+	 * Parked = 주차 자세(뒷축, 출차는 출발·입차는 도착). 통로 규칙(일방·막힘)은 그래프 에지 둘레의 방향장으로 지킨다.
+	 */
+	FParkSimWorldPlan PsHybridPlan(UWorld* World, const FParkSimLotSlot& Slot, const FCarDims& Car, const FParkSimGate& Gate, const FPose& Parked,
+		bool bEnter, const TSet<const ACarActor*>& Ignore, const FParkSimWorldPlan& Base, const TArray<FVector2D>& Route)
+	{
+		FParkSimWorldPlan W;
+		W.Type = Base.Type;
+		W.Car = Car;
+		W.bRearIn = Base.bRearIn;
+		W.Start = Parked;
+		FPsLane Lane;
+		if (!PsLaneLoad(World, Lane)) { W.Note = TEXT("통로 그래프가 없어 격자 탐색을 하지 못했습니다"); return W; }
+
+		ParkHybrid::FMapInput In;
+		In.G = Lane.G;
+		In.States = &Lane.States;
+		if (ACarPlacementManager* CarMgr = PsCarManager(World))
+		{
+			for (const TObjectPtr<ACarActor>& C : CarMgr->GetCars())
+			{
+				if (!IsValid(C) || C->IsHidden() || Ignore.Contains(C.Get())) { continue; }
+				FPoly2D Wp;
+				if (ParkSimLot::CarPolygon(C, Wp)) { In.Cars.Add(Wp); }
+				In.CarCenters.Add(FVector2D(C->CarData.pos.x, C->CarData.pos.y));
+			}
+		}
+		In.OwnSlots.Add(Slot.Corners);
+		In.FreeAround.Add(Gate.Pos);
+		In.Route = Route;
+		In.FreeZones.Add({ Slot.Center, 6.0 });   // 면에서 빼고 넣는 기동
+		In.FreeZones.Add({ Gate.Pos, 3.0 });
+		ParkHybrid::FMap M;
+		ParkHybrid::BuildMap(In, M);
+		ParkHybrid::FParams P;
+		P.KMax = PsKMax(Car);
+		{
+			const AParkingSimManager* Def = GetDefault<AParkingSimManager>();
+			P.StallHalfM = Def->AvoidCorridorHalfM + 0.1;
+			P.StallGapM = Def->AvoidSafeGapM + 0.1;
+		}
+		const ParkHybrid::FResult R = ParkHybrid::Search(M, Car, Parked, PsGatePose(Gate), bEnter, P,
+			bEnter ? TEXT("통로를 따라 주행(격자 탐색)") : TEXT("통로를 따라 출구로(격자 탐색)"));
+		if (!R.bOk)
+		{
+			W.Note = FString::Printf(TEXT("격자 탐색 실패: %s (%.0f ms, 전개 %d)"), *R.Why, R.Ms, R.Expanded);
+			return W;
+		}
+
+		// 기동 구간 / 통로 구간으로 나눈다.
+		TArray<FSeg> Man, Tr;
+		FPose ManStart = R.Start, TrStart = R.Start, Q = R.Start;
+		for (const FSeg& S : R.Segs)
+		{
+			TArray<FSeg>& Dst = S.bTransit ? Tr : Man;
+			if (Dst.Num() == 0) { (S.bTransit ? TrStart : ManStart) = Q; }
+			Dst.Add(S);
+			Q = Step(Q, S, S.Len);
+		}
+
+		// 통로 구간의 최종 판정은 통로 그래프 경로와 같은 격자 훑기다. 기동 구간은 주차 자세부터 연석 칸에 걸쳐 있는 면이 있어
+		// (서 있는 차도 같은 자리) 훑기 대신 탐색 지도의 완화 기준(주차 자세의 여유 이상)을 믿는다.
+		FVector2D At(0, 0);
+		const int32 Hit = Tr.Num() > 0 ? ParkLane::SweepHits(*Lane.G, TrStart, Tr, Car, At, Gate.Pos, 4.0) : 0;
+		if (Hit == 2)
+		{
+			W.Note = FString::Printf(TEXT("격자 탐색 경로가 (%.1f, %.1f) 에서 벽·장애물에 닿습니다"), At.X, At.Y);
+			W.Segs = R.Segs;
+			return W;
+		}
+		auto Clear = [&](const FPose& St, const TArray<FSeg>& Segs) { return (Segs.Num() == 0 || In.Cars.Num() == 0) ? -1.0 : PathClearance(St, Segs, Car, In.Cars, 0.1); };
+		const double ManClear = Clear(ManStart, Man);
+		W.TransitClearanceM = Clear(TrStart, Tr);
+		W.ClearanceM = ManClear >= 0.0 ? ManClear : FMath::Max(0.0, W.TransitClearanceM);
+		W.GearChanges = R.GearChanges;
+		W.Maneuver = FString::Printf(TEXT("격자 탐색 기동(기어 전환 %d회)"), R.GearChanges);
+		W.Start = R.Start;
+		W.Segs = R.Segs;
+		W.UsedGate = Gate;
+		W.bLaneRoute = true;
+		W.LaneRulesSource = Lane.Source;
+		for (const FSeg& S : Tr) { W.LaneLengthM += S.Len; }
+		TArray<int32> Edges;
+		ParkHybrid::EdgesAlong(M, R.Start, R.Segs, Car, Edges);
+		for (const int32 E : Edges) { W.LaneEdges.Add(ParkLane::EdgeId(E)); }
+
+		if (bEnter && ManClear >= 0.0 && ManClear < 0.05)
+		{
+			W.Note = FString::Printf(TEXT("격자 탐색: 이 차는 %d번 면에 들어가면 옆 차와 %.2f m 로 겹칩니다(들어갈 자리가 없음)"), Slot.Number, ManClear);
+			return W;
+		}
+		FString StallWhy;
+		if (PsPredictStall(World, W, Ignore, StallWhy))
+		{
+			W.Note = TEXT("격자 탐색 경로도 ") + StallWhy;
+			return W;
+		}
+
+		W.Note = FString::Printf(TEXT("정해진 기동·통로 추종으로는 안 돼 격자 탐색으로 찾은 경로(%.0f ms)"), R.Ms);
+		if (Hit == 1) { W.Note += FString::Printf(TEXT(" · 참고: (%.1f, %.1f) 에서 주차면 가장자리를 지납니다"), At.X, At.Y); }
+		if (ManClear >= 0.0 && ManClear < 0.25) { W.Note += FString::Printf(TEXT(" · 주의: 기동 구간 옆 차와 %.2f m"), ManClear); }
+		if (W.TransitClearanceM >= 0.0 && W.TransitClearanceM < 0.25) { W.Note += FString::Printf(TEXT(" · 주의: 통로 주행 구간 서 있는 차와 %.2f m"), W.TransitClearanceM); }
+		W.bOk = true;
+		return W;
+	}
+
+	/**
+	 * 격자 탐색 회랑 후보: 면 앞 통로 ↔ 게이트의 그래프 경로(규칙을 지킨 FindRoute, 실제 주행 순서, 게이트 점 포함).
+	 * 면 앞에서 달릴 수 있는 두 방향 중 길이 있는 것을 짧은 순으로.
+	 */
+	TArray<TArray<FVector2D>> PsHybridRoutes(const FPsLane& L, const FParkSimLotSlot& Slot, const FCarDims& Car, const FParkSimGate& Gate, bool bEnter)
+	{
+		TArray<TPair<double, TArray<FVector2D>>> Found;
+		ParkLane::FAnchor SlotA, GateA;
+		double Dg;
+		if (PsLaneAtSlot(L, Slot, Car, SlotA) && ParkLane::Project(*L.G, L.States, Gate.Pos, GateA, Dg))
+		{
+			for (const FVector2D& Ex : { Slot.RowDir, -Slot.RowDir })
+			{
+				ParkLane::FAnchor T = SlotA;
+				T.Dir = PsEdgeDir(L, SlotA, Ex);
+				ParkLane::FRoute R;
+				if (!(bEnter ? ParkLane::FindRoute(*L.G, L.States, GateA, T, R) : ParkLane::FindRoute(*L.G, L.States, T, GateA, R))) { continue; }
+				TArray<FVector2D> Pts = R.Pts;
+				if (bEnter) { Pts.Insert(Gate.Pos, 0); } else { Pts.Add(Gate.Pos); }
+				Found.Add({ R.LengthM, MoveTemp(Pts) });
+			}
+		}
+		Found.Sort([](const TPair<double, TArray<FVector2D>>& A, const TPair<double, TArray<FVector2D>>& B) { return A.Key < B.Key; });
+		TArray<TArray<FVector2D>> Out;
+		for (TPair<double, TArray<FVector2D>>& F : Found) { Out.Add(MoveTemp(F.Value)); }
+		return Out;
+	}
+
+	/** 회랑 후보를 짧은 순으로 격자 탐색해 처음 된 것. 다 안 되면 첫 후보의 실패. */
+	FParkSimWorldPlan PsHybridTry(UWorld* World, const FParkSimLotSlot& Slot, const FCarDims& Car, const FParkSimGate& Gate, const FPose& Parked,
+		bool bEnter, const TSet<const ACarActor*>& Ignore, const FParkSimWorldPlan& Base)
+	{
+		FPsLane Lane;
+		TArray<TArray<FVector2D>> Routes;
+		if (PsLaneLoad(World, Lane)) { Routes = PsHybridRoutes(Lane, Slot, Car, Gate, bEnter); }
+		if (Routes.Num() == 0)
+		{
+			FParkSimWorldPlan W = Base;
+			W.bOk = false;
+			W.Start = Parked;
+			W.Note = TEXT("격자 탐색 회랑을 만들 통로 그래프 경로가 없습니다");
+			return W;
+		}
+		FParkSimWorldPlan First;
+		for (int32 i = 0; i < Routes.Num(); ++i)
+		{
+			FParkSimWorldPlan W = PsHybridPlan(World, Slot, Car, Gate, Parked, bEnter, Ignore, Base, Routes[i]);
+			if (W.bOk) { return W; }
+			if (i == 0) { First = MoveTemp(W); }
+			else { First.Note += TEXT(" / [반대 방향] ") + W.Note; }
+		}
+		return First;
+	}
+
+	/** 기존 계획 First 가 못 쓰는 것이면 격자 탐색을 해 보고, 그것도 안 되면 First 에 그 이유를 덧붙여 돌려준다. */
+	FParkSimWorldPlan PsWithHybrid(UWorld* World, const TSet<const ACarActor*>& Ignore, FParkSimWorldPlan First, TFunctionRef<FParkSimWorldPlan()> Hybrid)
+	{
+		// 기존 계획이 성공이어도 실주행 전방 감시에 걸리면(정체중단 예상) 다시 푼다.
+		FString StallWhy;
+		const bool bStall = First.bOk && PsPredictStall(World, First, Ignore, StallWhy);
+		if (!bStall && !PsNeedHybrid(First)) { return First; }
+		FParkSimWorldPlan H = Hybrid();
+		if (H.bOk)
+		{
+			const FString Why = !First.bOk ? First.Note : (bStall ? StallWhy : FString(TEXT("통로 주행이 서 있는 차에 닿음")));
+			H.Note += FString::Printf(TEXT(" — 기존 계획: %s"), *Why);
+			return H;
+		}
+		if (bStall)
+		{
+			// 달리면 통로 한가운데서 멈춰 뒤차까지 막는다 — 거절이 낫다.
+			First.bOk = false;
+			First.Note = TEXT("기존 계획은 ") + StallWhy;
+		}
+		First.Note = First.Note.IsEmpty() ? H.Note : First.Note + TEXT(" / ") + H.Note;
+		return First;
+	}
 }
 
 namespace ParkSimLot
@@ -665,7 +926,7 @@ namespace ParkSimLot
 			}
 		}
 
-		return PsTryDirs(Dirs, [&](const FVector2D& Ex) -> FParkSimWorldPlan
+		FParkSimWorldPlan First = PsTryDirs(Dirs, [&](const FVector2D& Ex) -> FParkSimWorldPlan
 		{
 			FParkSimWorldPlan W = Base;
 			const FPsLevelOptions Opts = PsReadLevelOptions(World);
@@ -793,6 +1054,24 @@ namespace ParkSimLot
 			W.bOk = true;
 			return W;
 		});
+		if (!bLane) { return First; }
+		return PsWithHybrid(World, Ignore, MoveTemp(First), [&]()
+		{
+			// 주차 완료 자세(차체 중심 = 면 중심). 정형·사선: 전면주차 = 코가 면 안쪽(통로 반대), 후면주차 = 그 반대.
+			// 도로변: 면 축 두 방향 중 되는 쪽(통로 진행 방향과 같은 쪽이 먼저 풀린다).
+			if (Slot.Type == ELotType::Parallel)
+			{
+				const double Th0 = FMath::Atan2(Slot.Axis.Y, Slot.Axis.X);
+				FParkSimWorldPlan H = PsHybridTry(World, Slot, Car, Entrance, RearAxleFromCenter(Slot.Center, Th0, Car), true, Ignore, Base);
+				if (H.bOk) { return H; }
+				FParkSimWorldPlan H2 = PsHybridTry(World, Slot, Car, Entrance, RearAxleFromCenter(Slot.Center, NormalizeAngle(Th0 + UE_DOUBLE_PI), Car), true, Ignore, Base);
+				if (!H2.bOk) { H2.Note = H.Note + TEXT(" / [반대 방향] ") + H2.Note; }
+				return H2;
+			}
+			const FVector2D Inward = FVector2D::DotProduct(Slot.Axis, -Slot.AisleDir) >= 0.0 ? Slot.Axis : -Slot.Axis;
+			const double Th = FMath::Atan2(Inward.Y, Inward.X) + (bRear ? UE_DOUBLE_PI : 0.0);
+			return PsHybridTry(World, Slot, Car, Entrance, RearAxleFromCenter(Slot.Center, NormalizeAngle(Th), Car), true, Ignore, Base);
+		});
 	}
 
 	FParkSimWorldPlan PlanExit(UWorld* World, const FParkSimLotSlot& Slot, const FVector2D& CarCenter, double CarYawRad,
@@ -849,7 +1128,7 @@ namespace ParkSimLot
 			}
 		}
 
-		return PsTryDirs(Dirs, [&](const FVector2D& Ex) -> FParkSimWorldPlan
+		FParkSimWorldPlan First = PsTryDirs(Dirs, [&](const FVector2D& Ex) -> FParkSimWorldPlan
 		{
 			FParkSimWorldPlan W = Base;
 			const FPsLevelOptions Opts = PsReadLevelOptions(World);
@@ -972,6 +1251,11 @@ namespace ParkSimLot
 			W.Segs.Append(Link);
 			W.bOk = true;
 			return W;
+		});
+		if (!bLane) { return First; }
+		return PsWithHybrid(World, Ignore, MoveTemp(First), [&]()
+		{
+			return PsHybridTry(World, Slot, Car, Exit, RearAxleFromCenter(CarCenter, CarYawRad, Car), false, Ignore, Base);
 		});
 	}
 }

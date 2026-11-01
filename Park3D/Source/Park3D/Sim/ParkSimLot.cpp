@@ -500,6 +500,34 @@ namespace
 	}
 
 	/**
+	 * 도로변 면의 주차 자세(차체 중심, 방위 Th). 서신 16·17번처럼 길이 5.14 m 면을 중심 간격 5.0 m 로 겹쳐 그린 열에서는
+	 * 면 가운데에 세우면 긴 차끼리 앞뒤가 닿는다(이오닉9 5.10 m 옆에 4.9 m 넘는 차). 실제 운전자처럼 면 축을 따라 앞뒤 차와
+	 * 간격이 나는 쪽으로 옮긴다 — 차 간격 0.30 m(안 되면 0.12 m)를 지키는 가장 작은 이동, 벽 여유는 가운데보다 나빠지지 않게.
+	 * 가운데가 이미 되면 가운데 그대로다.
+	 */
+	FVector2D PsParallelParkCenter(UWorld* World, const FParkSimLotSlot& Slot, const FCarDims& Car, double Th, const TSet<const ACarActor*>& Ignore)
+	{
+		FPsLane Lane;
+		if (!PsLaneLoad(World, Lane)) { return Slot.Center; }
+		ParkHybrid::FMapInput In;
+		In.G = Lane.G;
+		if (ACarPlacementManager* CarMgr = PsCarManager(World))
+		{
+			for (const TObjectPtr<ACarActor>& C : CarMgr->GetCars())
+			{
+				if (!IsValid(C) || C->IsHidden() || Ignore.Contains(C.Get())) { continue; }
+				FPoly2D Wp;
+				if (ParkSimLot::CarPolygon(C, Wp)) { In.Cars.Add(Wp); }
+			}
+		}
+		if (In.Cars.Num() == 0) { return Slot.Center; }
+		ParkHybrid::FMap M;
+		ParkHybrid::BuildMap(In, M);
+		if (!M.IsValid()) { return Slot.Center; }
+		return Slot.Center + Slot.Axis * ParkHybrid::ParallelParkShift(M, Car, Slot.Center, Slot.Axis, Th);
+	}
+
+	/**
 	 * 격자 탐색(Hybrid A*)으로 다시 푼다 — 후진·전진을 섞어 빼고 넣으며, 모퉁이는 주행 영역 안에서 크게 돈다(ParkHybridPlanner).
 	 * Parked = 주차 자세(뒷축, 출차는 출발·입차는 도착). 통로 규칙(일방·막힘)은 그래프 에지 둘레의 방향장으로 지킨다.
 	 */
@@ -1058,13 +1086,14 @@ namespace ParkSimLot
 		return PsWithHybrid(World, Ignore, MoveTemp(First), [&]()
 		{
 			// 주차 완료 자세(차체 중심 = 면 중심). 정형·사선: 전면주차 = 코가 면 안쪽(통로 반대), 후면주차 = 그 반대.
-			// 도로변: 면 축 두 방향 중 되는 쪽(통로 진행 방향과 같은 쪽이 먼저 풀린다).
+			// 도로변: 면 축 두 방향 중 되는 쪽(통로 진행 방향과 같은 쪽이 먼저 풀린다). 중심은 앞뒤 차와 간격이 나게 면 축으로 옮길 수 있다.
 			if (Slot.Type == ELotType::Parallel)
 			{
 				const double Th0 = FMath::Atan2(Slot.Axis.Y, Slot.Axis.X);
-				FParkSimWorldPlan H = PsHybridTry(World, Slot, Car, Entrance, RearAxleFromCenter(Slot.Center, Th0, Car), true, Ignore, Base);
+				const double Th1 = NormalizeAngle(Th0 + UE_DOUBLE_PI);
+				FParkSimWorldPlan H = PsHybridTry(World, Slot, Car, Entrance, RearAxleFromCenter(PsParallelParkCenter(World, Slot, Car, Th0, Ignore), Th0, Car), true, Ignore, Base);
 				if (H.bOk) { return H; }
-				FParkSimWorldPlan H2 = PsHybridTry(World, Slot, Car, Entrance, RearAxleFromCenter(Slot.Center, NormalizeAngle(Th0 + UE_DOUBLE_PI), Car), true, Ignore, Base);
+				FParkSimWorldPlan H2 = PsHybridTry(World, Slot, Car, Entrance, RearAxleFromCenter(PsParallelParkCenter(World, Slot, Car, Th1, Ignore), Th1, Car), true, Ignore, Base);
 				if (!H2.bOk) { H2.Note = H.Note + TEXT(" / [반대 방향] ") + H2.Note; }
 				return H2;
 			}

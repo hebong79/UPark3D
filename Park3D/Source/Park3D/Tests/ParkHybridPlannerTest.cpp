@@ -192,4 +192,65 @@ bool FParkHybridEnterTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// 도로변 면 주차 자세 옮기기 — 서신 16·17번 재현(pm-restore 2026-11-01, .125 일방 입차 17번 「들어갈 자리가 없음」).
+// 길이 5.14 m 면 두 칸을 중심 간격 5.0 m 로 겹쳐 그린 열(축 +Y, x 1.0..3.64), 왼쪽은 연석(벽), 17번 끝 너머 1.3 m 뒤에 벽.
+// 16번에는 이오닉9(5.10 m)가 17번 쪽으로 0.31 m 밀려 서 있다. 카니발(5.26 m)을 17번 가운데에 세우면 겹친다.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FParkHybridParallelShiftTest, "Park3D.Lane.ParallelShift",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::EngineFilter)
+
+bool FParkHybridParallelShiftTest::RunTest(const FString& Parameters)
+{
+	FLaneGrid Grid;
+	Grid.Cell = 0.2;
+	Grid.W = FMath::RoundToInt(14.0 / Grid.Cell) + 1;
+	Grid.H = FMath::RoundToInt(16.0 / Grid.Cell) + 1;
+	Grid.Free.SetNumZeroed(Grid.W * Grid.H);
+	auto IsWall = [](const FVector2D& P) { return P.X < 1.0 || (P.X < 3.64 && (P.Y > 12.9 || P.Y < 1.2)); };
+	auto InSlots = [](const FVector2D& P) { return P.X >= 1.0 && P.X < 3.64 && P.Y > 1.43 && P.Y < 11.57; };
+	for (int32 i = 0; i < Grid.W * Grid.H; ++i) { Grid.Free[i] = IsWall(Grid.CellCenter(i % Grid.W, i / Grid.W)) ? 0 : 1; }
+	FBuildParams Prm;
+	FLaneGraph G = BuildFromGrid(Grid, Prm);
+	G.GridCells.SetNumZeroed(Grid.W * Grid.H);
+	for (int32 i = 0; i < Grid.W * Grid.H; ++i)
+	{
+		const FVector2D P = Grid.CellCenter(i % Grid.W, i / Grid.W);
+		G.GridCells[i] = IsWall(P) ? 0 : (InSlots(P) ? 2 : 1);
+	}
+
+	const FVector2D Axis(0.0, 1.0);
+	const FVector2D C16(2.32, 4.0), C17(2.32, 9.0);
+	const double Th = UE_DOUBLE_HALF_PI;
+	ParkHybrid::FMapInput In;
+	In.G = &G;
+	FPoly2D Ioniq9;
+	RectPoly(C16 + Axis * 0.31, Th, 5.10, 1.95, Ioniq9);
+	In.Cars.Add(Ioniq9);
+	ParkHybrid::FMap M;
+	ParkHybrid::BuildMap(In, M);
+	if (!TestTrue(TEXT("지도"), M.IsValid())) { return false; }
+
+	const FCarDims Carnival = FCarDims::FromSize(5.26, 1.99);
+	double Wall0, Car0;
+	ParkHybrid::PoseClearance(M, Carnival, RearAxleFromCenter(C17, Th, Carnival), Wall0, Car0);
+	AddInfo(FString::Printf(TEXT("면 가운데: 벽 %.2f m · 차 %.2f m"), Wall0, Car0));
+	TestTrue(TEXT("재현: 면 가운데에 세우면 앞차와 겹친다(들어갈 자리 없음 기준 0.05 m 미만)"), Car0 < 0.05);
+
+	const double S = ParkHybrid::ParallelParkShift(M, Carnival, C17, Axis, Th);
+	double Wall1, Car1;
+	ParkHybrid::PoseClearance(M, Carnival, RearAxleFromCenter(C17 + Axis * S, Th, Carnival), Wall1, Car1);
+	AddInfo(FString::Printf(TEXT("이동 %.2f m: 벽 %.2f m · 차 %.2f m"), S, Wall1, Car1));
+	TestTrue(TEXT("앞차에서 멀어지는 쪽(+Y, 열 끝 쪽)으로 옮긴다"), S > 0.0 && S <= 1.0 + 1e-6);
+	TestTrue(TEXT("옮긴 자세는 차 간격 0.30 m 이상"), Car1 >= 0.30);
+	TestTrue(TEXT("옮긴 자세는 끝 벽에 닿지 않는다"), Wall1 >= FMath::Min(Wall0, 0.05) - 1e-3);
+
+	// 반대 방위(코가 -Y)여도 같은 쪽으로 옮긴다 — 이동은 차체 중심 기준이다.
+	const double S2 = ParkHybrid::ParallelParkShift(M, Carnival, C17, Axis, -Th);
+	TestTrue(TEXT("반대 방위도 +Y 로 옮긴다"), FMath::Abs(S2 - S) < 0.051);
+
+	// 가운데로 충분한 작은 차(모닝 3.6 m)는 옮기지 않는다.
+	const FCarDims Morning = FCarDims::FromSize(3.6, 1.6);
+	TestEqual(TEXT("가운데가 되면 이동 0"), ParkHybrid::ParallelParkShift(M, Morning, C17, Axis, Th), 0.0);
+	return true;
+}
+
 #endif

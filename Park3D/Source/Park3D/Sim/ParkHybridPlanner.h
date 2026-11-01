@@ -160,4 +160,13 @@ namespace ParkHybrid
 
 	/** 경로를 따라 원 덮개로 잰 벽·차까지 최소 여유(m, 음수 = 닿음). 테스트·보고용. */
 	PARK3D_API double MinSlack(const FMap& M, const ParkPlan::FPose& Start, const TArray<ParkPlan::FSeg>& Segs, const ParkPlan::FCarDims& Car);
+
+	/** 한 자세에서 차체 외곽까지 벽·서 있는 차의 거리(m, 거리장 표본 — 원 덮개 아님). */
+	PARK3D_API void PoseClearance(const FMap& M, const ParkPlan::FCarDims& Car, const ParkPlan::FPose& Q, double& OutWall, double& OutCar);
+
+	/**
+	 * 도로변 면에 세울 차체 중심을 면 축(Axis, 단위)으로 얼마나 옮길지(m). 면 가운데에서 앞뒤 차와 간격이 모자라면
+	 * 차 간격 0.30 m(안 되면 0.12 m)를 지키는 가장 작은 이동(최대 1 m, 벽 여유는 가운데보다 나빠지지 않게). 가운데가 되거나 다 안 되면 0.
+	 */
+	PARK3D_API double ParallelParkShift(const FMap& M, const ParkPlan::FCarDims& Car, const FVector2D& Center, const FVector2D& Axis, double Th);
 }

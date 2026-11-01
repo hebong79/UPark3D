@@ -772,4 +772,32 @@ double MinSlack(const FMap& M, const FPose& Start, const TArray<FSeg>& Segs, con
 	}
 	return Min;
 }
+
+void PoseClearance(const FMap& M, const FCarDims& Car, const FPose& Q, double& OutWall, double& OutCar)
+{
+	PhSlacks(M, FPhCover(Car), Q, OutWall, OutCar, DBL_MAX);
+}
+
+double ParallelParkShift(const FMap& M, const FCarDims& Car, const FVector2D& Center, const FVector2D& Axis, double Th)
+{
+	constexpr double MaxShift = 1.0, ShiftStep = 0.05;
+	auto At = [&](double S, double& OutWall, double& OutCar) { PoseClearance(M, Car, RearAxleFromCenter(Center + Axis * S, Th, Car), OutWall, OutCar); };
+	double Wall0, Car0;
+	At(0.0, Wall0, Car0);
+	const double WallMin = FMath::Min(Wall0, 0.05) - 1e-3;
+	for (const double Need : { 0.30, 0.12 })
+	{
+		if (Car0 >= Need) { return 0.0; }
+		for (double S = ShiftStep; S <= MaxShift + 1e-6; S += ShiftStep)
+		{
+			for (const double Sg : { S, -S })
+			{
+				double Wl, Cr;
+				At(Sg, Wl, Cr);
+				if (Cr >= Need && Wl >= WallMin) { return Sg; }
+			}
+		}
+	}
+	return 0.0;
+}
 }

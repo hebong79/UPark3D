@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "ParkingSimManager.h"
+#include "ParkAgentManager.h"
 
 #include "../CarActor.h"
 #include "../CarPlacementLibrary.h"
@@ -893,6 +894,16 @@ void AParkingSimManager::TickDrive(float Dt)
 	const FVector2D Heading(FMath::Cos(A.Th), FMath::Sin(A.Th));
 	Target = ApplyAvoidance(static_cast<float>(Target), Heading * static_cast<double>(A.Gear),
 		static_cast<float>(FMath::Min<double>(AvoidLookAheadM, Remaining + 1.0)), Dt, bTransit);
+	Target = ApplyAgentYield(static_cast<float>(Target), Heading * static_cast<double>(A.Gear),
+		static_cast<float>(FMath::Min<double>(AvoidLookAheadM, Remaining + 1.0)), Dt);
+	if (AgentBlockedSec > AgentGiveUpSec)
+	{
+		LogEvent(FString::Printf(TEXT("정체 중단 — %s 에 %.1f초 막혀 비켜 주지 않습니다(위치 %.2f, %.2f)"),
+			*AgentBlockerId, AgentBlockedSec, PosM.X, PosM.Y));
+		SpeedMps = 0.f;
+		FinishRun(TEXT("정체중단"));
+		return;
+	}
 
 	// 움직이지 않는 차량에 막힌 경우는 기다려도 풀리지 않는다. 뚫고 지나가지 않고 주행을 접는다.
 	if (BlockerRunId == 0 && BlockedSec > AvoidDeadlockSec)
@@ -968,6 +979,94 @@ void AParkingSimManager::TickDrive(float Dt)
 	}
 
 	Sample(Dt);
+}
+
+ACarActor* AParkingSimManager::GetSimCar() const
+{
+	return Car;
+}
+
+float AParkingSimManager::ApplyAgentYield(float InTargetSpeed, const FVector2D& TravelDir, float MaxRangeM, float Dt)
+{
+	const AParkAgentManager* Agents = bAvoidCollision ? AParkAgentManager::Find(GetWorld()) : nullptr;
+	if (!Agents || Agents->Num() == 0)
+	{
+		if (!AgentBlockerId.IsEmpty())   // 막던 것이 지워졌다(에이전트가 한 번도 없던 주행은 여기 오지 않는다)
+		{
+			LogEvent(FString::Printf(TEXT("전방 정리 — %s 이(가) 사라졌습니다, 주행 재개"), *AgentBlockerId));
+			AgentBlockerId.Reset();
+		}
+		AgentBlockedSec = 0.f;
+		return InTargetSpeed;
+	}
+	TArray<FVector2D> Pos;
+	TArray<double> Radius;
+	TArray<FString> Ids;
+	Agents->CollectYieldTargets(Pos, Radius, Ids);
+
+	// 지금 기어 구간의 남은 궤적(차체 중심선)을 따라 앞을 본다 — 곧은 통로로 보면 회전 뒤에 선 사람을 코앞에서야 본다.
+	const double Range = FMath::Min(AvoidLookAheadM, MaxRangeM);
+	TArray<FVector2D> Line;
+	Line.Add(PosM);
+	{
+		const int32 EndIdx = MoveEnds.IsValidIndex(MoveIdx) ? MoveEnds[MoveIdx] : Track.Num() - 1;
+		double Arc = 0.0;
+		for (int32 k = TrackIdx + 1; k <= EndIdx && Arc < Range; ++k)
+		{
+			if (Track[k].S <= CurS) { continue; }
+			const FVector2D C = ParkPlan::CenterFromRearAxle(ParkPlan::FPose{ Track[k].Rear.X, Track[k].Rear.Y, Track[k].Th }, Plan.Car);
+			Arc += FVector2D::Distance(Line.Last(), C);
+			Line.Add(C);
+		}
+		// 구간 끝에서 1 m 더 — 마지막 자세의 앞머리 자리도 본다.
+		FVector2D EndDir = Line.Num() >= 2 ? (Line.Last() - Line[Line.Num() - 2]).GetSafeNormal() : FVector2D::ZeroVector;
+		if (EndDir.IsNearlyZero()) { EndDir = TravelDir; }
+		Line.Add(Line.Last() + EndDir * 1.0);
+	}
+
+	// 그 선에서 통로 반폭(차량 회피와 같은 폭) 안에 드는 가장 가까운 사람·이륜. 간격은 선을 따라 잰 거리.
+	float NearestGap = TNumericLimits<float>::Max();
+	int32 Nearest = INDEX_NONE;
+	for (int32 i = 0; i < Pos.Num(); ++i)
+	{
+		double Before = 0.0;
+		for (int32 k = 0; k + 1 < Line.Num() && Before <= Range + Radius[i]; ++k)
+		{
+			const FVector2D Seg = Line[k + 1] - Line[k];
+			const double L = Seg.Size();
+			if (L < 1e-6) { continue; }
+			const FVector2D Dir = Seg / L;
+			const double Along = FVector2D::DotProduct(Pos[i] - Line[k], Dir);
+			if (k == 0 && Along <= 0.0) { Before += L; continue; }   // 차 뒤
+			const double T = FMath::Clamp(Along, 0.0, L);
+			if (FVector2D::Distance(Pos[i], Line[k] + Dir * T) <= AvoidCorridorHalfM + Radius[i])
+			{
+				const double Gap = Before + T;
+				if (Gap <= Range + Radius[i] && Gap < NearestGap) { NearestGap = static_cast<float>(Gap); Nearest = i; }
+				break;
+			}
+			Before += L;
+		}
+	}
+	if (Nearest == INDEX_NONE)
+	{
+		if (!AgentBlockerId.IsEmpty())
+		{
+			LogEvent(FString::Printf(TEXT("전방 정리 — %s 이(가) 비켰습니다, 주행 재개"), *AgentBlockerId));
+			AgentBlockerId.Reset();
+		}
+		AgentBlockedSec = 0.f;
+		return InTargetSpeed;
+	}
+	if (AgentBlockerId != Ids[Nearest])
+	{
+		AgentBlockerId = Ids[Nearest];
+		LogEvent(FString::Printf(TEXT("전방 양보 — %s 이(가) %.1fm 앞에 있어 감속(간격 %.1fm)"), *AgentBlockerId, NearestGap, AgentSafeGapM));
+	}
+	const float Allowed = FMath::Sqrt(2.f * DecelMps2 * FMath::Max(NearestGap - AgentSafeGapM, 0.f));
+	const float Capped = FMath::Min(InTargetSpeed, Allowed);
+	AgentBlockedSec = Capped < 0.05f ? AgentBlockedSec + Dt : 0.f;
+	return Capped;
 }
 
 float AParkingSimManager::ApplyAvoidance(float InTargetSpeed, const FVector2D& TravelDir, float MaxRangeM, float Dt, bool bStaticToo)

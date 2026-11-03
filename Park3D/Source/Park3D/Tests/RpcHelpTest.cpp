@@ -4,6 +4,7 @@
 #include "Misc/AutomationTest.h"
 #include "../Rpc/RpcDispatcher.h"
 #include "../Rpc/RpcHelp.h"
+#include "../Rpc/Modules/AgentRpcModule.h"
 #include "../Rpc/Modules/BayRpcModule.h"
 #include "../Rpc/Modules/CamRpcModule.h"
 #include "../Rpc/Modules/CarRpcModule.h"
@@ -43,6 +44,7 @@ bool FRpcHelpTableTest::RunTest(const FString& Parameters)
 {
 	TFunction<UWorld*()> NoWorld = []() -> UWorld* { return nullptr; };
 	URpcDispatcher* D = NewObject<URpcDispatcher>();
+	FAgentRpcModule Agent(NoWorld);       Agent.Register(*D);
 	FBayRpcModule Bay(NoWorld);           Bay.Register(*D);
 	FCamRpcModule Cam(NoWorld);           Cam.Register(*D);
 	FCarRpcModule Car(NoWorld);           Car.Register(*D);

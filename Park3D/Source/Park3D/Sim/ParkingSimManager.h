@@ -107,6 +107,9 @@ public:
 	/** 주행이든 리플레이든 진행 중인가(정리·상한 판정 기준). */
 	bool IsBusy() const { return IsDriving() || State == EParkSimState::Replay; }
 
+	/** 이 주행이 모는 차량(없으면 nullptr). 에이전트(사람·이륜)가 움직이는 차를 피할 때 쓴다. */
+	ACarActor* GetSimCar() const;
+
 	/**
 	 * 시뮬레이션 시작(기존 진입점 — HUD·단축키). 면 지정이 (presetId, slotIndex) 뿐인 요청으로 바꿔 StartRequest 에 넘긴다.
 	 * @param Mode 전면/후면/랜덤. 도로변 면은 항상 후면(후진)주차다. 출차에서는 새로 세우는 차의 자세.
@@ -228,6 +231,12 @@ private:
 	 * 서 있는 차량에 막힌 경우는 여기서 풀지 않는다(TickDrive 가 "정체중단"으로 접는다).
 	 */
 	float ApplyAvoidance(float InTargetSpeed, const FVector2D& TravelDir, float MaxRangeM, float Dt, bool bStaticToo);
+	/**
+	 * 사람·자전거·오토바이(AParkAgentManager)가 남은 궤적(지금 기어 구간, 차체 중심선 ±AvoidCorridorHalfM) 안에 있으면
+	 * 궤적을 따라 잰 간격으로 그 앞 AgentSafeGapM 에서 서는 속도로 깎는다. TravelDir 은 구간 끝을 1 m 늘이는 방향(궤적이 짧을 때).
+	 * 에이전트가 하나도 없으면 아무것도 바꾸지 않는다(기존 주행과 같은 결과).
+	 */
+	float ApplyAgentYield(float InTargetSpeed, const FVector2D& TravelDir, float MaxRangeM, float Dt);
 	void TickReplay(float Dt);
 	/** 차체 중심·진행 방위(도)로 차량을 놓는다. */
 	void ApplyCarPose(const FVector2D& PosM, float YawDegIn);
@@ -297,6 +306,14 @@ private:
 	int32 BlockerRunId = INDEX_NONE;
 	/** 이번 교착에서 "우선순위 통과" 로그를 이미 남겼는가. */
 	bool bDeadlockLogged = false;
+
+	// 사람·이륜 양보
+	/** 차체 중심 ↔ 에이전트 중심 최소 간격(m) — 차 반길이 약 2.3 + 여유. */
+	static constexpr float AgentSafeGapM = 3.6f;
+	/** 에이전트에 이만큼 막혀 서 있으면 주행을 접는다(정체중단). */
+	static constexpr float AgentGiveUpSec = 30.f;
+	float AgentBlockedSec = 0.f;
+	FString AgentBlockerId;
 
 	// 리플레이
 	float ReplayTime = 0.f;

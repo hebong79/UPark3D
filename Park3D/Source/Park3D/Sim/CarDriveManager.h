@@ -57,6 +57,12 @@ public:
 
 	const FCarDriveRun* FindRun(int32 RunId) const;
 
+	/** 이 차가 지금 car.drive 로 달리는 중인가. */
+	bool IsDriving(const ACarActor* Car) const
+	{
+		return Runs.ContainsByPredicate([Car](const FCarDriveRun& R) { return R.State == ECarDriveState::Driving && R.Car.Get() == Car; });
+	}
+
 	/** Dt 초만큼 모든 주행을 진행한다(Tick 이 부른다. 에디터 월드 테스트는 직접 부른다). */
 	void Advance(float Dt);
 

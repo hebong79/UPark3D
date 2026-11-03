@@ -38,7 +38,7 @@ protected:
 	/** 콤보 선택 변경. 사용자가 고른 것(OnMouseClick/OnKeyPress)만 이동이고, 코드 선택(Direct)은 무시한다. */
 	UFUNCTION() void HandleSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
 
-	/** 콤보 항목/본문 위젯 — 어두운 입력칸·목록 위에 흰 굵은 글자(시안 "주차장 선택 카드"). */
+	/** 콤보 항목/본문 위젯 — [현재 표시 점] 이름(굵게) + 설명(levels[].desc, 흐리게) 두 줄. */
 	UFUNCTION() UWidget* HandleGenerateItem(FString Item);
 
 private:
@@ -46,6 +46,8 @@ private:
 
 	/** 마지막 Populate 로 받은 목록. 콤보 문자열 → 레벨 경로를 여기서 찾는다. */
 	TArray<FPark3DLevelOption> Options;
+	/** 지금 레벨에 해당하는 항목 이름(없으면 빈 문자열). 항목 위젯이 현재 표시 점·강조색을 칠한다. */
+	FString CurrentName;
 
 	UPROPERTY(Transient) TObjectPtr<UBorder> RootBorder = nullptr;
 	UPROPERTY(Transient) TObjectPtr<UComboBoxString> Combo_Level = nullptr;

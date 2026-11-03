@@ -46,6 +46,9 @@ struct FPark3DLevelOption
 	UPROPERTY(BlueprintReadWrite, Category = "Config")
 	FString Level;
 
+	/** 콤보 항목 아래 한 줄 설명(JSON `desc`, 예: "실내 · 65면 · 데이터 없음"). 없으면 줄을 안 그린다. 비-UPROPERTY(JSON 파서 전용). */
+	FString Desc;
+
 	/** 이 주차장에 들어갔을 때 쓸 데이터 파일(Save/3D/<종류>/ 기준). 키가 없으면 최상위 값 유지. */
 	TOptional<FString> PresetFile;
 	TOptional<FString> CarPosFile;
@@ -59,6 +62,11 @@ struct FPark3DLevelOption
 	TOptional<bool> MapFloor;
 	/** 이 주차장의 조명 파일(Save/3D/Light 기준, JSON `light_file`). 없으면 최상위 값 유지. */
 	TOptional<FString> LightFile;
+	/**
+	 * 이 주차장에서 숨길 레벨 액터 이름(JSON `hide_actors`). 없으면 최상위 값 유지, `[]` 면 아무것도 숨기지 않는다.
+	 * 액터 이름은 레벨마다 달라 서신 나무용 `StaticMeshActor_188` 이 다른 레벨에선 덕트·천장 조명을 숨겼다(2026-11-03 실측).
+	 */
+	TOptional<TArray<FString>> HideActors;
 
 	/**
 	 * 주차 시뮬 입구·출구(UE 월드 미터, Z 자리에 진행 yaw 도). JSON `sim_entrance`/`sim_exit` = {x, y, yaw}.

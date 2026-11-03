@@ -372,7 +372,13 @@ void APark3DGameMode::ReplayParkingSim()
 void APark3DGameMode::ApplyConfigHiddenActors()
 {
 	FPark3DAppConfig Config;
-	if (!UPark3DAppConfigLibrary::Load(Config) || Config.HideActors.Num() == 0)
+	if (!UPark3DAppConfigLibrary::Load(Config))
+	{
+		return;
+	}
+	// levels[] 항목에 hide_actors 가 있으면 그 레벨은 그 목록을 쓴다(`[]` = 숨기지 않음).
+	UPark3DAppConfigLibrary::ApplyLevelOverrides(Config, UPark3DAppConfigLibrary::GetCurrentLevelPath(GetWorld()));
+	if (Config.HideActors.Num() == 0)
 	{
 		return;
 	}

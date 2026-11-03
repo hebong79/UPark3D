@@ -482,7 +482,7 @@ bool FPark3DAppConfigLevelsTest::RunTest(const FString& Parameters)
 		"camerapos_file": "CamPos_Seosin.json",
 		"levels": [
 			{"name": "서신지구대", "level": "Levels/LV_Park_01"},
-			{"name": "객리단길", "level": "Levels/LV_Park_03", "preset_file": "", "carpos_file": "CarPos_13Num.객리단.json", "slot_file": "LevelSlots_13Face.객리단.json"},
+			{"name": "객리단길", "level": "Levels/LV_Park_03", "desc": " 실외 · 13면 ", "preset_file": "", "carpos_file": "CarPos_13Num.객리단.json", "slot_file": "LevelSlots_13Face.객리단.json"},
 			{"name": "이름만"},
 			{"level": "Levels/LV_Park_09"},
 			"문자열 항목"
@@ -492,6 +492,8 @@ bool FPark3DAppConfigLevelsTest::RunTest(const FString& Parameters)
 	{
 		TestEqual(TEXT("[0] name"), C.Levels[0].Name, FString(TEXT("서신지구대")));
 		TestFalse(TEXT("[0] 파일 키 없음 → 미설정"), C.Levels[0].CarPosFile.IsSet());
+		TestTrue(TEXT("[0] desc 없음 → 빈 문자열"), C.Levels[0].Desc.IsEmpty());
+		TestEqual(TEXT("[1] desc 앞뒤 공백 제거"), C.Levels[1].Desc, FString(TEXT("실외 · 13면")));
 		TestEqual(TEXT("[1] level"), C.Levels[1].Level, FString(TEXT("Levels/LV_Park_03")));
 		TestTrue(TEXT("[1] preset_file 빈 문자열도 '있음'"), C.Levels[1].PresetFile.IsSet() && C.Levels[1].PresetFile.GetValue().IsEmpty());
 		TestTrue(TEXT("[1] carpos_file"), C.Levels[1].CarPosFile.IsSet());
@@ -539,6 +541,33 @@ bool FPark3DAppConfigLevelsTest::RunTest(const FString& Parameters)
 			UPark3DAppConfigLibrary::ApplyLevelOverrides(Park, TEXT("/Game/Levels/LV_Park_01"));
 			TestFalse(TEXT("키 없는 항목은 map_floor 최상위 유지"), Park.bMapFloor);
 			TestEqual(TEXT("키 없는 항목은 light_file 최상위 유지"), Park.LightFile, FString(TEXT("Top.json")));
+		}
+	}
+
+	// 3.6) hide_actors — 항목에 있으면 그 목록(빈 배열 = 숨기지 않음), 없으면 최상위 유지.
+	{
+		FPark3DAppConfig H;
+		const FString HJson = TEXT(R"({
+			"hide_actors": ["StaticMeshActor_188", "StaticMeshActor_185"],
+			"levels": [
+				{"name": "서신지구대", "level": "Levels/LV_Park_01"},
+				{"name": "동대문 지하주차장", "level": "Levels/LV_Park_05", "hide_actors": []},
+				{"name": "익산시청 지하주차장", "level": "Levels/LV_Park_09", "hide_actors": [" Lamp_3 ", ""]}
+			]
+		})");
+		if (TestTrue(TEXT("hide_actors 파싱"), UPark3DAppConfigLibrary::FromJson(HJson, H)) && TestEqual(TEXT("hide_actors 항목 3개"), H.Levels.Num(), 3))
+		{
+			FPark3DAppConfig Seo2 = H;
+			UPark3DAppConfigLibrary::ApplyLevelOverrides(Seo2, TEXT("/Game/Levels/LV_Park_01"));
+			TestEqual(TEXT("키 없는 항목은 최상위 hide_actors 유지"), Seo2.HideActors.Num(), 2);
+
+			FPark3DAppConfig Dong = H;
+			UPark3DAppConfigLibrary::ApplyLevelOverrides(Dong, TEXT("/Game/Levels/LV_Park_05"));
+			TestEqual(TEXT("빈 배열이면 숨기지 않음"), Dong.HideActors.Num(), 0);
+
+			FPark3DAppConfig Ik = H;
+			UPark3DAppConfigLibrary::ApplyLevelOverrides(Ik, TEXT("/Game/Levels/LV_Park_09"));
+			TestTrue(TEXT("항목 목록으로 교체(공백 제거, 빈 이름 버림)"), Ik.HideActors.Num() == 1 && Ik.HideActors[0] == TEXT("Lamp_3"));
 		}
 	}
 

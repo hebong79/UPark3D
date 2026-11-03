@@ -1,11 +1,19 @@
 {
 	"level": "Levels/LV_Park_03",
 	"levels": [
-		{ "name": "기본맵", "level": "Maps/PresetMaker1", "map_floor": true, "light_file": "LightSettings_Base.json", "preset_file": "", "carpos_file": "", "camerapos_file": "", "slot_file": "" },
-		{ "name": "서신지구대", "level": "Levels/LV_Park_01", "preset_file": "", "carpos_file": "CarPos_Seoshin_2Cam.json", "camerapos_file": "CamPos_Seosin.json" },
-		{ "name": "객리단길", "level": "Levels/LV_Park_03", "preset_file": "", "carpos_file": "CarPos_13Num.객리단.json", "camerapos_file": "CamPos_13Face.객리단.json", "slot_file": "LevelSlots_13Face.객리단.json",
+		{ "name": "기본맵", "level": "Maps/PresetMaker1", "desc": "빈 바닥 · 면 없음", "map_floor": true, "light_file": "LightSettings_Base.json", "preset_file": "", "carpos_file": "", "camerapos_file": "", "slot_file": "" },
+		{ "name": "서신지구대", "level": "Levels/LV_Park_01", "desc": "실외 · 23면", "preset_file": "", "carpos_file": "CarPos_Seoshin_2Cam.json", "camerapos_file": "CamPos_Seosin.json" },
+		{ "name": "객리단길", "level": "Levels/LV_Park_03", "desc": "실외 · 13면", "preset_file": "", "carpos_file": "CarPos_13Num.객리단.json", "camerapos_file": "CamPos_13Face.객리단.json", "slot_file": "LevelSlots_13Face.객리단.json",
 		  "sim_entrance": { "x": 11.04, "y": 36.0, "yaw": -107.91 }, "sim_exit": { "x": -24.45, "y": -73.8, "yaw": -107.91 },
-		  "move_actors": [ { "name": "StaticMeshActor_128", "pos": { "x": -7.3165, "y": -31.7978, "z": 0.005 } } ] }
+		  "move_actors": [ { "name": "StaticMeshActor_128", "pos": { "x": -7.3165, "y": -31.7978, "z": 0.005 } } ] },
+		{ "name": "동대문 지하주차장", "level": "Levels/LV_Park_05", "desc": "실내 · 65면 · 데이터 없음", "hide_actors": [], "preset_file": "", "carpos_file": "", "camerapos_file": "", "slot_file": "" },
+		{ "name": "익산시청 지하주차장", "level": "Levels/LV_Park_09", "desc": "실내 · 83면 · 데이터 없음", "hide_actors": [], "preset_file": "", "carpos_file": "", "camerapos_file": "", "slot_file": "" },
+		{ "name": "오산휴게소", "level": "Levels/LV_Park_02", "desc": "실외 · 248면 · 데이터 없음", "hide_actors": [], "preset_file": "", "carpos_file": "", "camerapos_file": "", "slot_file": "" },
+		{ "name": "전주혁신도시", "level": "Levels/LV_Park_04", "desc": "실외 · 91면 · 데이터 없음", "hide_actors": [], "preset_file": "", "carpos_file": "", "camerapos_file": "", "slot_file": "" },
+		{ "name": "속초 수산시장 (평행)", "level": "Levels/LV_Park_07A", "desc": "실외 · 55면 · 데이터 없음", "hide_actors": [], "preset_file": "", "carpos_file": "", "camerapos_file": "", "slot_file": "" },
+		{ "name": "속초 수산시장 (사선)", "level": "Levels/LV_Park_07B", "desc": "실외 · 50면 · 데이터 없음", "hide_actors": [], "preset_file": "", "carpos_file": "", "camerapos_file": "", "slot_file": "" },
+		{ "name": "LV_Park_06 (이름 미확인)", "level": "Levels/LV_Park_06", "desc": "실외 · 565면 · 데이터 없음", "hide_actors": [], "preset_file": "", "carpos_file": "", "camerapos_file": "", "slot_file": "" },
+		{ "name": "LV_Park_08 (이름 미확인)", "level": "Levels/LV_Park_08", "desc": "실외 · 56면 · 데이터 없음", "hide_actors": [], "preset_file": "", "carpos_file": "", "camerapos_file": "", "slot_file": "" }
 	],
 	"rpc_port": 13510,
 	"main_port": 13600,

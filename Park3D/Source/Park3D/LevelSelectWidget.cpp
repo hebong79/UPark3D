@@ -22,8 +22,12 @@
 namespace
 {
 	// 시안(Park3D UI 시안 › 주차장 선택 카드)의 값. 색은 sRGB 16진 — FLinearColor(FColor) 가 선형으로 바꾼다.
-	constexpr float LevelCardWidth = 248.f;
-	constexpr float LevelComboHeight = 34.f;
+	// 2026-11-03 레벨 11개: 카드 248 → 300(가장 긴 "속초 수산시장 (평행)"·"LV_Park_06 (이름 미확인)" 이 안 잘리게),
+	// 항목은 이름 + 설명 두 줄이라 콤보·행 높이를 키우고, 목록은 화면을 넘지 않게 높이를 묶어 스크롤한다.
+	constexpr float LevelCardWidth = 300.f;
+	constexpr float LevelComboHeight = 46.f;
+	constexpr float LevelItemHeight = 40.f;
+	constexpr float LevelListMaxHeight = 420.f;
 	constexpr float LevelLabelFontSize = 11.f;
 	constexpr float LevelItemFontSize = 13.f;
 	constexpr float LevelMetaFontSize = 10.f;
@@ -45,6 +49,12 @@ namespace
 	void LvSetTextStyle(UTextBlock* Text, float Size, const FLinearColor& Color, bool bBold = false)
 	{
 		FSlateFontInfo Font = Text->GetFont();
+		// 엔진 기본 Roboto 에는 한글이 없어 한글만 폴백 글꼴(보통 굵기)로 그려져 "LV_Park_06 (이름 미확인)" 처럼
+		// 섞인 이름의 굵기가 갈렸다 → 한글이 있는 Pretendard(WBP 가 참조해 쿡된다, CarPlateNumberWidget 과 같은 경로).
+		if (UObject* Pretendard = LoadObject<UObject>(nullptr, TEXT("/Game/Widgets/Fonts/Pretendard/Pretendard")))
+		{
+			Font.FontObject = Pretendard;
+		}
 		Font.Size = Size;
 		Font.TypefaceFontName = bBold ? FName("Bold") : FName("Regular");
 		Text->SetFont(Font);
@@ -85,7 +95,8 @@ namespace
 		Row.SelectorFocusedBrush          = Clear;
 		Combo->SetItemStyle(Row);
 
-		Combo->SetContentPadding(FMargin(12.f, 0.f, 10.f, 0.f));
+		Combo->SetContentPadding(FMargin(8.f, 0.f, 10.f, 0.f));
+		Combo->SetMaxListHeight(LevelListMaxHeight); // 넘치면 목록 안에서 스크롤
 	}
 
 	/** "서신지구대" → "서신지구대로", "객리단길" → "객리단길로", 받침(ㄹ 제외)이 있으면 "으로". */
@@ -204,17 +215,55 @@ void ULevelSelectWidget::NativeConstruct()
 
 UWidget* ULevelSelectWidget::HandleGenerateItem(FString Item)
 {
-	// 닫힌 콤보 본문과 펼친 목록 항목이 이 함수를 같이 쓴다 — 둘 다 어두운 바탕이라 흰 글자 하나로 충분하다.
-	UTextBlock* Text = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
-	Text->SetText(FText::FromString(Item));
-	LvSetTextStyle(Text, LevelItemFontSize, LvTextColor(), /*bBold=*/true);
+	// 닫힌 콤보 본문과 펼친 목록 항목이 이 함수를 같이 쓴다 — [현재 표시 점] [이름 / 설명] 두 줄.
+	// 점은 지금 레벨 항목에만 강조색으로 칠하고 나머지는 같은 폭의 투명 점이라 이름 시작선이 맞는다.
+	// ⚠ 여기서 만든 UWidget 은 콤보가 Slate 위젯만 가져가고 UObject 는 아무도 붙잡지 않아 GC 된다. UBorder·UImage 처럼
+	//   브러시를 UObject 안에 두고 Slate 가 그 포인터를 그리는 위젯을 쓰면 GC 뒤 해제된 메모리를 그리다 죽는다(작업본 실측,
+	//   SBorder::OnPaint → MakeBox 접근 위반). 값을 복사해 가는 텍스트 블록만 쓴다 — 점도 글자("●")로.
+	const FPark3DLevelOption* Opt = Options.FindByPredicate([&Item](const FPark3DLevelOption& O) { return O.Name == Item; });
+	const bool bCurrent = !CurrentName.IsEmpty() && Item == CurrentName;
+
+	UHorizontalBox* Line = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+
+	UTextBlock* Dot = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+	Dot->SetText(FText::FromString(TEXT("●")));
+	LvSetTextStyle(Dot, 8.f, bCurrent ? LvAccentColor() : FLinearColor::Transparent);
+	if (UHorizontalBoxSlot* S = Cast<UHorizontalBoxSlot>(Line->AddChild(Dot)))
+	{
+		S->SetVerticalAlignment(VAlign_Center);
+		S->SetPadding(FMargin(2.f, 0.f, 7.f, 0.f));
+	}
+
+	UVerticalBox* Texts = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+	UTextBlock* NameText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+	NameText->SetText(FText::FromString(Item));
+	LvSetTextStyle(NameText, LevelItemFontSize, bCurrent ? LvAccentColor() : LvTextColor(), /*bBold=*/true);
+	NameText->SetTextOverflowPolicy(ETextOverflowPolicy::Ellipsis); // 폭을 넘는 이름이 생겨도 칸 밖으로 안 나간다
+	Texts->AddChild(NameText);
+	if (Opt && !Opt->Desc.IsEmpty())
+	{
+		UTextBlock* Meta = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		Meta->SetText(FText::FromString(bCurrent ? Opt->Desc + TEXT(" · 현재") : Opt->Desc));
+		LvSetTextStyle(Meta, LevelMetaFontSize, LvMutedColor());
+		Meta->SetTextOverflowPolicy(ETextOverflowPolicy::Ellipsis);
+		if (UVerticalBoxSlot* S = Cast<UVerticalBoxSlot>(Texts->AddChild(Meta)))
+		{
+			S->SetPadding(FMargin(0.f, 1.f, 0.f, 0.f));
+		}
+	}
+	if (UHorizontalBoxSlot* S = Cast<UHorizontalBoxSlot>(Line->AddChild(Texts)))
+	{
+		S->SetVerticalAlignment(VAlign_Center);
+		S->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+	}
 
 	USizeBox* Row = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
-	Row->SetHeightOverride(30.f);
-	if (USizeBoxSlot* S = Cast<USizeBoxSlot>(Row->AddChild(Text)))
+	Row->SetHeightOverride(LevelItemHeight);
+	if (USizeBoxSlot* S = Cast<USizeBoxSlot>(Row->AddChild(Line)))
 	{
 		S->SetPadding(FMargin(4.f, 0.f));
 		S->SetVerticalAlignment(VAlign_Center);
+		S->SetHorizontalAlignment(HAlign_Fill);
 	}
 	return Row;
 }
@@ -227,16 +276,22 @@ bool ULevelSelectWidget::Populate(const TArray<FPark3DLevelOption>& InOptions, c
 		return false;
 	}
 
-	Combo_Level->ClearOptions();
+	// 항목 위젯(HandleGenerateItem)이 현재 표시를 그리려면 옵션을 넣기 전에 현재 항목을 알아야 한다.
 	int32 CurrentIndex = INDEX_NONE;
 	for (int32 i = 0; i < Options.Num(); ++i)
 	{
-		Combo_Level->AddOption(Options[i].Name);
-		if (CurrentIndex == INDEX_NONE
-			&& UPark3DAppConfigLibrary::NormalizeLevelPath(Options[i].Level).Equals(CurrentLevelPath, ESearchCase::IgnoreCase))
+		if (UPark3DAppConfigLibrary::NormalizeLevelPath(Options[i].Level).Equals(CurrentLevelPath, ESearchCase::IgnoreCase))
 		{
 			CurrentIndex = i;
+			break;
 		}
+	}
+	CurrentName = CurrentIndex != INDEX_NONE ? Options[CurrentIndex].Name : FString();
+
+	Combo_Level->ClearOptions();
+	for (const FPark3DLevelOption& O : Options)
+	{
+		Combo_Level->AddOption(O.Name);
 	}
 
 	// 현재 레벨이 목록에 있으면 그 항목을 보여 준다. 없으면 선택 없음으로 두어 "지금 어디인지"를 거짓으로 말하지 않는다.

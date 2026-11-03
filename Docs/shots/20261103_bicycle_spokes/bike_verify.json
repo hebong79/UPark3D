@@ -1,0 +1,532 @@
+{
+ "city_d12": {
+  "request": {
+   "kind": "bicycle",
+   "pos": {
+    "x": 4.25,
+    "y": 2.88
+   },
+   "yaw": 110,
+   "rider": true,
+   "model": "city"
+  },
+  "ids": [
+   "bicycle-2",
+   "person-3"
+  ],
+  "fallback": null,
+  "list": [
+   [
+    "bicycle-2",
+    null,
+    "city",
+    "idle"
+   ],
+   [
+    "person-3",
+    null,
+    "quinn",
+    "idle"
+   ]
+  ],
+  "img": "D:/Work2/Unreal2/UPark3D/Docs/shots/20261103_bicycle_spokes\\cam1_city_d12.jpg"
+ },
+ "city_d18": {
+  "request": {
+   "kind": "bicycle",
+   "pos": {
+    "x": 10.36,
+    "y": 3.43
+   },
+   "yaw": 105,
+   "rider": true,
+   "model": "city"
+  },
+  "ids": [
+   "bicycle-3",
+   "person-4"
+  ],
+  "fallback": null,
+  "list": [
+   [
+    "bicycle-3",
+    null,
+    "city",
+    "idle"
+   ],
+   [
+    "person-4",
+    null,
+    "manny",
+    "idle"
+   ]
+  ],
+  "img": "D:/Work2/Unreal2/UPark3D/Docs/shots/20261103_bicycle_spokes\\cam1_city_d18.jpg"
+ },
+ "city_d22": {
+  "request": {
+   "kind": "bicycle",
+   "pos": {
+    "x": 14.12,
+    "y": 4.84
+   },
+   "yaw": 106,
+   "rider": true,
+   "model": "city"
+  },
+  "ids": [
+   "bicycle-4",
+   "person-5"
+  ],
+  "fallback": null,
+  "list": [
+   [
+    "bicycle-4",
+    null,
+    "city",
+    "idle"
+   ],
+   [
+    "person-5",
+    null,
+    "manny",
+    "idle"
+   ]
+  ],
+  "img": "D:/Work2/Unreal2/UPark3D/Docs/shots/20261103_bicycle_spokes\\cam1_city_d22.jpg"
+ },
+ "city_d25": {
+  "request": {
+   "kind": "bicycle",
+   "pos": {
+    "x": 15.63,
+    "y": 9.34
+   },
+   "yaw": 115,
+   "rider": true,
+   "model": "city"
+  },
+  "ids": [
+   "bicycle-5",
+   "person-6"
+  ],
+  "fallback": null,
+  "list": [
+   [
+    "bicycle-5",
+    null,
+    "city",
+    "idle"
+   ],
+   [
+    "person-6",
+    null,
+    "manny",
+    "idle"
+   ]
+  ],
+  "img": "D:/Work2/Unreal2/UPark3D/Docs/shots/20261103_bicycle_spokes\\cam1_city_d25.jpg"
+ },
+ "sport_d12": {
+  "request": {
+   "kind": "bicycle",
+   "pos": {
+    "x": 4.25,
+    "y": 2.88
+   },
+   "yaw": 110,
+   "rider": true,
+   "model": "sport"
+  },
+  "ids": [
+   "bicycle-6",
+   "person-7"
+  ],
+  "fallback": null,
+  "list": [
+   [
+    "bicycle-6",
+    null,
+    "sport",
+    "idle"
+   ],
+   [
+    "person-7",
+    null,
+    "manny",
+    "idle"
+   ]
+  ],
+  "img": "D:/Work2/Unreal2/UPark3D/Docs/shots/20261103_bicycle_spokes\\cam1_sport_d12.jpg"
+ },
+ "sport_d18": {
+  "request": {
+   "kind": "bicycle",
+   "pos": {
+    "x": 10.36,
+    "y": 3.43
+   },
+   "yaw": 105,
+   "rider": true,
+   "model": "sport"
+  },
+  "ids": [
+   "bicycle-7",
+   "person-8"
+  ],
+  "fallback": null,
+  "list": [
+   [
+    "bicycle-7",
+    null,
+    "sport",
+    "idle"
+   ],
+   [
+    "person-8",
+    null,
+    "manny",
+    "idle"
+   ]
+  ],
+  "img": "D:/Work2/Unreal2/UPark3D/Docs/shots/20261103_bicycle_spokes\\cam1_sport_d18.jpg"
+ },
+ "sport_d22": {
+  "request": {
+   "kind": "bicycle",
+   "pos": {
+    "x": 14.12,
+    "y": 4.84
+   },
+   "yaw": 106,
+   "rider": true,
+   "model": "sport"
+  },
+  "ids": [
+   "bicycle-8",
+   "person-9"
+  ],
+  "fallback": null,
+  "list": [
+   [
+    "bicycle-8",
+    null,
+    "sport",
+    "idle"
+   ],
+   [
+    "person-9",
+    null,
+    "manny",
+    "idle"
+   ]
+  ],
+  "img": "D:/Work2/Unreal2/UPark3D/Docs/shots/20261103_bicycle_spokes\\cam1_sport_d22.jpg"
+ },
+ "sport_d25": {
+  "request": {
+   "kind": "bicycle",
+   "pos": {
+    "x": 15.63,
+    "y": 9.34
+   },
+   "yaw": 115,
+   "rider": true,
+   "model": "sport"
+  },
+  "ids": [
+   "bicycle-9",
+   "person-10"
+  ],
+  "fallback": null,
+  "list": [
+   [
+    "bicycle-9",
+    null,
+    "sport",
+    "idle"
+   ],
+   [
+    "person-10",
+    null,
+    "manny",
+    "idle"
+   ]
+  ],
+  "img": "D:/Work2/Unreal2/UPark3D/Docs/shots/20261103_bicycle_spokes\\cam1_sport_d25.jpg"
+ },
+ "simple_d12": {
+  "request": {
+   "kind": "bicycle",
+   "pos": {
+    "x": 4.25,
+    "y": 2.88
+   },
+   "yaw": 110,
+   "rider": true,
+   "model": "simple"
+  },
+  "ids": [
+   "bicycle-10",
+   "person-11"
+  ],
+  "fallback": null,
+  "list": [
+   [
+    "bicycle-10",
+    null,
+    "simple",
+    "idle"
+   ],
+   [
+    "person-11",
+    null,
+    "manny",
+    "idle"
+   ]
+  ],
+  "img": "D:/Work2/Unreal2/UPark3D/Docs/shots/20261103_bicycle_spokes\\cam1_simple_d12.jpg"
+ },
+ "simple_d18": {
+  "request": {
+   "kind": "bicycle",
+   "pos": {
+    "x": 10.36,
+    "y": 3.43
+   },
+   "yaw": 105,
+   "rider": true,
+   "model": "simple"
+  },
+  "ids": [
+   "bicycle-11",
+   "person-12"
+  ],
+  "fallback": null,
+  "list": [
+   [
+    "bicycle-11",
+    null,
+    "simple",
+    "idle"
+   ],
+   [
+    "person-12",
+    null,
+    "manny",
+    "idle"
+   ]
+  ],
+  "img": "D:/Work2/Unreal2/UPark3D/Docs/shots/20261103_bicycle_spokes\\cam1_simple_d18.jpg"
+ },
+ "simple_d22": {
+  "request": {
+   "kind": "bicycle",
+   "pos": {
+    "x": 14.12,
+    "y": 4.84
+   },
+   "yaw": 106,
+   "rider": true,
+   "model": "simple"
+  },
+  "ids": [
+   "bicycle-12",
+   "person-13"
+  ],
+  "fallback": null,
+  "list": [
+   [
+    "bicycle-12",
+    null,
+    "simple",
+    "idle"
+   ],
+   [
+    "person-13",
+    null,
+    "manny",
+    "idle"
+   ]
+  ],
+  "img": "D:/Work2/Unreal2/UPark3D/Docs/shots/20261103_bicycle_spokes\\cam1_simple_d22.jpg"
+ },
+ "simple_d25": {
+  "request": {
+   "kind": "bicycle",
+   "pos": {
+    "x": 15.63,
+    "y": 9.34
+   },
+   "yaw": 115,
+   "rider": true,
+   "model": "simple"
+  },
+  "ids": [
+   "bicycle-13",
+   "person-14"
+  ],
+  "fallback": null,
+  "list": [
+   [
+    "bicycle-13",
+    null,
+    "simple",
+    "idle"
+   ],
+   [
+    "person-14",
+    null,
+    "quinn",
+    "idle"
+   ]
+  ],
+  "img": "D:/Work2/Unreal2/UPark3D/Docs/shots/20261103_bicycle_spokes\\cam1_simple_d25.jpg"
+ },
+ "sample_create_response": {
+  "ok": true,
+  "ids": [
+   "bicycle-14",
+   "person-15"
+  ],
+  "agents": [
+   {
+    "id": "bicycle-14",
+    "objectType": "bicycle",
+    "model": "city",
+    "pos": {
+     "x": 4.25,
+     "y": 2.88,
+     "z": 0.1
+    },
+    "directionDeg": 110,
+    "speedMps": 0,
+    "motionType": "stationary",
+    "state": "idle",
+    "ridingWith": "person-15",
+    "relationId": "rel-15"
+   },
+   {
+    "id": "person-15",
+    "objectType": "person",
+    "model": "quinn",
+    "pos": {
+     "x": 4.25,
+     "y": 2.88,
+     "z": 0.1
+    },
+    "directionDeg": 110,
+    "speedMps": 0,
+    "motionType": "stationary",
+    "activityType": "riding",
+    "state": "idle",
+    "ridingWith": "bicycle-14",
+    "relationId": "rel-15"
+   }
+  ],
+  "relations": [
+   {
+    "relationId": "rel-15",
+    "relationType": "riding",
+    "fromObjectId": "person-15",
+    "toObjectId": "bicycle-14",
+    "validFromMs": 4043169,
+    "validToMs": null,
+    "active": true
+   }
+  ],
+  "changed": 2
+ },
+ "move": {
+  "resp": {
+   "ok": true,
+   "moveId": 1,
+   "id": "bicycle-14",
+   "mover": "bicycle-14",
+   "source": "path",
+   "pts": [
+    {
+     "x": 4.25,
+     "y": 2.88
+    },
+    {
+     "x": 10.36,
+     "y": 3.43
+    }
+   ],
+   "lengthM": 6.135,
+   "speedMps": 4,
+   "etaSec": 1.5,
+   "state": "moving",
+   "notes": [],
+   "changed": 1
+  },
+  "mid": [
+   [
+    "bicycle-14",
+    "moving",
+    3.31,
+    {
+     "x": 9.437,
+     "y": 3.347,
+     "z": 0.1
+    }
+   ],
+   [
+    "person-15",
+    "moving",
+    3.31,
+    {
+     "x": 9.437,
+     "y": 3.347,
+     "z": 0.1
+    }
+   ]
+  ],
+  "end": [
+   [
+    "bicycle-14",
+    "arrived",
+    {
+     "x": 10.36,
+     "y": 3.43,
+     "z": 0.1
+    }
+   ],
+   [
+    "person-15",
+    "arrived",
+    {
+     "x": 10.36,
+     "y": 3.43,
+     "z": 0.1
+    }
+   ]
+  ]
+ },
+ "fallback": {
+  "modelFallback": [
+   {
+    "param": "model",
+    "requested": "bmx",
+    "available": [
+     "city",
+     "sport",
+     "simple"
+    ]
+   },
+   {
+    "param": "riderModel",
+    "requested": "zzz",
+    "available": [
+     "manny",
+     "quinn"
+    ]
+   }
+  ],
+  "models": [
+   "sport",
+   "quinn"
+  ]
+ }
+}

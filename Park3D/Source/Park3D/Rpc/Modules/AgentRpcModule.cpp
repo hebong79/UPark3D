@@ -4,6 +4,7 @@
 #include "../RpcDispatcher.h"
 #include "../RpcParamUtil.h"
 #include "../../Sim/ParkAgentManager.h"
+#include "../../Sim/ParkAgentActor.h"
 
 namespace
 {
@@ -37,6 +38,19 @@ namespace
 		TArray<TSharedPtr<FJsonValue>> Out;
 		for (const FString& X : S) { Out.Add(MakeShared<FJsonValueString>(X)); }
 		return Out;
+	}
+
+	/** 요청한 모델 이름이 그 종류에 없으면 {param, requested, available[]} 한 줄을 더한다. */
+	void AgModelFallback(ParkAgent::EKind Kind, const FString& Requested, TArray<TSharedPtr<FJsonValue>>& Out, const TCHAR* Param = TEXT("model"))
+	{
+		if (Requested.IsEmpty()) { return; }
+		const TArray<FString> Names = AParkAgentActor::ModelNames(Kind);
+		for (const FString& N : Names) { if (N.Equals(Requested, ESearchCase::IgnoreCase)) { return; } }
+		TSharedPtr<FJsonObject> F = MakeShared<FJsonObject>();
+		F->SetStringField(TEXT("param"), Param);
+		F->SetStringField(TEXT("requested"), Requested);
+		F->SetArrayField(TEXT("available"), AgStrings(Names));
+		Out.Add(MakeShared<FJsonValueObject>(F));
 	}
 }
 
@@ -79,6 +93,11 @@ void FAgentRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetArrayField(TEXT("agents"), Mgr->ListJson(nullptr, Ids));
 		O->SetArrayField(TEXT("relations"), Mgr->RelationsJson(Ids[0]));
 		O->SetNumberField(TEXT("changed"), Ids.Num());
+		// 없는 모델 이름은 id 로 고른 모델로 대신한다 — 조용히 넘기지 않고 고를 수 있는 이름을 알린다.
+		TArray<TSharedPtr<FJsonValue>> Fallback;
+		AgModelFallback(Kind, Model, Fallback);
+		if (bRider && Kind != ParkAgent::EKind::Pedestrian) { AgModelFallback(ParkAgent::EKind::Pedestrian, RiderModel, Fallback, TEXT("riderModel")); }
+		if (Fallback.Num() > 0) { O->SetArrayField(TEXT("modelFallback"), Fallback); }
 		return RpcDto::MakeObject(O);
 	});
 	Dispatcher.SetMethodMeta(TEXT("agent.create"), { true, false,

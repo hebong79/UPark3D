@@ -27,6 +27,7 @@
 #include "Modules/FileRpcModule.h"
 #include "Modules/OverlayRpcModule.h"
 #include "Modules/StateRpcModule.h"
+#include "Modules/AgentRpcModule.h"
 #include "MjpegStreamManager.h"
 #include "RpcServerSubsystem.generated.h"
 
@@ -132,6 +133,7 @@ private:
 	TUniquePtr<FFileRpcModule> FileModule;
 	TUniquePtr<FOverlayRpcModule> OverlayModule;   // car/preset.highlight · view.setLabels · preview.* (보드 #1102)
 	TUniquePtr<FStateRpcModule> StateModule;       // state.* · car.setAll/createMany/setVisible · preset.setAll (보드 #1100)
+	TUniquePtr<FAgentRpcModule> AgentModule;       // agent.* — 사람·자전거·오토바이(pm-restore 2026-11-03)
 
 	/** requestId 중복 제거(보드 #1100) — 같은 method+requestId 가 60초 안에 다시 오면 첫 응답을 그대로 돌려준다. */
 	struct FCachedRpcResponse

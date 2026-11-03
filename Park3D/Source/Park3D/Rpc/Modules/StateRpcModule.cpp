@@ -25,6 +25,7 @@ namespace
 		if (L == TEXT("presets")) return FStateRpcModule::ScopePresets;
 		if (L == TEXT("cameras")) return FStateRpcModule::ScopeCameras;
 		if (L == TEXT("view")) return FStateRpcModule::ScopeView;
+		if (L == TEXT("agents")) return FStateRpcModule::ScopeAgents;
 		if (L == TEXT("all") || L.IsEmpty()) return FStateRpcModule::ScopeAll;
 		return 0;
 	}
@@ -36,6 +37,7 @@ namespace
 		if (Scopes & FStateRpcModule::ScopePresets) Out.Add(MakeShared<FJsonValueString>(TEXT("presets")));
 		if (Scopes & FStateRpcModule::ScopeCameras) Out.Add(MakeShared<FJsonValueString>(TEXT("cameras")));
 		if (Scopes & FStateRpcModule::ScopeView) Out.Add(MakeShared<FJsonValueString>(TEXT("view")));
+		if (Scopes & FStateRpcModule::ScopeAgents) Out.Add(MakeShared<FJsonValueString>(TEXT("agents")));
 		return Out;
 	}
 
@@ -121,13 +123,18 @@ FString FStateRpcModule::TakeSnapshot(uint8 Scopes, FRpcError& E)
 			PC->GetPlayerViewPoint(S.ViewLoc, S.ViewRot);
 		}
 	}
+	if (Scopes & ScopeAgents)
+	{
+		// 매니저가 없으면 "에이전트 0개" 를 뜬다 — 되돌리면 그 뒤에 만든 것이 지워진다.
+		if (const AParkAgentManager* AM = AParkAgentManager::Find(World)) { S.Agents = AM->Capture(); }
+	}
 
 	Snapshots.Add(MoveTemp(S));
 	while (Snapshots.Num() > StMaxSnapshots) { Snapshots.RemoveAt(0); }
 	return Snapshots.Last().Token;
 }
 
-bool FStateRpcModule::RestoreSnapshot(const FString& Token, TSharedPtr<FJsonObject>& OutSummary, FRpcError& E)
+bool FStateRpcModule::RestoreSnapshot(const FString& Token, TSharedPtr<FJsonObject>& OutSummary, FRpcError& E, bool bPausedAgents)
 {
 	const FSnapshot* S = Snapshots.FindByPredicate([&Token](const FSnapshot& X) { return X.Token == Token; });
 	if (!S)
@@ -193,6 +200,11 @@ bool FStateRpcModule::RestoreSnapshot(const FString& Token, TSharedPtr<FJsonObje
 		}
 		Restored->SetBoolField(TEXT("view"), true);
 	}
+	if (S->Scopes & ScopeAgents)
+	{
+		AParkAgentManager* AM = S->Agents.Agents.Num() > 0 ? AParkAgentManager::GetOrSpawn(World) : AParkAgentManager::Find(World);
+		Restored->SetNumberField(TEXT("agents"), AM ? AM->Restore(S->Agents, bPausedAgents) : 0);
+	}
 	OutSummary = MakeShared<FJsonObject>();
 	OutSummary->SetStringField(TEXT("token"), Token);
 	OutSummary->SetObjectField(TEXT("restored"), Restored);
@@ -215,7 +227,7 @@ void FStateRpcModule::Register(URpcDispatcher& Dispatcher)
 		{
 			const FString One = RpcParam::GetString(P, TEXT("scope"), TEXT("all"));
 			Scopes = StParseScope(One);
-			if (Scopes == 0) { E.FailDomain(FString::Printf(TEXT("scope 는 cars | presets | cameras | view | all 중 하나입니다: %s"), *One), ERpcErrorKind::BadParams); return nullptr; }
+			if (Scopes == 0) { E.FailDomain(FString::Printf(TEXT("scope 는 cars | presets | cameras | view | agents | all 중 하나입니다: %s"), *One), ERpcErrorKind::BadParams); return nullptr; }
 		}
 		const FString Token = TakeSnapshot(Scopes, E);
 		if (Token.IsEmpty()) return nullptr;
@@ -226,22 +238,24 @@ void FStateRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetNumberField(TEXT("cars"), S.Cars.Num());
 		O->SetNumberField(TEXT("presets"), S.Presets.Num());
 		O->SetNumberField(TEXT("cameras"), S.Cams.Num());
+		O->SetNumberField(TEXT("agents"), S.Agents.Agents.Num());
 		return RpcDto::MakeObject(O);
 	});
-	Dispatcher.SetMethodMeta(TEXT("state.snapshot"), { true, false, TEXT("{scope?:\"cars\"|\"presets\"|\"cameras\"|\"view\"|\"all\"|[...] (기본 all)}"),
-		TEXT("메모리 스냅샷(파일 안 씀). 최근 20개 보관 — 넘치면 오래된 것부터 버린다. {token, scope, cars, presets, cameras}") });
+	Dispatcher.SetMethodMeta(TEXT("state.snapshot"), { true, false, TEXT("{scope?:\"cars\"|\"presets\"|\"cameras\"|\"view\"|\"agents\"|\"all\"|[...] (기본 all)}"),
+		TEXT("메모리 스냅샷(파일 안 씀). 최근 20개 보관 — 넘치면 오래된 것부터 버린다. {token, scope, cars, presets, cameras, agents}") });
 
 	Dispatcher.Register(TEXT("state.restore"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		FString Token;
 		if (!RpcParam::RequireString(P, TEXT("token"), Token, E)) return nullptr;
+		const bool bPaused = RpcParam::GetBool(P, TEXT("paused"), false);
 		TSharedPtr<FJsonObject> O;
-		if (!RestoreSnapshot(Token, O, E)) return nullptr;
+		if (!RestoreSnapshot(Token, O, E, bPaused)) return nullptr;
 		O->SetBoolField(TEXT("ok"), true);
 		return RpcDto::MakeObject(O);
 	});
-	Dispatcher.SetMethodMeta(TEXT("state.restore"), { true, true, TEXT("{token}"),
-		TEXT("스냅샷으로 되돌린다(cars 범위면 지금 차량을 지우고 다시 만든다 — carNameId 는 스냅샷 값). 없는/만료 토큰은 not_found. 토큰은 남는다(여러 번 되돌리기 가능)") });
+	Dispatcher.SetMethodMeta(TEXT("state.restore"), { true, true, TEXT("{token, paused?=false}"),
+		TEXT("스냅샷으로 되돌린다(cars 범위면 지금 차량을 지우고 다시 만든다 — carNameId 는 스냅샷 값). agents 범위는 같은 id 로 다시 만들어 이동을 이어 가고, paused:true 면 그 자리에 세운다. 없는/만료 토큰은 not_found. 토큰은 남는다(여러 번 되돌리기 가능)") });
 
 	Dispatcher.Register(TEXT("state.drop"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
@@ -267,6 +281,7 @@ void FStateRpcModule::Register(URpcDispatcher& Dispatcher)
 			O->SetStringField(TEXT("created"), S.Created.ToIso8601());
 			O->SetNumberField(TEXT("cars"), S.Cars.Num());
 			O->SetNumberField(TEXT("presets"), S.Presets.Num());
+			O->SetNumberField(TEXT("agents"), S.Agents.Agents.Num());
 			Arr.Add(MakeShared<FJsonValueObject>(O));
 		}
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();

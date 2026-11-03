@@ -5,6 +5,7 @@
 #include "../RpcParamUtil.h"
 #include "../RpcImageUtil.h"
 #include "../CaptureTruth.h"
+#include "../../Sim/ParkAgentManager.h"
 #include "../../CameraControlManager.h"
 #include "../../PTZCameraActor.h"
 #include "../../CameraControlLibrary.h"
@@ -266,6 +267,8 @@ namespace
 			}
 			Truth->SetNumberField(TEXT("frameId"), static_cast<double>(FrameId));
 			Truth->SetNumberField(TEXT("timeMs"), CaptureTimeMs);
+			// 사람·자전거·오토바이 — agent.list 와 같은 항목(가시성·상자·마스크는 아직 없다).
+			Truth->SetArrayField(TEXT("agents"), AParkAgentManager::ListJsonOf(Cam->GetWorld()));
 		}
 
 		TArray<uint8> Bytes;

@@ -314,6 +314,7 @@ void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	FileModule = MakeUnique<FFileRpcModule>(WorldGetter);
 	OverlayModule = MakeUnique<FOverlayRpcModule>(WorldGetter);
 	StateModule = MakeUnique<FStateRpcModule>(WorldGetter);
+	AgentModule = MakeUnique<FAgentRpcModule>(WorldGetter);
 
 	// 차량 카탈로그 주입. DT_CarCatalog 가 없으면 CatalogFromTable 이 car_catalog.json 으로 폴백하므로
 	// 로드 실패(nullptr)를 그대로 넘긴다.
@@ -352,6 +353,7 @@ void URpcServerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	FileModule->Register(*Dispatcher);       // 비영속(file.*) — OmiPark3D 이식, Save/3D 폴더 읽기
 	OverlayModule->Register(*Dispatcher);    // 비영속(car/preset.highlight · view.setLabels · preview.*) — 보드 #1102
 	StateModule->Register(*Dispatcher);      // 비영속(state.* · car.setAll/createMany/setVisible · preset.setAll) — 보드 #1100
+	AgentModule->Register(*Dispatcher);      // 비영속(agent.*) — 사람·자전거·오토바이
 
 	StartServer();
 }
@@ -377,6 +379,7 @@ void URpcServerSubsystem::Deinitialize()
 	FileModule.Reset();
 	OverlayModule.Reset();
 	StateModule.Reset();
+	AgentModule.Reset();
 	Dispatcher = nullptr;
 	Super::Deinitialize();
 }

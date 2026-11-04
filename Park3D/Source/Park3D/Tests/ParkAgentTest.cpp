@@ -7,6 +7,9 @@
 #include "Misc/AutomationTest.h"
 #include "../Sim/ParkAgentNav.h"
 #include "../Sim/ParkAgentManager.h"
+#include "../Sim/ParkAgentActor.h"
+#include "Components/PrimitiveComponent.h"
+#include "EngineUtils.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Engine/Engine.h"
@@ -437,6 +440,17 @@ bool FParkAgentGripTest::RunTest(const FString& Parameters)
 				AddInfo(FString::Printf(TEXT("%s/%s 발 좌 %.2f 우 %.2f cm"), C.Model, Person, L, R));
 				TestTrue(FString::Printf(TEXT("%s/%s 왼발 %.2f cm"), C.Model, Person, L), L < 8.0);
 				TestTrue(FString::Printf(TEXT("%s/%s 오른발 %.2f cm"), C.Model, Person, R), R < 8.0);
+			}
+			// 노면 도색 데칼이 바퀴·발에 찍히면 안 된다(사람·탑승자·차체 부품 전부).
+			for (TActorIterator<AParkAgentActor> It(World); It; ++It)
+			{
+				TArray<UPrimitiveComponent*> Prims;
+				It->GetComponents<UPrimitiveComponent>(Prims);
+				TestTrue(FString::Printf(TEXT("%s/%s 부품 있음"), C.Model, Person), Prims.Num() > 0);
+				for (const UPrimitiveComponent* Prim : Prims)
+				{
+					TestFalse(FString::Printf(TEXT("%s/%s %s 데칼 안 받음"), C.Model, Person, *Prim->GetName()), Prim->bReceivesDecals);
+				}
 			}
 			M->Delete(Ids, false, NotFound);
 		}

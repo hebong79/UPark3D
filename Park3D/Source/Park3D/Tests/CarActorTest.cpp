@@ -67,6 +67,7 @@ bool FCarActorTransformRoundTripTest::RunTest(const FString& Parameters)
 		{
 			continue;
 		}
+		TestFalse(TEXT("차 메시는 노면 도색 데칼을 받지 않는다"), Car->MeshComp->bReceivesDecals);
 
 		FCarPos In;
 		In.id = TEXT("9-12.34.56");

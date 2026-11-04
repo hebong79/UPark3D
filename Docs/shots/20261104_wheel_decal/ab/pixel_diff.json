@@ -1,0 +1,222 @@
+{
+ "blotch_off": {
+  "meanAbs": 3.44,
+  "over40pct": 0.17
+ },
+ "blotch_on_again": {
+  "meanAbs": 10.33,
+  "over40pct": 3.28
+ },
+ "blotch_on_t1": {
+  "meanAbs": 10.77,
+  "over40pct": 3.29
+ },
+ "blotch_on_t5": {
+  "meanAbs": 10.29,
+  "over40pct": 3.3
+ },
+ "blotch_plain": {
+  "meanAbs": 2.12,
+  "over40pct": 0.01
+ },
+ "paint_car_move": {
+  "meanAbs": 9.16,
+  "over40pct": 5.56
+ },
+ "paint_car_still": {
+  "meanAbs": 4.98,
+  "over40pct": 1.07
+ },
+ "paint_car_top": {
+  "meanAbs": 5.96,
+  "over40pct": 0.02
+ },
+ "paint_car_wheelA": {
+  "meanAbs": 6.97,
+  "over40pct": 2.11
+ },
+ "paint_car_wheelB": {
+  "meanAbs": 32.74,
+  "over40pct": 10.91
+ },
+ "paint_city_move": {
+  "meanAbs": 27.98,
+  "over40pct": 20.05
+ },
+ "paint_city_still": {
+  "meanAbs": 4.58,
+  "over40pct": 2.23
+ },
+ "paint_city_still_wheelA": {
+  "meanAbs": 7.55,
+  "over40pct": 5.19
+ },
+ "paint_city_still_wheelB": {
+  "meanAbs": 7.26,
+  "over40pct": 5.33
+ },
+ "paint_person_move": {
+  "meanAbs": 16.91,
+  "over40pct": 11.61
+ },
+ "paint_person_still": {
+  "meanAbs": 6.19,
+  "over40pct": 1.66
+ },
+ "paint_rider_still": {
+  "meanAbs": 4.3,
+  "over40pct": 1.88
+ },
+ "paint_scooter3_move": {
+  "meanAbs": 15.92,
+  "over40pct": 8.68
+ },
+ "paint_scooter3_still": {
+  "meanAbs": 7.68,
+  "over40pct": 3.28
+ },
+ "paint_scooter3_still_wheelA": {
+  "meanAbs": 50.86,
+  "over40pct": 36.0
+ },
+ "paint_scooter3_still_wheelB": {
+  "meanAbs": 43.82,
+  "over40pct": 14.54
+ },
+ "paint_sport_move": {
+  "meanAbs": 18.26,
+  "over40pct": 13.41
+ },
+ "paint_sport_still": {
+  "meanAbs": 4.23,
+  "over40pct": 1.87
+ },
+ "paint_sport_still_wheelA": {
+  "meanAbs": 7.37,
+  "over40pct": 5.25
+ },
+ "paint_sport_still_wheelB": {
+  "meanAbs": 7.38,
+  "over40pct": 5.35
+ },
+ "plain_car_move": {
+  "meanAbs": 3.2,
+  "over40pct": 1.79
+ },
+ "plain_car_still": {
+  "meanAbs": 1.63,
+  "over40pct": 0.0
+ },
+ "plain_car_top": {
+  "meanAbs": 2.41,
+  "over40pct": 0.01
+ },
+ "plain_car_wheelA": {
+  "meanAbs": 2.33,
+  "over40pct": 0.02
+ },
+ "plain_car_wheelB": {
+  "meanAbs": 2.22,
+  "over40pct": 0.0
+ },
+ "plain_city_move": {
+  "meanAbs": 21.58,
+  "over40pct": 18.01
+ },
+ "plain_city_still": {
+  "meanAbs": 2.38,
+  "over40pct": 0.05
+ },
+ "plain_city_still_wheelA": {
+  "meanAbs": 1.61,
+  "over40pct": 0.0
+ },
+ "plain_city_still_wheelB": {
+  "meanAbs": 1.68,
+  "over40pct": 0.0
+ },
+ "plain_person_move": {
+  "meanAbs": 14.37,
+  "over40pct": 11.76
+ },
+ "plain_person_still": {
+  "meanAbs": 1.56,
+  "over40pct": 0.02
+ },
+ "plain_rider_still": {
+  "meanAbs": 2.2,
+  "over40pct": 0.01
+ },
+ "plain_scooter3_move": {
+  "meanAbs": 28.9,
+  "over40pct": 18.4
+ },
+ "plain_scooter3_still": {
+  "meanAbs": 1.94,
+  "over40pct": 0.0
+ },
+ "plain_scooter3_still_wheelA": {
+  "meanAbs": 1.67,
+  "over40pct": 0.0
+ },
+ "plain_scooter3_still_wheelB": {
+  "meanAbs": 1.82,
+  "over40pct": 0.0
+ },
+ "plain_sport_move": {
+  "meanAbs": 5.71,
+  "over40pct": 3.51
+ },
+ "plain_sport_still": {
+  "meanAbs": 1.44,
+  "over40pct": 0.0
+ },
+ "plain_sport_still_wheelA": {
+  "meanAbs": 1.05,
+  "over40pct": 0.0
+ },
+ "plain_sport_still_wheelB": {
+  "meanAbs": 1.08,
+  "over40pct": 0.0
+ },
+ "report_scooter3_yaw0": {
+  "meanAbs": 3.35,
+  "over40pct": 0.3
+ },
+ "report_scooter3_yaw90": {
+  "meanAbs": 5.3,
+  "over40pct": 1.52
+ },
+ "report_sport_yaw0": {
+  "meanAbs": 2.86,
+  "over40pct": 0.18
+ },
+ "report_sport_yaw90": {
+  "meanAbs": 6.59,
+  "over40pct": 1.85
+ },
+ "scene_cam1": {
+  "meanAbs": 2.79,
+  "over40pct": 0.12
+ },
+ "scene_cam2": {
+  "meanAbs": 2.91,
+  "over40pct": 0.02
+ },
+ "slotline_scooter3": {
+  "meanAbs": 2.56,
+  "over40pct": 0.16
+ },
+ "slotline_sport": {
+  "meanAbs": 1.73,
+  "over40pct": 0.01
+ },
+ "top_line_with_cars": {
+  "meanAbs": 1.98,
+  "over40pct": 0.0
+ },
+ "top_stem_empty": {
+  "meanAbs": 2.17,
+  "over40pct": 0.02
+ }
+}

@@ -598,7 +598,7 @@ void URpcServerSubsystem::RegisterSystemMethods()
 		return MakeShared<FJsonValueObject>(O);
 	});
 	Dispatcher->SetMethodMeta(TEXT("system.batch"), { true, false, TEXT("{calls:[{method, params?}], atomic?:bool=false}"),
-		TEXT("여러 호출을 한 프레임에. atomic=true 면 실패 시 state 스냅샷으로 되돌린다(cars·presets·cameras·view — env/light 는 되돌리지 않는다). {ok, results[], failedAt?, rolledBack, revision}. 중첩 불가") });
+		TEXT("여러 호출을 한 프레임에. atomic=true 면 실패 시 state 스냅샷으로 되돌린다(cars·presets·cameras·view·agents — env/light 는 되돌리지 않는다). {ok, results[], failedAt?, rolledBack, revision}. 중첩 불가") });
 }
 
 void URpcServerSubsystem::EnsureListenerBindOverride()

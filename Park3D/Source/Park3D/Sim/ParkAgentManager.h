@@ -42,7 +42,7 @@ struct FParkAgentMove
 	double BlockAfterSec = 20.0;
 	double WaitSec = 0.0;
 	FString WaitingFor;
-	FString EndReason;            // arrived | stopped | blocked | replaced | deleted | restoredPaused
+	FString EndReason;            // arrived | stopped | blocked | replaced | deleted | restoredPaused | setPose
 
 	double TotalM() const { return Cum.Num() > 0 ? Cum.Last() : 0.0; }
 };
@@ -63,7 +63,23 @@ struct FParkAgent
 	EParkAgentState State = EParkAgentState::Idle;
 	FParkAgentMove Move;
 	FString Plate;                           // 오토바이만 — 더미 고정 문자열
+	/** agent.setPose 가 놓은 자세. SpeedMps 는 표시용이라 이동이 없어도 0 으로 되돌리지 않는다. */
+	bool bPosed = false;
+	/** agent.setPose 의 activity("walking"|"standing"). 빈 값 = 속도로 정한다. */
+	FString PoseActivity;
 	TWeakObjectPtr<AParkAgentActor> Actor;
+};
+
+/** agent.setPose 한 항목. */
+struct FParkAgentPose
+{
+	FString Id;
+	FVector2D PosM = FVector2D::ZeroVector;
+	bool bHasZ = false;
+	double ZM = 0.0;
+	double YawDeg = 0.0;
+	double SpeedMps = 0.0;
+	FString Activity;
 };
 
 struct FParkAgentRelation
@@ -105,9 +121,17 @@ public:
 	 * 만든다. 이동수단 + bRider 면 사람 1 + 이동수단 1 + 관계(riding) 1.
 	 * @param OutIds 만든 id(이동수단 먼저, 다음 사람).
 	 * @param Outfit 사람의 옷(걷는 사람 또는 탑승자). nullptr 이면 새 seed 로 뽑는다.
+	 * @param bAllowOverlap 벽·보도·차와 겹쳐도 만든다. 높이는 그 자리 바닥(건물 지붕에 올라서지 않는다).
 	 */
 	bool Create(ParkAgent::EKind Kind, const FVector2D& PosM, double YawDeg, bool bRider, const FString& Model, const FString& RiderModel,
-		TArray<FString>& OutIds, FString& OutError, const FParkAgentOutfit* Outfit = nullptr);
+		TArray<FString>& OutIds, FString& OutError, const FParkAgentOutfit* Outfit = nullptr, bool bAllowOverlap = false);
+
+	/**
+	 * 검사·회피 없이 그 자세로 바로 옮긴다. 돌던 이동은 끝난다(endReason setPose).
+	 * 탑승 관계가 있는 대상이나 이동수단의 Activity 가 하나라도 있으면 아무것도 옮기지 않고 false.
+	 * 없는 id 는 그 항목만 건너뛰어 OutNotFound 에 넣는다.
+	 */
+	bool SetPoses(const TArray<FParkAgentPose>& Items, int32& OutApplied, TArray<FString>& OutNotFound, FString& OutError);
 
 	/**
 	 * 이동. Path(점 목록) 또는 To(목적지) 중 하나. 탑승자 id 를 주면 그 이동수단이 움직인다.

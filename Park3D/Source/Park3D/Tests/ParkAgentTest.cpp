@@ -7,8 +7,12 @@
 #include "Misc/AutomationTest.h"
 #include "../Sim/ParkAgentNav.h"
 #include "../Sim/ParkAgentManager.h"
+#include "../Rpc/RpcDispatcher.h"
+#include "../Rpc/Modules/AgentRpcModule.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 
@@ -440,6 +444,244 @@ bool FParkAgentGripTest::RunTest(const FString& Parameters)
 			}
 			M->Delete(Ids, false, NotFound);
 		}
+	}
+	M->Delete({}, true, NotFound);
+	M->Destroy();
+	return true;
+}
+
+// ===================================================================== agent.setPose + allowOverlap
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FParkAgentSetPoseTest, "Park3D.Agent.SetPose",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FParkAgentSetPoseTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = (GEngine && GEngine->GetWorldContexts().Num() > 0) ? GWorld : nullptr;
+	if (!TestNotNull(TEXT("에디터 월드"), World)) { return false; }
+	AParkAgentManager* M = AParkAgentManager::GetOrSpawn(World);
+	if (!TestNotNull(TEXT("매니저"), M)) { return false; }
+	TArray<FString> NotFound;
+	M->Delete({}, true, NotFound);
+
+	URpcDispatcher* D = NewObject<URpcDispatcher>();
+	FAgentRpcModule Module([World]() -> UWorld* { return World; });
+	Module.Register(*D);
+
+	TArray<FString> Unread;
+	const auto Rpc = [&](const TCHAR* Method, const FString& Json, FRpcError& E) -> TSharedPtr<FJsonObject>
+	{
+		TSharedPtr<FJsonObject> Params;
+		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
+		TestTrue(FString::Printf(TEXT("시험 JSON: %s"), *Json), FJsonSerializer::Deserialize(Reader, Params));
+		TSharedPtr<FJsonValue> R;
+		D->Dispatch(Method, Params, R, E, &Unread);
+		return R.IsValid() ? R->AsObject() : nullptr;
+	};
+	const auto Listed = [&](const FString& Id) { return PaFind(M->ListJson(nullptr, {}), Id); };
+	const auto Item = [](const FString& Id, const FVector2D& P, const TCHAR* Extra = TEXT("")) -> FString
+	{
+		return FString::Printf(TEXT("{\"id\":\"%s\",\"pos\":{\"x\":%.3f,\"y\":%.3f},\"yawDeg\":90%s}"), *Id, P.X, P.Y, Extra);
+	};
+	const auto Items = [](const FString& A, const FString& B = FString()) -> FString
+	{
+		return FString::Printf(TEXT("{\"items\":[%s%s%s]}"), *A, B.IsEmpty() ? TEXT("") : TEXT(","), *B);
+	};
+
+	const FVector2D Base(3000.0, 3000.0);
+	FString Err;
+	TArray<FString> Ids;
+	TestTrue(TEXT("사람 1"), M->Create(EKind::Pedestrian, Base, 0.0, false, FString(), FString(), Ids, Err));
+	const FString P1 = Ids.Num() > 0 ? Ids[0] : FString();
+	Ids.Reset();
+	TestTrue(TEXT("사람 2"), M->Create(EKind::Pedestrian, Base + FVector2D(0, 4), 0.0, false, FString(), FString(), Ids, Err));
+	const FString P2 = Ids.Num() > 0 ? Ids[0] : FString();
+	Ids.Reset();
+	TestTrue(TEXT("탑승자 없는 자전거"), M->Create(EKind::Bicycle, Base + FVector2D(0, 8), 0.0, false, TEXT("city"), FString(), Ids, Err));
+	const FString Bike = Ids.Num() > 0 ? Ids[0] : FString();
+	Ids.Reset();
+	TestTrue(TEXT("탑승 오토바이"), M->Create(EKind::Motorcycle, Base + FVector2D(0, 12), 0.0, true, FString(), FString(), Ids, Err));
+	if (!TestEqual(TEXT("이동수단 + 탑승자"), Ids.Num(), 2)) { return false; }
+	const FString Moto = Ids[0], Rider = Ids[1];
+
+	// 여러 개를 한 번에, z 지정·속도 유지.
+	{
+		FRpcError E;
+		const FString Walker = FString::Printf(TEXT("{\"id\":\"%s\",\"pos\":{\"x\":%.3f,\"y\":%.3f,\"z\":0.25},\"yawDeg\":90,\"speedMps\":1.3}"), *P1, Base.X + 5.0, Base.Y + 1.0);
+		const TSharedPtr<FJsonObject> R = Rpc(TEXT("agent.setPose"), Items(Walker, Item(Bike, Base + FVector2D(8, 2))), E);
+		TestFalse(TEXT("다건 성공"), E.HasError());
+		TestEqual(TEXT("모르는 키 없음"), Unread.Num(), 0);
+		if (R.IsValid())
+		{
+			TestEqual(TEXT("applied 2"), static_cast<int32>(R->GetNumberField(TEXT("applied"))), 2);
+			TestEqual(TEXT("notFound 0"), R->GetArrayField(TEXT("notFound")).Num(), 0);
+		}
+		for (int32 i = 0; i < 10; ++i) { M->Advance(0.1f); }
+		const TSharedPtr<FJsonObject> O = Listed(P1);
+		TestTrue(TEXT("위치 그대로(스스로 안 움직임)"), PaPos(O).Equals(Base + FVector2D(5, 1), 1e-3));
+		TestEqual(TEXT("z 지정"), O->GetObjectField(TEXT("pos"))->GetNumberField(TEXT("z")), 0.25, 1e-6);
+		TestEqual(TEXT("방향"), O->GetNumberField(TEXT("directionDeg")), 90.0, 1e-6);
+		TestEqual(TEXT("틱 뒤에도 속도"), O->GetNumberField(TEXT("speedMps")), 1.3, 1e-6);
+		TestEqual(TEXT("state moving"), O->GetStringField(TEXT("state")), FString(TEXT("moving")));
+		TestEqual(TEXT("motionType moving"), O->GetStringField(TEXT("motionType")), FString(TEXT("moving")));
+		TestEqual(TEXT("activityType walking"), O->GetStringField(TEXT("activityType")), FString(TEXT("walking")));
+		const TSharedPtr<FJsonObject> B = Listed(Bike);
+		TestEqual(TEXT("속도 생략 = stopped"), B->GetStringField(TEXT("state")), FString(TEXT("stopped")));
+		TestEqual(TEXT("속도 생략 = stationary"), B->GetStringField(TEXT("motionType")), FString(TEXT("stationary")));
+	}
+	// 속도 0 은 서 있다.
+	{
+		FRpcError E;
+		Rpc(TEXT("agent.setPose"), Items(Item(P1, Base + FVector2D(5, 1), TEXT(",\"speedMps\":0"))), E);
+		const TSharedPtr<FJsonObject> O = Listed(P1);
+		TestEqual(TEXT("속도 0 = stopped"), O->GetStringField(TEXT("state")), FString(TEXT("stopped")));
+		TestEqual(TEXT("속도 0 = standing"), O->GetStringField(TEXT("activityType")), FString(TEXT("standing")));
+	}
+	// 이동 중인 대상은 이동이 끝나고, 다음 이동은 새 자리에서 시작한다.
+	{
+		TSharedPtr<FJsonObject> Info;
+		bool bBad = false;
+		const TArray<FVector2D> Path = { Base + FVector2D(10, 4) };
+		TestTrue(TEXT("이동 시작"), M->StartMove(P2, &Path, nullptr, 1.0, true, 20.0, Info, Err, bBad));
+		M->Advance(0.5f);
+		FRpcError E;
+		const FVector2D Spot = Base + FVector2D(-6, 20);
+		Rpc(TEXT("agent.setPose"), Items(Item(P2, Spot)), E);
+		TestFalse(TEXT("이동 중 setPose"), E.HasError());
+		for (int32 i = 0; i < 5; ++i) { M->Advance(0.1f); }
+		TSharedPtr<FJsonObject> O = Listed(P2);
+		TestTrue(TEXT("이동이 안 이어진다"), PaPos(O).Equals(Spot, 1e-3));
+		TestEqual(TEXT("endReason setPose"), O->GetStringField(TEXT("endReason")), FString(TEXT("setPose")));
+
+		const TArray<FVector2D> Path2 = { Spot + FVector2D(10, 0) };
+		TestTrue(TEXT("다시 이동"), M->StartMove(P2, &Path2, nullptr, 1.0, true, 20.0, Info, Err, bBad));
+		for (int32 i = 0; i < 10; ++i) { M->Advance(0.1f); }
+		O = Listed(P2);
+		TestTrue(TEXT("새 자리에서 출발"), FVector2D::Distance(PaPos(O), Spot) > 0.5 && FVector2D::Distance(PaPos(O), Spot) < 1.5);
+		TestEqual(TEXT("다시 moving"), O->GetStringField(TEXT("state")), FString(TEXT("moving")));
+		M->Stop({ P2 }, false, NotFound);
+	}
+	// 표시 속도는 agent.stop 과 agent.move 로 끝난다.
+	{
+		FRpcError E;
+		Rpc(TEXT("agent.setPose"), Items(Item(P1, Base + FVector2D(5, 1), TEXT(",\"speedMps\":1.3"))), E);
+		TestEqual(TEXT("표시 속도도 stopped 로 센다"), M->Stop({ P1 }, false, NotFound), 1);
+		M->Advance(0.1f);
+		TSharedPtr<FJsonObject> O = Listed(P1);
+		TestEqual(TEXT("stop = 속도 0"), O->GetNumberField(TEXT("speedMps")), 0.0, 1e-6);
+		TestEqual(TEXT("stop = stopped"), O->GetStringField(TEXT("state")), FString(TEXT("stopped")));
+
+		Rpc(TEXT("agent.setPose"), Items(Item(P1, Base + FVector2D(5, 1), TEXT(",\"speedMps\":1.3"))), E);
+		TSharedPtr<FJsonObject> Info;
+		bool bBad = false;
+		const TArray<FVector2D> Path = { Base + FVector2D(5, 1.5) };
+		TestTrue(TEXT("표시 속도 뒤 이동"), M->StartMove(P1, &Path, nullptr, 1.0, true, 20.0, Info, Err, bBad));
+		for (int32 i = 0; i < 20; ++i) { M->Advance(0.1f); }
+		O = Listed(P1);
+		TestEqual(TEXT("도착 = arrived"), O->GetStringField(TEXT("state")), FString(TEXT("arrived")));
+		TestEqual(TEXT("도착 = 속도 0"), O->GetNumberField(TEXT("speedMps")), 0.0, 1e-6);
+	}
+	// 없는 id: 그 항목만 건너뛴다. 전부 없으면 not_found.
+	{
+		FRpcError E;
+		const FVector2D Spot = Base + FVector2D(1, 1);
+		const TSharedPtr<FJsonObject> R = Rpc(TEXT("agent.setPose"), Items(Item(P1, Spot), Item(TEXT("no-such"), Base)), E);
+		TestFalse(TEXT("없는 id 섞여도 성공"), E.HasError());
+		if (R.IsValid())
+		{
+			TestEqual(TEXT("applied 1"), static_cast<int32>(R->GetNumberField(TEXT("applied"))), 1);
+			const TArray<TSharedPtr<FJsonValue>> Nf = R->GetArrayField(TEXT("notFound"));
+			TestTrue(TEXT("notFound 에 그 id"), Nf.Num() == 1 && Nf[0]->AsString() == TEXT("no-such"));
+		}
+		TestTrue(TEXT("있는 항목은 옮겨졌다"), PaPos(Listed(P1)).Equals(Spot, 1e-3));
+
+		FRpcError E2;
+		Rpc(TEXT("agent.setPose"), Items(Item(TEXT("no-such"), Base)), E2);
+		TestTrue(TEXT("전부 없음 = not_found"), E2.HasError() && E2.Kind == ERpcErrorKind::NotFound);
+	}
+	// 호출 전체를 거부하는 경우 — 앞 항목도 옮겨지면 안 된다.
+	{
+		const FVector2D Before = PaPos(Listed(P1));
+		const FString Good = Item(P1, Base + FVector2D(50, 50));
+		const struct { const TCHAR* Name; FString Bad; } Cases[] = {
+			{ TEXT("탑승자"), Item(Rider, Base) },
+			{ TEXT("탑승 이동수단"), Item(Moto, Base) },
+			{ TEXT("이동수단 activity"), Item(Bike, Base, TEXT(",\"activity\":\"walking\"")) },
+			{ TEXT("모르는 activity"), Item(P2, Base, TEXT(",\"activity\":\"riding\"")) },
+			{ TEXT("음수 속도"), Item(P2, Base, TEXT(",\"speedMps\":-1")) },
+			{ TEXT("모르는 키"), Item(P2, Base, TEXT(",\"yaw\":1")) },
+			{ TEXT("yawDeg 없음"), FString::Printf(TEXT("{\"id\":\"%s\",\"pos\":{\"x\":0,\"y\":0}}"), *P2) },
+			{ TEXT("pos 없음"), FString::Printf(TEXT("{\"id\":\"%s\",\"yawDeg\":0}"), *P2) },
+			{ TEXT("id 없음"), TEXT("{\"pos\":{\"x\":0,\"y\":0},\"yawDeg\":0}") },
+		};
+		for (const auto& C : Cases)
+		{
+			FRpcError E;
+			Rpc(TEXT("agent.setPose"), Items(Good, C.Bad), E);
+			TestTrue(FString::Printf(TEXT("%s = bad_params"), C.Name), E.HasError() && E.Kind == ERpcErrorKind::BadParams);
+			TestTrue(FString::Printf(TEXT("%s: 아무것도 안 옮김"), C.Name), PaPos(Listed(P1)).Equals(Before, 1e-3));
+		}
+		FRpcError E;
+		Rpc(TEXT("agent.setPose"), TEXT("{\"items\":[]}"), E);
+		TestTrue(TEXT("빈 items = bad_params"), E.HasError() && E.Kind == ERpcErrorKind::BadParams);
+	}
+	// activity 가 속도를 이긴다. 같은 id 는 뒤가 이긴다.
+	{
+		FRpcError E;
+		Rpc(TEXT("agent.setPose"), Items(Item(P1, Base, TEXT(",\"speedMps\":1.3,\"activity\":\"standing\""))), E);
+		TSharedPtr<FJsonObject> O = Listed(P1);
+		TestEqual(TEXT("standing + 속도"), O->GetStringField(TEXT("activityType")), FString(TEXT("standing")));
+		TestEqual(TEXT("표시 속도는 그대로"), O->GetStringField(TEXT("motionType")), FString(TEXT("moving")));
+
+		Rpc(TEXT("agent.setPose"), Items(Item(P1, Base, TEXT(",\"activity\":\"walking\""))), E);
+		O = Listed(P1);
+		TestEqual(TEXT("walking + 속도 0"), O->GetStringField(TEXT("activityType")), FString(TEXT("walking")));
+		TestEqual(TEXT("walking + 속도 0 = stationary"), O->GetStringField(TEXT("motionType")), FString(TEXT("stationary")));
+
+		const FVector2D Last = Base + FVector2D(2, 2);
+		Rpc(TEXT("agent.setPose"), Items(Item(P1, Base + FVector2D(9, 9)), Item(P1, Last)), E);
+		TestFalse(TEXT("같은 id 두 번"), E.HasError());
+		TestTrue(TEXT("뒤 항목"), PaPos(Listed(P1)).Equals(Last, 1e-3));
+	}
+	// 스냅샷: 그대로 돌아오고, paused 면 선다.
+	{
+		FRpcError E;
+		const FVector2D Spot = Base + FVector2D(3, 3);
+		Rpc(TEXT("agent.setPose"), Items(Item(P1, Spot, TEXT(",\"speedMps\":1.3"))), E);
+		const FParkAgentSnapshot Snap = M->Capture();
+		M->Delete({}, true, NotFound);
+		TestEqual(TEXT("지웠다"), M->Num(), 0);
+		M->Restore(Snap, false);
+		for (int32 i = 0; i < 5; ++i) { M->Advance(0.1f); }
+		TSharedPtr<FJsonObject> O = Listed(P1);
+		if (TestTrue(TEXT("복원"), O.IsValid()))
+		{
+			TestTrue(TEXT("복원 자리"), PaPos(O).Equals(Spot, 1e-3));
+			TestEqual(TEXT("복원 속도"), O->GetNumberField(TEXT("speedMps")), 1.3, 1e-6);
+		}
+		M->Restore(Snap, true);
+		O = Listed(P1);
+		if (TestTrue(TEXT("paused 복원"), O.IsValid()))
+		{
+			TestTrue(TEXT("paused 자리"), PaPos(O).Equals(Spot, 1e-3));
+			TestEqual(TEXT("paused 속도 0"), O->GetNumberField(TEXT("speedMps")), 0.0, 1e-6);
+			TestEqual(TEXT("paused stopped"), O->GetStringField(TEXT("state")), FString(TEXT("stopped")));
+		}
+	}
+	// 탑승 이동수단을 지워 내리면 옮길 수 있다.
+	{
+		M->Delete({ Moto }, false, NotFound);
+		FRpcError E;
+		Rpc(TEXT("agent.setPose"), Items(Item(Rider, Base + FVector2D(4, 4))), E);
+		TestFalse(TEXT("내린 사람"), E.HasError());
+	}
+	// allowOverlap: 시험 월드엔 격자가 없어 "기본값은 겹치면 거부" 는 13530 실기로 본다.
+	{
+		FRpcError E;
+		const TSharedPtr<FJsonObject> R = Rpc(TEXT("agent.create"), TEXT("{\"kind\":\"pedestrian\",\"pos\":{\"x\":3000,\"y\":3030},\"allowOverlap\":true}"), E);
+		TestFalse(TEXT("allowOverlap 생성"), E.HasError());
+		TestEqual(TEXT("allowOverlap 은 읽힌다"), Unread.Num(), 0);
+		TestTrue(TEXT("응답"), R.IsValid());
 	}
 	M->Delete({}, true, NotFound);
 	M->Destroy();

@@ -78,6 +78,7 @@ void FAgentRpcModule::Register(URpcDispatcher& Dispatcher)
 		const bool bRider = RpcParam::GetBool(P, TEXT("rider"), true);
 		const FString Model = RpcParam::GetString(P, TEXT("model"));
 		const FString RiderModel = RpcParam::GetString(P, TEXT("riderModel"));
+		const bool bAllowOverlap = RpcParam::GetBool(P, TEXT("allowOverlap"), false);
 
 		// 옷: 걷는 사람은 outfit·outfitSeed, 탑승자는 riderOutfit·riderOutfitSeed. 해당 없는 쪽은 읽지 않아 unknownParam 경고로 알린다.
 		const bool bVehicle = Kind != ParkAgent::EKind::Pedestrian;
@@ -102,7 +103,7 @@ void FAgentRpcModule::Register(URpcDispatcher& Dispatcher)
 		if (!Mgr) { E.FailDomain(TEXT("월드 없음(맵 미로드)"), ERpcErrorKind::Busy); return nullptr; }
 		TArray<FString> Ids;
 		FString Err;
-		if (!Mgr->Create(Kind, FVector2D(X, Y), Yaw, bRider, Model, RiderModel, Ids, Err, bPerson ? &Outfit : nullptr))
+		if (!Mgr->Create(Kind, FVector2D(X, Y), Yaw, bRider, Model, RiderModel, Ids, Err, bPerson ? &Outfit : nullptr, bAllowOverlap))
 		{
 			E.FailDomain(Err, ERpcErrorKind::BadParams);
 			return nullptr;
@@ -121,7 +122,7 @@ void FAgentRpcModule::Register(URpcDispatcher& Dispatcher)
 		return RpcDto::MakeObject(O);
 	});
 	Dispatcher.SetMethodMeta(TEXT("agent.create"), { true, false,
-		TEXT("{kind:\"pedestrian\"|\"bicycle\"|\"motorcycle\", pos{x,y} (UE m), yaw?=0, rider?=true, model?, riderModel?, outfit?, outfitSeed?, riderOutfit?, riderOutfitSeed?}"),
+		TEXT("{kind:\"pedestrian\"|\"bicycle\"|\"motorcycle\", pos{x,y} (UE m), yaw?=0, rider?=true, model?, riderModel?, outfit?, outfitSeed?, riderOutfit?, riderOutfitSeed?, allowOverlap?=false}"),
 		TEXT("사람·자전거·오토바이 생성. 이동수단 + rider 면 사람·이동수단 각자 id + riding 관계. {ids, agents, relations, changed}") });
 
 	Dispatcher.Register(TEXT("agent.move"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
@@ -196,6 +197,87 @@ void FAgentRpcModule::Register(URpcDispatcher& Dispatcher)
 	});
 	Dispatcher.SetMethodMeta(TEXT("agent.stop"), { true, false, TEXT("{id? | ids?:[str] | all?:true}"),
 		TEXT("그 자리에 선다(state stopped). 탑승자 id 면 이동수단이 선다. {stopped, changed, notFound}") });
+
+	Dispatcher.Register(TEXT("agent.setPose"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+		RpcParam::MarkRead(P, TEXT("items"));
+		if (!P.IsValid() || !P->TryGetArrayField(TEXT("items"), Items) || Items->Num() == 0)
+		{
+			E.FailDomain(TEXT("필수 파라미터 누락: items ([{id, pos{x,y,z?}, yawDeg, speedMps?, activity?}])"), ERpcErrorKind::BadParams);
+			return nullptr;
+		}
+		// 항목 하나라도 틀리면 아무것도 옮기지 않는다.
+		TArray<FParkAgentPose> Poses;
+		for (int32 i = 0; i < Items->Num(); ++i)
+		{
+			const auto Bad = [&E, i](const FString& What) -> TSharedPtr<FJsonValue>
+			{
+				E.FailDomain(FString::Printf(TEXT("items[%d]: %s"), i, *What), ERpcErrorKind::BadParams);
+				return nullptr;
+			};
+			const TSharedPtr<FJsonObject>* Item = nullptr;
+			if (!(*Items)[i].IsValid() || !(*Items)[i]->TryGetObject(Item) || !Item) { return Bad(TEXT("객체여야 합니다")); }
+			for (const TPair<FString, TSharedPtr<FJsonValue>>& Kv : (*Item)->Values)
+			{
+				if (Kv.Key != TEXT("id") && Kv.Key != TEXT("pos") && Kv.Key != TEXT("yawDeg") && Kv.Key != TEXT("speedMps") && Kv.Key != TEXT("activity"))
+				{
+					return Bad(FString::Printf(TEXT("모르는 키 %s"), *Kv.Key));
+				}
+			}
+			FParkAgentPose Pose;
+			if (!(*Item)->TryGetStringField(TEXT("id"), Pose.Id) || Pose.Id.IsEmpty()) { return Bad(TEXT("id 가 필요합니다")); }
+			if (!AgPoint((*Item)->TryGetField(TEXT("pos")), Pose.PosM)) { return Bad(TEXT("pos {x,y} 가 필요합니다")); }
+			const TSharedPtr<FJsonObject> PosObj = (*Item)->GetObjectField(TEXT("pos"));
+			if (PosObj->HasField(TEXT("z")))
+			{
+				if (!PosObj->TryGetNumberField(TEXT("z"), Pose.ZM)) { return Bad(TEXT("pos.z 는 숫자입니다")); }
+				Pose.bHasZ = true;
+			}
+			if (!(*Item)->TryGetNumberField(TEXT("yawDeg"), Pose.YawDeg)) { return Bad(TEXT("yawDeg 가 필요합니다")); }
+			if ((*Item)->HasField(TEXT("speedMps")) && (!(*Item)->TryGetNumberField(TEXT("speedMps"), Pose.SpeedMps) || Pose.SpeedMps < 0.0))
+			{
+				return Bad(TEXT("speedMps 는 0 이상의 숫자입니다"));
+			}
+			if ((*Item)->HasField(TEXT("activity"))
+				&& (!(*Item)->TryGetStringField(TEXT("activity"), Pose.Activity) || (Pose.Activity != TEXT("walking") && Pose.Activity != TEXT("standing"))))
+			{
+				return Bad(TEXT("activity 는 walking | standing 입니다"));
+			}
+			Poses.Add(MoveTemp(Pose));
+		}
+
+		AParkAgentManager* Mgr = AParkAgentManager::Find(GetWorldPtr());
+		int32 Applied = 0;
+		TArray<FString> NotFound;
+		if (Mgr)
+		{
+			FString Err;
+			if (!Mgr->SetPoses(Poses, Applied, NotFound, Err))
+			{
+				E.FailDomain(Err, ERpcErrorKind::BadParams);
+				return nullptr;
+			}
+		}
+		else
+		{
+			for (const FParkAgentPose& Pose : Poses) { NotFound.Add(Pose.Id); }
+		}
+		if (Applied == 0)
+		{
+			E.FailDomain(FString::Printf(TEXT("에이전트 없음: %s"), *FString::Join(NotFound, TEXT(", "))), ERpcErrorKind::NotFound);
+			return nullptr;
+		}
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetNumberField(TEXT("applied"), Applied);
+		O->SetNumberField(TEXT("changed"), Applied);
+		O->SetArrayField(TEXT("notFound"), AgStrings(NotFound));
+		return RpcDto::MakeObject(O);
+	});
+	Dispatcher.SetMethodMeta(TEXT("agent.setPose"), { true, false,
+		TEXT("{items:[{id, pos{x,y,z?} (UE m), yawDeg, speedMps?=0, activity?:\"walking\"|\"standing\"}]}"),
+		TEXT("검사·회피 없이 그 자세로 바로 옮긴다(여러 개 한 번에). 돌던 이동은 끝난다. speedMps 는 표시용으로 걷기 애니메이션 빠르기를 정한다. {applied, changed, notFound}") });
 
 	Dispatcher.Register(TEXT("agent.delete"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{

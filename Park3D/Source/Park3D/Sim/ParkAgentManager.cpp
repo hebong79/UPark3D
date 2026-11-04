@@ -560,6 +560,7 @@ void AParkAgentManager::SpawnActorFor(FParkAgent& A)
 	Act->SetActorLabel(A.Id);
 #endif
 	A.Model = Act->Setup(A.Kind, A.Model, GetTypeHash(A.Id));
+	if (A.Kind == EKind::Pedestrian) { Act->ApplyOutfit(A.Outfit); }
 	A.Actor = Act;
 }
 
@@ -574,6 +575,7 @@ void AParkAgentManager::AttachRider(FParkAgent& Rider, FParkAgent& Vehicle)
 	R->AttachToActor(V, FAttachmentTransformRules::KeepRelativeTransform);
 	R->SetActorRelativeLocation(V->SeatOffsetCm());
 	R->SetActorRelativeRotation(FRotator::ZeroRotator);
+	R->SetRideVehicle(*V);
 	R->SetPersonPose(AParkAgentActor::EPersonPose::Ride, 0.0);
 }
 
@@ -591,7 +593,7 @@ void AParkAgentManager::SyncActor(FParkAgent& A)
 }
 
 bool AParkAgentManager::Create(EKind Kind, const FVector2D& PosM, double YawDeg, bool bRider, const FString& Model, const FString& RiderModel,
-	TArray<FString>& OutIds, FString& OutError)
+	TArray<FString>& OutIds, FString& OutError, const FParkAgentOutfit* Outfit)
 {
 	UWorld* World = GetWorld();
 	if (!World) { OutError = TEXT("월드 없음"); return false; }
@@ -629,6 +631,7 @@ bool AParkAgentManager::Create(EKind Kind, const FVector2D& PosM, double YawDeg,
 		A.Z = Z;
 		A.YawDeg = YawDeg;
 		if (K == EKind::Motorcycle) { A.Plate = DummyPlate; }
+		if (K == EKind::Pedestrian) { A.Outfit = Outfit ? *Outfit : ParkAgentOutfit::Draw(ParkAgentOutfit::NewSeed()); }
 		const int32 Idx = Agents.Add(A);
 		SpawnActorFor(Agents[Idx]);
 		SyncActor(Agents[Idx]);
@@ -1078,6 +1081,18 @@ TArray<TSharedPtr<FJsonValue>> AParkAgentManager::ListJson(const EKind* KindFilt
 		if (A.Kind == EKind::Pedestrian)
 		{
 			O->SetStringField(TEXT("activityType"), bRiding ? TEXT("riding") : (A.SpeedMps > 0.05 ? TEXT("walking") : TEXT("standing")));
+			const AParkAgentActor* Act = A.Actor.Get();
+			TSharedPtr<FJsonObject> Fit = ParkAgentOutfit::ToJson(A.Outfit);
+			Fit->SetBoolField(TEXT("applied"), Act && Act->IsOutfitApplied());
+			O->SetObjectField(TEXT("outfit"), Fit);
+			double GapL = 0.0, GapR = 0.0;
+			if (bRiding && Act && Act->GetGripGapCm(GapL, GapR))
+			{
+				TSharedPtr<FJsonObject> Gap = MakeShared<FJsonObject>();
+				Gap->SetNumberField(TEXT("left"), FMath::RoundToDouble(GapL * 100.0) / 100.0);
+				Gap->SetNumberField(TEXT("right"), FMath::RoundToDouble(GapR * 100.0) / 100.0);
+				O->SetObjectField(TEXT("gripGapCm"), Gap);
+			}
 		}
 		O->SetStringField(TEXT("state"), StateName(A.State));
 		// 탑승자의 이동 정보는 이동수단 것.

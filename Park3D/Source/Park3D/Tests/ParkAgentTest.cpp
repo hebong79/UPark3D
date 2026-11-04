@@ -319,4 +319,131 @@ bool FParkAgentLifeTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FParkAgentOutfitTest, "Park3D.Agent.Outfit",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FParkAgentOutfitTest::RunTest(const FString& Parameters)
+{
+	// 값 — 월드 없이.
+	const FParkAgentOutfit A = ParkAgentOutfit::Draw(7), B = ParkAgentOutfit::Draw(7);
+	TestTrue(TEXT("같은 seed = 같은 옷"), A == B);
+	TestEqual(TEXT("seed 를 담는다"), A.Seed, 7);
+	TestTrue(TEXT("무늬 둘째 색은 윗옷과 다르다"), A.Top != A.TopAlt);
+	TSet<FString> Tops, Sleeves, Patterns;
+	for (int32 S = 1; S <= 200; ++S)
+	{
+		const FParkAgentOutfit O = ParkAgentOutfit::Draw(S);
+		Tops.Add(O.Top);
+		Sleeves.Add(O.Sleeve);
+		Patterns.Add(O.Pattern);
+	}
+	TestEqual(TEXT("이어진 seed 200 개에 윗옷 12색이 다 나온다"), Tops.Num(), 12);
+	TestEqual(TEXT("소매 3종"), Sleeves.Num(), 3);
+	TestEqual(TEXT("무늬 3종"), Patterns.Num(), 3);
+
+	FParkAgentOutfit Out;
+	FString Err;
+	TSharedPtr<FJsonObject> Over = MakeShared<FJsonObject>();
+	Over->SetStringField(TEXT("top"), TEXT("red"));
+	TestTrue(TEXT("일부만 지정"), ParkAgentOutfit::Resolve(Over, 7, Out, Err));
+	TestEqual(TEXT("지정한 값"), Out.Top, FString(TEXT("red")));
+	TestEqual(TEXT("나머지는 seed 대로"), Out.BottomColor, A.BottomColor);
+	Over->SetStringField(TEXT("top"), TEXT("없는색"));
+	TestFalse(TEXT("없는 이름은 거절"), ParkAgentOutfit::Resolve(Over, 7, Out, Err));
+	TestTrue(TEXT("오류에 고를 수 있는 이름"), Err.Contains(TEXT("skyblue")));
+	TSharedPtr<FJsonObject> Bad = MakeShared<FJsonObject>();
+	Bad->SetStringField(TEXT("hat"), TEXT("red"));
+	TestFalse(TEXT("없는 키는 거절"), ParkAgentOutfit::Resolve(Bad, 7, Out, Err));
+
+	// agent.list 의 outfit 을 그대로 다시 주면 같은 옷(applied 는 무시).
+	TSharedPtr<FJsonObject> Back = ParkAgentOutfit::ToJson(A);
+	Back->SetBoolField(TEXT("applied"), true);
+	TestTrue(TEXT("목록 값 되돌리기"), ParkAgentOutfit::Resolve(Back, 0, Out, Err) && Out == A);
+
+	// 월드 — 스냅샷 복원 뒤 같은 옷, 탑승자도 옷을 입는다.
+	UWorld* World = (GEngine && GEngine->GetWorldContexts().Num() > 0) ? GWorld : nullptr;
+	if (!TestNotNull(TEXT("에디터 월드"), World)) { return false; }
+	AParkAgentManager* M = AParkAgentManager::GetOrSpawn(World);
+	if (!TestNotNull(TEXT("매니저"), M)) { return false; }
+	TArray<FString> NotFound;
+	M->Delete({}, true, NotFound);
+	const FVector2D Base(3000.0, 3000.0);
+	TArray<FString> Ids;
+	TestTrue(TEXT("걷는 사람"), M->Create(EKind::Pedestrian, Base, 0.0, true, FString(), FString(), Ids, Err, &A));
+	TestTrue(TEXT("seed 생략 탑승자"), M->Create(EKind::Bicycle, Base + FVector2D(5.0, 0.0), 0.0, true, FString(), FString(), Ids, Err));
+	if (!TestEqual(TEXT("id 3개"), Ids.Num(), 3)) { return false; }
+
+	auto OutfitOf = [&](const FString& Id) { return PaFind(M->ListJson(nullptr, {}), Id)->GetObjectField(TEXT("outfit")); };
+	const TSharedPtr<FJsonObject> Fit = OutfitOf(Ids[0]);
+	TestEqual(TEXT("목록에 seed"), static_cast<int32>(Fit->GetNumberField(TEXT("seed"))), 7);
+	TestEqual(TEXT("목록에 윗옷"), Fit->GetStringField(TEXT("top")), A.Top);
+	TestTrue(TEXT("재질이 있으면 applied"), Fit->GetBoolField(TEXT("applied")));
+	const TSharedPtr<FJsonObject> RiderFit = OutfitOf(Ids[2]);
+	TestTrue(TEXT("탑승자 새 seed"), RiderFit->GetNumberField(TEXT("seed")) > 0.0);
+	TestFalse(TEXT("이동수단에는 옷이 없다"), PaFind(M->ListJson(nullptr, {}), Ids[1])->HasField(TEXT("outfit")));
+
+	const FParkAgentSnapshot Snap = M->Capture();
+	M->Restore(Snap, true);
+	TestEqual(TEXT("복원 뒤 같은 옷(걷는 사람)"), OutfitOf(Ids[0])->GetStringField(TEXT("top")), A.Top);
+	TestEqual(TEXT("복원 뒤 같은 옷(탑승자)"), OutfitOf(Ids[2])->GetNumberField(TEXT("seed")), RiderFit->GetNumberField(TEXT("seed")));
+	TestTrue(TEXT("복원 뒤 applied"), OutfitOf(Ids[2])->GetBoolField(TEXT("applied")));
+
+	M->Delete({}, true, NotFound);
+	M->Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FParkAgentGripTest, "Park3D.Agent.Grip",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FParkAgentGripTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = (GEngine && GEngine->GetWorldContexts().Num() > 0) ? GWorld : nullptr;
+	if (!TestNotNull(TEXT("에디터 월드"), World)) { return false; }
+	AParkAgentManager* M = AParkAgentManager::GetOrSpawn(World);
+	if (!TestNotNull(TEXT("매니저"), M)) { return false; }
+	TArray<FString> NotFound;
+	M->Delete({}, true, NotFound);
+
+	struct FCase { EKind Kind; const TCHAR* Model; };
+	const FCase Cases[] = {
+		{ EKind::Bicycle, TEXT("city") }, { EKind::Bicycle, TEXT("sport") }, { EKind::Bicycle, TEXT("simple") },
+		{ EKind::Motorcycle, TEXT("scooter1") }, { EKind::Motorcycle, TEXT("evscooter2") }, { EKind::Motorcycle, TEXT("hondawave") }, { EKind::Motorcycle, TEXT("scooter3") },
+	};
+	const FVector2D Base(3000.0, 3000.0);
+	FString Err;
+	for (const FCase& C : Cases)
+	{
+		for (const TCHAR* Person : { TEXT("manny"), TEXT("quinn") })
+		{
+			TArray<FString> Ids;
+			if (!TestTrue(FString::Printf(TEXT("%s 생성"), C.Model), M->Create(C.Kind, Base, 0.0, true, C.Model, Person, Ids, Err))) { continue; }
+			const TSharedPtr<FJsonObject> Rider = PaFind(M->ListJson(nullptr, {}), Ids[1]);
+			const TSharedPtr<FJsonObject>* Gap = nullptr;
+			if (TestTrue(FString::Printf(TEXT("%s/%s gripGapCm"), C.Model, Person), Rider.IsValid() && Rider->TryGetObjectField(TEXT("gripGapCm"), Gap)))
+			{
+				// 손바닥이 손잡이 위 3 cm 에 놓이도록 풀었으니 뼈~손잡이 중심 거리도 그 근처여야 한다.
+				const double L = (*Gap)->GetNumberField(TEXT("left")), R = (*Gap)->GetNumberField(TEXT("right"));
+				AddInfo(FString::Printf(TEXT("%s/%s 좌 %.2f 우 %.2f cm"), C.Model, Person, L, R));
+				TestTrue(FString::Printf(TEXT("%s/%s 왼손 %.2f cm"), C.Model, Person, L), L < 5.0);
+				TestTrue(FString::Printf(TEXT("%s/%s 오른손 %.2f cm"), C.Model, Person, R), R < 5.0);
+			}
+			// 자전거만 페달을 밟는다. 간격 = 발볼 뼈의 바닥 높이(뼈~페달 윗면)라 IK 가 닿았으면 몇 cm 안이다.
+			const bool bPedals = Rider.IsValid() && Rider->TryGetObjectField(TEXT("pedalGapCm"), Gap);
+			TestTrue(FString::Printf(TEXT("%s/%s pedalGapCm 은 자전거에만"), C.Model, Person), bPedals == (C.Kind == EKind::Bicycle));
+			if (bPedals)
+			{
+				const double L = (*Gap)->GetNumberField(TEXT("left")), R = (*Gap)->GetNumberField(TEXT("right"));
+				AddInfo(FString::Printf(TEXT("%s/%s 발 좌 %.2f 우 %.2f cm"), C.Model, Person, L, R));
+				TestTrue(FString::Printf(TEXT("%s/%s 왼발 %.2f cm"), C.Model, Person, L), L < 8.0);
+				TestTrue(FString::Printf(TEXT("%s/%s 오른발 %.2f cm"), C.Model, Person, R), R < 8.0);
+			}
+			M->Delete(Ids, false, NotFound);
+		}
+	}
+	M->Delete({}, true, NotFound);
+	M->Destroy();
+	return true;
+}
+
 #endif

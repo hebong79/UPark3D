@@ -78,11 +78,31 @@ void FAgentRpcModule::Register(URpcDispatcher& Dispatcher)
 		const bool bRider = RpcParam::GetBool(P, TEXT("rider"), true);
 		const FString Model = RpcParam::GetString(P, TEXT("model"));
 		const FString RiderModel = RpcParam::GetString(P, TEXT("riderModel"));
+
+		// 옷: 걷는 사람은 outfit·outfitSeed, 탑승자는 riderOutfit·riderOutfitSeed. 해당 없는 쪽은 읽지 않아 unknownParam 경고로 알린다.
+		const bool bVehicle = Kind != ParkAgent::EKind::Pedestrian;
+		FParkAgentOutfit Outfit;
+		const bool bPerson = !bVehicle || bRider;
+		if (bPerson)
+		{
+			const TCHAR* ObjKey = bVehicle ? TEXT("riderOutfit") : TEXT("outfit");
+			const TCHAR* SeedKey = bVehicle ? TEXT("riderOutfitSeed") : TEXT("outfitSeed");
+			RpcParam::MarkRead(P, ObjKey);
+			const TSharedPtr<FJsonObject>* OverPtr = nullptr;
+			const bool bHasOver = P->TryGetObjectField(ObjKey, OverPtr) && OverPtr;
+			FString FitErr;
+			if (!ParkAgentOutfit::Resolve(bHasOver ? *OverPtr : TSharedPtr<FJsonObject>(), RpcParam::GetInt(P, SeedKey, 0), Outfit, FitErr))
+			{
+				E.FailDomain(FitErr, ERpcErrorKind::BadParams);
+				return nullptr;
+			}
+		}
+
 		AParkAgentManager* Mgr = AParkAgentManager::GetOrSpawn(GetWorldPtr());
 		if (!Mgr) { E.FailDomain(TEXT("월드 없음(맵 미로드)"), ERpcErrorKind::Busy); return nullptr; }
 		TArray<FString> Ids;
 		FString Err;
-		if (!Mgr->Create(Kind, FVector2D(X, Y), Yaw, bRider, Model, RiderModel, Ids, Err))
+		if (!Mgr->Create(Kind, FVector2D(X, Y), Yaw, bRider, Model, RiderModel, Ids, Err, bPerson ? &Outfit : nullptr))
 		{
 			E.FailDomain(Err, ERpcErrorKind::BadParams);
 			return nullptr;
@@ -101,7 +121,7 @@ void FAgentRpcModule::Register(URpcDispatcher& Dispatcher)
 		return RpcDto::MakeObject(O);
 	});
 	Dispatcher.SetMethodMeta(TEXT("agent.create"), { true, false,
-		TEXT("{kind:\"pedestrian\"|\"bicycle\"|\"motorcycle\", pos{x,y} (UE m), yaw?=0, rider?=true, model?, riderModel?}"),
+		TEXT("{kind:\"pedestrian\"|\"bicycle\"|\"motorcycle\", pos{x,y} (UE m), yaw?=0, rider?=true, model?, riderModel?, outfit?, outfitSeed?, riderOutfit?, riderOutfitSeed?}"),
 		TEXT("사람·자전거·오토바이 생성. 이동수단 + rider 면 사람·이동수단 각자 id + riding 관계. {ids, agents, relations, changed}") });
 
 	Dispatcher.Register(TEXT("agent.move"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
@@ -226,7 +246,7 @@ void FAgentRpcModule::Register(URpcDispatcher& Dispatcher)
 		return RpcDto::MakeObject(O);
 	});
 	Dispatcher.SetMethodMeta(TEXT("agent.list"), { false, false, TEXT("{kind?, ids?:[str]}"),
-		TEXT("{count, agents[{id, objectType, model, pos, directionDeg, speedMps, motionType, activityType?, state, moveId?, remainingM?, waitingFor?, endReason?, ridingWith, relationId?, plate?, plateVisible?}], timeMs, frameId}") });
+		TEXT("{count, agents[{id, objectType, model, pos, directionDeg, speedMps, motionType, activityType?, outfit?, gripGapCm?, pedalGapCm?, state, moveId?, remainingM?, waitingFor?, endReason?, ridingWith, relationId?, plate?, plateVisible?}], timeMs, frameId}") });
 
 	Dispatcher.Register(TEXT("agent.relations"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{

@@ -31,12 +31,23 @@ namespace
 	/** 걷기 애니메이션 한 바퀴가 나타내는 속도(m/s) — 걸음 빠르기 = 속도 / 이 값. */
 	constexpr double GApWalkAnimMps = 1.5;
 
+	/** 옷 재질(Tools/agent_outfit/build_outfit_material.py 가 만든다). */
+	const TCHAR* GApOutfitMaterial = TEXT("/Game/Characters/Mannequins/Outfit/M_AgentOutfit.M_AgentOutfit");
+
 	/** 오토바이(2026-11-03 1030 엔진에서 들여온 스태틱 메시). */
-	const FApMesh GApMotorcycles[] = {
-		{ TEXT("scooter1"), TEXT("/Game/Actors/Motorcycle/SM_Scooter_1.SM_Scooter_1"), false },
-		{ TEXT("evscooter2"), TEXT("/Game/Actors/Motorcycle/SM_EV_Scooter_2.SM_EV_Scooter_2"), false },
-		{ TEXT("hondawave"), TEXT("/Game/Actors/Motorcycle/SM_Honda_Wave.SM_Honda_Wave"), false },
-		{ TEXT("scooter3"), TEXT("/Game/Actors/Motorcycle/SM_Scooter_3.SM_Scooter_3"), false },
+	struct FApMoto
+	{
+		const TCHAR* Name;
+		const TCHAR* Path;
+		bool bFlip;
+		/** 오른쪽 손잡이 중심(cm, 정렬된 메시 기준). 메시 정점에서 잰 값(Tools/agent_outfit/grip_stats.py). */
+		FVector Grip;
+	};
+	const FApMoto GApMotorcycles[] = {
+		{ TEXT("scooter1"), TEXT("/Game/Actors/Motorcycle/SM_Scooter_1.SM_Scooter_1"), false, FVector(18.2, 31.5, 101.7) },
+		{ TEXT("evscooter2"), TEXT("/Game/Actors/Motorcycle/SM_EV_Scooter_2.SM_EV_Scooter_2"), false, FVector(36.5, 30.0, 96.1) },
+		{ TEXT("hondawave"), TEXT("/Game/Actors/Motorcycle/SM_Honda_Wave.SM_Honda_Wave"), false, FVector(21.3, 29.0, 97.4) },
+		{ TEXT("scooter3"), TEXT("/Game/Actors/Motorcycle/SM_Scooter_3.SM_Scooter_3"), false, FVector(22.1, 28.0, 104.2) },
 	};
 
 	/**
@@ -57,11 +68,43 @@ namespace
 	const TCHAR* GApCylinder = TEXT("/Engine/BasicShapes/Cylinder.Cylinder");
 	const TCHAR* GApShapeMaterial = TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial");
 
-	template <int32 N>
-	const FApMesh& ApPick(const FApMesh (&Table)[N], const FString& Model, uint32 Hash)
+	template <typename T, int32 N>
+	const T& ApPick(const T (&Table)[N], const FString& Model, uint32 Hash)
 	{
-		for (const FApMesh& M : Table) { if (Model.Equals(M.Name, ESearchCase::IgnoreCase)) { return M; } }
+		for (const T& M : Table) { if (Model.Equals(M.Name, ESearchCase::IgnoreCase)) { return M; } }
 		return Table[Hash % N];
+	}
+
+	/** 메시 기준 자세의 뼈 위치(메시 공간 cm). Quinn 은 스켈레톤 기준 자세와 달라 메시 것을 쓴다. */
+	FVector ApRefBonePos(const USkeletalMesh* Mesh, FName Bone)
+	{
+		const FReferenceSkeleton& Ref = Mesh->GetRefSkeleton();
+		int32 Idx = Ref.FindBoneIndex(Bone);
+		FTransform T = FTransform::Identity;
+		while (Idx != INDEX_NONE)
+		{
+			T = T * Ref.GetRefBonePose()[Idx];
+			Idx = Ref.GetParentIndex(Idx);
+		}
+		return T.GetLocation();
+	}
+
+	/** 어깨 S·손목 W·위/아래팔 길이·굽힘 쪽 Pole → 팔꿈치 위치. 닿지 않으면 W 쪽으로 곧게 뻗는다. */
+	FVector ApSolveElbow(const FVector& S, const FVector& W, double L1, double L2, const FVector& Pole)
+	{
+		const FVector D = W - S;
+		const FVector Dir = D.GetSafeNormal();
+		const double Len = FMath::Clamp(D.Size(), FMath::Abs(L1 - L2) + 0.1, L1 + L2 - 0.01);
+		const double A = (L1 * L1 - L2 * L2 + Len * Len) / (2.0 * Len);
+		const double H = FMath::Sqrt(FMath::Max(L1 * L1 - A * A, 0.0));
+		const FVector Perp = (Pole - Dir * FVector::DotProduct(Pole, Dir)).GetSafeNormal();
+		return S + Dir * A + Perp * H;
+	}
+
+	/** (RefX, RefZ) 틀을 (X, Z) 틀로 옮기는 회전. */
+	FQuat ApFrameDelta(const FVector& RefX, const FVector& RefZ, const FVector& X, const FVector& Z)
+	{
+		return FRotationMatrix::MakeFromXZ(X, Z).ToQuat() * FRotationMatrix::MakeFromXZ(RefX, RefZ).ToQuat().Inverse();
 	}
 
 	void ApNoCollision(UPrimitiveComponent* C)
@@ -85,7 +128,7 @@ TArray<FString> AParkAgentActor::ModelNames(ParkAgent::EKind InKind)
 	switch (InKind)
 	{
 	case ParkAgent::EKind::Pedestrian: for (const FApMesh& M : GApPersons) { Out.Add(M.Name); } break;
-	case ParkAgent::EKind::Motorcycle: for (const FApMesh& M : GApMotorcycles) { Out.Add(M.Name); } break;
+	case ParkAgent::EKind::Motorcycle: for (const FApMoto& M : GApMotorcycles) { Out.Add(M.Name); } break;
 	case ParkAgent::EKind::Bicycle:
 		if (FCString::Strlen(GApBicycleAsset.Path) > 0) { Out.Add(GApBicycleAsset.Name); }
 		for (const TCHAR* N : GApBicycleBuilt) { Out.Add(N); }
@@ -141,6 +184,94 @@ void AParkAgentActor::SetupPerson(const FString& Model, uint32 Hash, FString& Ou
 	CurPose = EPersonPose::Stand;
 }
 
+bool AParkAgentActor::ApplyOutfit(const FParkAgentOutfit& Outfit)
+{
+	bOutfitApplied = false;
+	if (Kind != ParkAgent::EKind::Pedestrian || !Body || !RideBody)
+	{
+		return false;
+	}
+	UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, GApOutfitMaterial, nullptr, LOAD_NoWarn);
+	if (!Base)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Agent] 옷 재질이 없어 원래 마네킹으로 둡니다(재쿡 전 패키지?): %s"), GApOutfitMaterial);
+		return false;
+	}
+	const USkeletalMesh* Mesh = Cast<USkeletalMesh>(Body->GetSkinnedAsset());
+	if (!Mesh)
+	{
+		return false;
+	}
+	UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Base, this);
+	Mid->SetVectorParameterValue(TEXT("TopColor"), ParkAgentOutfit::TopColor(Outfit.Top));
+	Mid->SetVectorParameterValue(TEXT("TopAltColor"), ParkAgentOutfit::TopColor(Outfit.TopAlt));
+	Mid->SetVectorParameterValue(TEXT("BottomColor"), ParkAgentOutfit::BottomColor(Outfit.BottomColor));
+	Mid->SetVectorParameterValue(TEXT("ShoesColor"), ParkAgentOutfit::ShoesColor(Outfit.Shoes));
+	Mid->SetVectorParameterValue(TEXT("SkinColor"), ParkAgentOutfit::SkinColor(Outfit.Skin));
+	Mid->SetVectorParameterValue(TEXT("HairColor"), ParkAgentOutfit::HairColor(Outfit.Hair));
+	// 소매 끝(T: 어깨 0, 팔꿈치 0.5, 손목 1). long 은 손목까지. 0 = 민소매(재질이 어깨까지 맨살로 판다).
+	Mid->SetScalarParameterValue(TEXT("SleeveT"), Outfit.Sleeve == TEXT("long") ? 0.985f : (Outfit.Sleeve == TEXT("short") ? 0.33f : 0.f));
+	Mid->SetScalarParameterValue(TEXT("PatternKind"), Outfit.Pattern == TEXT("check") ? 2.f : (Outfit.Pattern == TEXT("stripe") ? 1.f : 0.f));
+
+	// 부위 경계는 이 메시의 기준 자세 뼈에서 잡는다(Manny·Quinn 체형이 다르다).
+	const FVector Pelvis = ApRefBonePos(Mesh, TEXT("pelvis"));
+	const FVector Neck = ApRefBonePos(Mesh, TEXT("neck_01"));
+	const FVector Head = ApRefBonePos(Mesh, TEXT("head"));
+	const FVector Calf = ApRefBonePos(Mesh, TEXT("calf_l"));
+	const FVector Foot = ApRefBonePos(Mesh, TEXT("foot_l"));
+	auto SetBone = [&](const TCHAR* Param, const TCHAR* Bone)
+	{
+		const FVector P = ApRefBonePos(Mesh, Bone);
+		Mid->SetVectorParameterValue(Param, FLinearColor(static_cast<float>(FMath::Abs(P.X)), static_cast<float>(P.Y), static_cast<float>(P.Z))); // 재질은 |x| 로 좌우를 합친다
+	};
+	SetBone(TEXT("ShoulderPos"), TEXT("upperarm_l"));
+	SetBone(TEXT("ElbowPos"), TEXT("lowerarm_l"));
+	SetBone(TEXT("WristPos"), TEXT("hand_l"));
+	Mid->SetScalarParameterValue(TEXT("NeckZ"), static_cast<float>(Neck.Z));
+	Mid->SetScalarParameterValue(TEXT("HairZ"), static_cast<float>(Head.Z + 9.5));
+	Mid->SetScalarParameterValue(TEXT("HeadY"), static_cast<float>(Head.Y + 1.0));
+	Mid->SetScalarParameterValue(TEXT("WaistZ"), static_cast<float>(Pelvis.Z + 7.0));
+	Mid->SetScalarParameterValue(TEXT("ShoeZ"), static_cast<float>(Foot.Z + 2.5));
+	Mid->SetScalarParameterValue(TEXT("ShortsZ"), Outfit.Bottom == TEXT("shorts") ? static_cast<float>(Calf.Z + 10.0) : -1.f);
+
+	const int32 Slots = Body->GetNumMaterials();
+	for (int32 i = 0; i < Slots; ++i)
+	{
+		Body->SetMaterial(i, Mid);
+		RideBody->SetMaterial(i, Mid);
+	}
+	bOutfitApplied = true;
+	return true;
+}
+
+void AParkAgentActor::SetRideVehicle(const AParkAgentActor& Vehicle)
+{
+	bHasRideGrip = !Vehicle.GripCm.IsZero();
+	RideGripCm = Vehicle.GripCm - FVector(Vehicle.SeatCm.X, 0.0, Vehicle.SeatCm.Z);
+	RideVehicle = &Vehicle;
+}
+
+bool AParkAgentActor::GetGripGapCm(double& OutLeft, double& OutRight) const
+{
+	OutLeft = GripGapLeftCm;
+	OutRight = GripGapRightCm;
+	return bHasGripGap;
+}
+
+bool AParkAgentActor::GetPedalGapCm(double& OutLeft, double& OutRight) const
+{
+	const AParkAgentActor* V = RideVehicle.Get();
+	if (!V || V->PedalLeftCm.IsZero() || !RideBody)
+	{
+		return false;
+	}
+	// 지금 월드에 있는 뼈와 페달로 잰다(손잡이 간격과 달리 메시 내림·좌석 붙임·좌우가 틀려도 드러난다).
+	const FTransform VT = V->GetActorTransform();
+	OutLeft = FVector::Dist(RideBody->GetBoneLocationByName(TEXT("ball_l"), EBoneSpaces::WorldSpace), VT.TransformPosition(V->PedalLeftCm));
+	OutRight = FVector::Dist(RideBody->GetBoneLocationByName(TEXT("ball_r"), EBoneSpaces::WorldSpace), VT.TransformPosition(V->PedalRightCm));
+	return true;
+}
+
 void AParkAgentActor::SetPersonPose(EPersonPose Pose, double SpeedMps)
 {
 	if (Kind != ParkAgent::EKind::Pedestrian || !Body || !RideBody)
@@ -183,27 +314,204 @@ void AParkAgentActor::ApplyRidePose()
 	auto Dx = [](double Deg) { return FQuat(FVector::XAxisVector, FMath::DegreesToRadians(Deg)); };
 	struct FApTurn { const TCHAR* Bone; double Deg; };
 	// 부모 → 자식 순. 각 뼈의 "기준 자세 대비 회전"을 컴포넌트 공간 절대값으로 준다(자식은 부모를 따라가지 않고 이 값이 된다).
-	const FApTurn Turns[] = {
-		// 상체를 숙이고 팔을 내려 손이 핸들(안장 앞 약 54 cm, 높이 97 cm)에 닿게 한다(#1794 — 55/75° 는 손이 핸들보다 40 cm 위에 떴다).
-		{ TEXT("spine_01"), -25.0 },
-		{ TEXT("upperarm_l"), 35.0 }, { TEXT("upperarm_r"), 35.0 },
-		{ TEXT("lowerarm_l"), 50.0 }, { TEXT("lowerarm_r"), 50.0 },
+	const FApTurn Legs[] = {
 		{ TEXT("thigh_l"), 80.0 }, { TEXT("thigh_r"), 80.0 },
 		{ TEXT("calf_l"), 10.0 }, { TEXT("calf_r"), 10.0 },
 		{ TEXT("foot_l"), 0.0 }, { TEXT("foot_r"), 0.0 },
 	};
-	TMap<FName, FQuat> Ref;
-	for (const FApTurn& T : Turns)
+	// 손잡이를 모르는 이동수단(에셋 자전거 자리)만 쓰는 고정 자세.
+	const FApTurn NoGripUpper[] = {
+		{ TEXT("spine_01"), -25.0 },
+		{ TEXT("upperarm_l"), 35.0 }, { TEXT("upperarm_r"), 35.0 },
+		{ TEXT("lowerarm_l"), 50.0 }, { TEXT("lowerarm_r"), 50.0 },
+	};
+	auto Apply = [&](TConstArrayView<FApTurn> Turns)
 	{
-		Ref.Add(T.Bone, RideBody->GetBoneRotationByName(T.Bone, EBoneSpaces::ComponentSpace).Quaternion());
-	}
-	for (const FApTurn& T : Turns)
-	{
-		RideBody->SetBoneRotationByName(T.Bone, (Dx(T.Deg) * Ref[T.Bone]).Rotator(), EBoneSpaces::ComponentSpace);
-	}
+		TMap<FName, FQuat> Ref;
+		for (const FApTurn& T : Turns)
+		{
+			Ref.Add(T.Bone, RideBody->GetBoneRotationByName(T.Bone, EBoneSpaces::ComponentSpace).Quaternion());
+		}
+		for (const FApTurn& T : Turns)
+		{
+			RideBody->SetBoneRotationByName(T.Bone, (Dx(T.Deg) * Ref[T.Bone]).Rotator(), EBoneSpaces::ComponentSpace);
+		}
+	};
 	// 엉덩이(골반 아래 10 cm)가 탑승자 액터 원점에 오도록 메시를 내린다 — 이동수단은 좌석 윗면에 탑승자 원점을 붙인다.
 	const FVector Pelvis = RideBody->GetBoneLocationByName(TEXT("pelvis"), EBoneSpaces::ComponentSpace);
-	RideBody->SetRelativeLocation(FVector(0.0, 0.0, -(Pelvis.Z - 10.0)));
+	const double MeshZ = -(Pelvis.Z - 10.0);
+	RideBody->SetRelativeLocation(FVector(0.0, 0.0, MeshZ));
+	const AParkAgentActor* Vehicle = RideVehicle.Get();
+	if (Vehicle && !Vehicle->PedalLeftCm.IsZero())
+	{
+		const FVector SeatXZ(Vehicle->SeatCm.X, 0.0, Vehicle->SeatCm.Z);
+		ApplyPedalPose(MeshZ, Vehicle->PedalLeftCm - SeatXZ, Vehicle->PedalRightCm - SeatXZ);
+	}
+	else
+	{
+		Apply(Legs);
+	}
+	if (bHasRideGrip)
+	{
+		ApplyGripPose(MeshZ);
+	}
+	else
+	{
+		Apply(NoGripUpper);
+	}
+}
+
+void AParkAgentActor::ApplyPedalPose(double MeshZOffsetCm, const FVector& PedalLeft, const FVector& PedalRight)
+{
+	// 메시 공간: +X = 사람 왼쪽, +Y = 앞, +Z = 위. 액터 (ax, ay, az) → 메시 (-ay, ax, az - MeshZ). 왼발 = 액터 -Y 페달.
+	auto BoneT = [this](const TCHAR* Bone) { return RideBody->GetBoneTransformByName(Bone, EBoneSpaces::ComponentSpace); };
+	auto SetRot = [this](const TCHAR* Bone, const FQuat& Q) { RideBody->SetBoneRotationByName(Bone, Q.Rotator(), EBoneSpaces::ComponentSpace); };
+	const FQuat ToeDown(FVector::XAxisVector, FMath::DegreesToRadians(-10.0));   // 발끝을 조금 내린다
+	struct FLeg { const TCHAR* Thigh; const TCHAR* Calf; const TCHAR* Foot; const TCHAR* Ball; FVector Pedal; };
+	const FLeg Legs[] = {
+		{ TEXT("thigh_l"), TEXT("calf_l"), TEXT("foot_l"), TEXT("ball_l"), PedalLeft },
+		{ TEXT("thigh_r"), TEXT("calf_r"), TEXT("foot_r"), TEXT("ball_r"), PedalRight },
+	};
+	for (const FLeg& L : Legs)
+	{
+		const FTransform Thigh = BoneT(L.Thigh), Calf = BoneT(L.Calf), Foot = BoneT(L.Foot);
+		const FVector Ball = BoneT(L.Ball).GetLocation();
+		const FVector S = Thigh.GetLocation();
+		// 기준 자세의 Z 는 바닥(발바닥)부터의 높이 — 발볼을 그만큼 페달 윗면 위에 둔다.
+		const FVector BallTarget(-L.Pedal.Y, L.Pedal.X, L.Pedal.Z - MeshZOffsetCm + Ball.Z);
+		const FVector Ankle = BallTarget - ToeDown.RotateVector(Ball - Foot.GetLocation());
+		const double L1 = FVector::Dist(S, Calf.GetLocation());
+		const double L2 = FVector::Dist(Calf.GetLocation(), Foot.GetLocation());
+		// 무릎은 앞, 조금 바깥으로(프레임 쪽으로 모이지 않게).
+		const FVector Knee = ApSolveElbow(S, Ankle, L1, L2, FVector(S.X >= 0.0 ? 0.15 : -0.15, 1.0, 0.0));
+		SetRot(L.Thigh, FQuat::FindBetweenNormals((Calf.GetLocation() - S).GetSafeNormal(), (Knee - S).GetSafeNormal()) * Thigh.GetRotation());
+		SetRot(L.Calf, FQuat::FindBetweenNormals((Foot.GetLocation() - Calf.GetLocation()).GetSafeNormal(), (Ankle - Knee).GetSafeNormal()) * Calf.GetRotation());
+		SetRot(L.Foot, ToeDown * Foot.GetRotation());
+	}
+}
+
+void AParkAgentActor::ApplyGripPose(double MeshZOffsetCm)
+{
+	// 메시 공간: +X = 사람 왼쪽, +Y = 앞, +Z = 위. 액터 (ax, ay, az) → 메시 (-ay, ax, az - MeshZ).
+	auto BoneT = [this](const TCHAR* Bone) { return RideBody->GetBoneTransformByName(Bone, EBoneSpaces::ComponentSpace); };
+	auto SetRot = [this](const TCHAR* Bone, const FQuat& Q) { RideBody->SetBoneRotationByName(Bone, Q.Rotator(), EBoneSpaces::ComponentSpace); };
+
+	struct FArm
+	{
+		const TCHAR* Upper; const TCHAR* Lower; const TCHAR* Hand; const TCHAR* Mid; const TCHAR* Index; const TCHAR* Pinky;
+		const TCHAR* Fingers[4][3];
+		double Side = 1.0;      // +1 = 메시 +X(왼팔)
+		FVector Grip;           // 손잡이 중심(메시 공간)
+		FVector Knuckle;        // middle_01 이 갈 곳
+		FVector HandDir, PalmN; // 손이 향할 방향, 손바닥이 볼 방향
+		FTransform RefUpper, RefLower, RefHand;
+		FVector RefUpperDir, RefLowerDir, RefHandDir, RefPalmN;
+		double L1 = 0.0, L2 = 0.0, Palm = 0.0;
+		FVector Wrist;
+	};
+	FArm Arms[2];
+	Arms[0].Upper = TEXT("upperarm_l"); Arms[0].Lower = TEXT("lowerarm_l"); Arms[0].Hand = TEXT("hand_l");
+	Arms[0].Mid = TEXT("middle_01_l"); Arms[0].Index = TEXT("index_01_l"); Arms[0].Pinky = TEXT("pinky_01_l");
+	Arms[1].Upper = TEXT("upperarm_r"); Arms[1].Lower = TEXT("lowerarm_r"); Arms[1].Hand = TEXT("hand_r");
+	Arms[1].Mid = TEXT("middle_01_r"); Arms[1].Index = TEXT("index_01_r"); Arms[1].Pinky = TEXT("pinky_01_r");
+	const TCHAR* const LeftFingers[4][3] = {
+		{ TEXT("index_01_l"), TEXT("index_02_l"), TEXT("index_03_l") }, { TEXT("middle_01_l"), TEXT("middle_02_l"), TEXT("middle_03_l") },
+		{ TEXT("ring_01_l"), TEXT("ring_02_l"), TEXT("ring_03_l") }, { TEXT("pinky_01_l"), TEXT("pinky_02_l"), TEXT("pinky_03_l") } };
+	const TCHAR* const RightFingers[4][3] = {
+		{ TEXT("index_01_r"), TEXT("index_02_r"), TEXT("index_03_r") }, { TEXT("middle_01_r"), TEXT("middle_02_r"), TEXT("middle_03_r") },
+		{ TEXT("ring_01_r"), TEXT("ring_02_r"), TEXT("ring_03_r") }, { TEXT("pinky_01_r"), TEXT("pinky_02_r"), TEXT("pinky_03_r") } };
+	for (int32 f = 0; f < 4; ++f)
+	{
+		for (int32 j = 0; j < 3; ++j)
+		{
+			Arms[0].Fingers[f][j] = LeftFingers[f][j];
+			Arms[1].Fingers[f][j] = RightFingers[f][j];
+		}
+	}
+
+	// 숙이기 전 기준 자세를 읽어 둔다.
+	const FVector SpinePos = BoneT(TEXT("spine_01")).GetLocation();
+	const FQuat RefSpine = BoneT(TEXT("spine_01")).GetRotation();
+	const FQuat RefNeck = BoneT(TEXT("neck_01")).GetRotation();
+	FVector RefShoulder[2];
+	constexpr double GripPalmUpCm = 3.0;   // 손바닥은 손잡이 중심보다 이만큼 위(손바닥이 막대 윗면에 얹힌다)
+	for (int32 i = 0; i < 2; ++i)
+	{
+		FArm& A = Arms[i];
+		A.RefUpper = BoneT(A.Upper);
+		A.RefLower = BoneT(A.Lower);
+		A.RefHand = BoneT(A.Hand);
+		const FVector MidPos = BoneT(A.Mid).GetLocation();
+		const FVector Across = (BoneT(A.Index).GetLocation() - BoneT(A.Pinky).GetLocation()).GetSafeNormal();
+		A.Side = A.RefUpper.GetLocation().X >= 0.0 ? 1.0 : -1.0;
+		A.RefUpperDir = (A.RefLower.GetLocation() - A.RefUpper.GetLocation()).GetSafeNormal();
+		A.RefLowerDir = (A.RefHand.GetLocation() - A.RefLower.GetLocation()).GetSafeNormal();
+		A.RefHandDir = (MidPos - A.RefHand.GetLocation()).GetSafeNormal();
+		// 손바닥 법선: 기준 자세의 손가락은 손바닥 쪽으로 살짝 굽어 있다.
+		A.RefPalmN = FVector::CrossProduct(A.RefHandDir, Across).GetSafeNormal();
+		const FVector Curl = BoneT(A.Fingers[1][2]).GetLocation() - MidPos;
+		if (FVector::DotProduct(A.RefPalmN, Curl) < 0.0) { A.RefPalmN = -A.RefPalmN; }
+		A.L1 = FVector::Dist(A.RefUpper.GetLocation(), A.RefLower.GetLocation());
+		A.L2 = FVector::Dist(A.RefLower.GetLocation(), A.RefHand.GetLocation());
+		A.Palm = FVector::Dist(A.RefHand.GetLocation(), MidPos);
+		RefShoulder[i] = A.RefUpper.GetLocation();
+
+		// 왼팔(메시 +X) = 액터 -Y 손잡이.
+		A.Grip = FVector(A.Side * RideGripCm.Y, RideGripCm.X, RideGripCm.Z - MeshZOffsetCm);
+		A.HandDir = FVector(-0.2 * A.Side, 1.0, -0.25).GetSafeNormal();
+		A.PalmN = -FVector::UpVector;
+		A.Knuckle = A.Grip - A.PalmN * GripPalmUpCm;
+		A.Wrist = A.Knuckle - A.HandDir * A.Palm;
+	}
+
+	// 상체: 두 팔이 무리 없이(팔 길이의 92 % 안) 닿는 가장 작은 숙임. 메시 공간 X 축 둘레 -각 = 앞으로 숙임.
+	auto Dx = [](double Deg) { return FQuat(FVector::XAxisVector, FMath::DegreesToRadians(Deg)); };
+	double LeanDeg = 8.0;
+	for (; LeanDeg < 45.0; LeanDeg += 1.0)
+	{
+		bool bReach = true;
+		for (int32 i = 0; i < 2; ++i)
+		{
+			const FVector S = SpinePos + Dx(-LeanDeg).RotateVector(RefShoulder[i] - SpinePos);
+			bReach &= FVector::Dist(S, Arms[i].Wrist) <= 0.92 * (Arms[i].L1 + Arms[i].L2);
+		}
+		if (bReach) { break; }
+	}
+	SetRot(TEXT("spine_01"), Dx(-LeanDeg) * RefSpine);
+	SetRot(TEXT("neck_01"), Dx(-LeanDeg * 0.3) * RefNeck);   // 고개를 들어 앞을 본다
+
+	for (FArm& A : Arms)
+	{
+		const FVector S = BoneT(A.Upper).GetLocation();
+		const FVector Elbow = ApSolveElbow(S, A.Wrist, A.L1, A.L2, FVector(A.Side, -0.2, -1.0));
+		const FVector LowerDir = (A.Wrist - Elbow).GetSafeNormal();
+		SetRot(A.Upper, FQuat::FindBetweenNormals(A.RefUpperDir, (Elbow - S).GetSafeNormal()) * A.RefUpper.GetRotation());
+		// 아래팔은 손과 같은 쪽으로 비틀어 손목이 꼬이지 않게 한다.
+		SetRot(A.Lower, ApFrameDelta(A.RefLowerDir, A.RefPalmN, LowerDir, A.PalmN) * A.RefLower.GetRotation());
+		SetRot(A.Hand, ApFrameDelta(A.RefHandDir, A.RefPalmN, A.HandDir, A.PalmN) * A.RefHand.GetRotation());
+
+		// 손가락을 손바닥 쪽으로 말아 손잡이를 감싼다(마디마다 누적 각, 부모 → 자식).
+		const FVector CurlAxis = FVector::CrossProduct(A.HandDir, (A.PalmN - A.HandDir * FVector::DotProduct(A.PalmN, A.HandDir)).GetSafeNormal());
+		const double CurlDeg[3] = { 55.0, 105.0, 140.0 };
+		for (int32 f = 0; f < 4; ++f)
+		{
+			FQuat Cur[3];
+			for (int32 j = 0; j < 3; ++j) { Cur[j] = BoneT(A.Fingers[f][j]).GetRotation(); }
+			for (int32 j = 0; j < 3; ++j)
+			{
+				SetRot(A.Fingers[f][j], FQuat(CurlAxis, FMath::DegreesToRadians(CurlDeg[j])) * Cur[j]);
+			}
+		}
+	}
+
+	// 실제로 어디에 놓였는지 잰다(middle_01 은 뿌리 마디라 손가락을 말아도 제자리다).
+	for (const FArm& A : Arms)
+	{
+		const double Gap = FVector::Dist(BoneT(A.Mid).GetLocation(), A.Grip);
+		(A.Side > 0.0 ? GripGapLeftCm : GripGapRightCm) = Gap;
+	}
+	bHasGripGap = true;
+	UE_LOG(LogTemp, Log, TEXT("[Agent] 손잡이 자세 숙임 %.0f° 간격 좌 %.1f 우 %.1f cm"), LeanDeg, GripGapLeftCm, GripGapRightCm);
 }
 
 UStaticMeshComponent* AParkAgentActor::AddAlignedMesh(const TCHAR* Path, bool bFlip, double& OutLengthCm, double& OutHeightCm)
@@ -238,12 +546,13 @@ UStaticMeshComponent* AParkAgentActor::AddAlignedMesh(const TCHAR* Path, bool bF
 
 void AParkAgentActor::SetupMotorcycle(const FString& Model, uint32 Hash, FString& OutModel)
 {
-	const FApMesh& Pick = ApPick(GApMotorcycles, Model, Hash);
+	const FApMoto& Pick = ApPick(GApMotorcycles, Model, Hash);
 	OutModel = Pick.Name;
 	double L = 180.0, H = 115.0;
 	AddAlignedMesh(Pick.Path, Pick.bFlip, L, H);
 	// 좌석: 차체 중심보다 조금 뒤, 높이의 약 62 %.
 	SeatCm = FVector(-0.12 * L, 0.0, 0.62 * H);
+	GripCm = Pick.Grip;
 }
 
 UStaticMeshComponent* AParkAgentActor::AddShape(const TCHAR* Shape, const FVector& LocCm, const FRotator& Rot, const FVector& Scale, const FLinearColor& Color)
@@ -415,7 +724,9 @@ void AParkAgentActor::BuildSpokedBicycle(bool bCity, uint32 Hash)
 		const FVector Dir = CrankDir * Side;
 		const FVector Pedal = Bb + Dir * 17.0 + FVector(0.0, 8.0 * Side * -1.0, 0.0);
 		Bar(Metal, Bb + FVector(0.0, -8.0 * Side, 0.0), Pedal, 2.0);
-		Dark->AddInstance(FTransform(FRotator::ZeroRotator, Pedal + FVector(0.0, -5.0 * Side, 0.0), FVector(0.10, 0.09, 0.025)));
+		const FVector PedalBox = Pedal + FVector(0.0, -5.0 * Side, 0.0);
+		Dark->AddInstance(FTransform(FRotator::ZeroRotator, PedalBox, FVector(0.10, 0.09, 0.025)));
+		(PedalBox.Y < 0.0 ? PedalLeftCm : PedalRightCm) = PedalBox + FVector(0.0, 0.0, 1.25);
 	}
 
 	if (bCity)
@@ -469,6 +780,8 @@ void AParkAgentActor::SetupBicycle(const FString& Model, uint32 Hash, FString& O
 		OutModel = Pick;
 		BuildSpokedBicycle(Pick == TEXT("city"), Hash);
 		SeatCm = FVector(-14.0, 0.0, 88.5);
+		// 고무 손잡이 가운데(BuildSpokedBicycle 의 핸들 좌표).
+		GripCm = Pick == TEXT("city") ? FVector(24.0, 28.0, 101.0) : FVector(40.0, 26.0, 97.0);
 		return;
 	}
 	OutModel = TEXT("simple");
@@ -499,4 +812,8 @@ void AParkAgentActor::SetupBicycle(const FString& Model, uint32 Hash, FString& O
 	AddShape(GApCube, FVector(-14.0, 0.0, 86.0), FRotator::ZeroRotator, FVector(0.24, 0.12, 0.05), Black);  // 안장
 	AddShape(GApCube, Bb, FRotator::ZeroRotator, FVector(0.04, 0.34, 0.03), Black);                          // 크랭크·페달
 	SeatCm = FVector(-14.0, 0.0, 88.5);
+	GripCm = FVector(38.0, 24.0, 98.0);   // 핸들 막대(±28 cm)의 끝 쪽
+	// 크랭크·페달 막대(Bb, ±17 cm, 두께 3 cm)의 양 끝 윗면.
+	PedalLeftCm = Bb + FVector(0.0, -13.0, 1.5);
+	PedalRightCm = Bb + FVector(0.0, 13.0, 1.5);
 }

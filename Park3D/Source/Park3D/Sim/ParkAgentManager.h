@@ -11,6 +11,7 @@
 #include "GameFramework/Actor.h"
 #include "CollisionQueryParams.h"
 #include "ParkAgentNav.h"
+#include "ParkAgentOutfit.h"
 #include "ParkAgentManager.generated.h"
 
 class AParkAgentActor;
@@ -51,6 +52,8 @@ struct FParkAgent
 	FString Id;
 	ParkAgent::EKind Kind = ParkAgent::EKind::Pedestrian;
 	FString Model;
+	/** 사람만. 스냅샷에 값으로 실려 복원 뒤에도 같은 옷이다. */
+	FParkAgentOutfit Outfit;
 	/** 탑승 상대(사람이면 이동수단 id, 이동수단이면 사람 id). 빈 값 = 혼자. */
 	FString RidingWith;
 	FVector2D Pos = FVector2D::ZeroVector;   // UE m(지면)
@@ -101,9 +104,10 @@ public:
 	/**
 	 * 만든다. 이동수단 + bRider 면 사람 1 + 이동수단 1 + 관계(riding) 1.
 	 * @param OutIds 만든 id(이동수단 먼저, 다음 사람).
+	 * @param Outfit 사람의 옷(걷는 사람 또는 탑승자). nullptr 이면 새 seed 로 뽑는다.
 	 */
 	bool Create(ParkAgent::EKind Kind, const FVector2D& PosM, double YawDeg, bool bRider, const FString& Model, const FString& RiderModel,
-		TArray<FString>& OutIds, FString& OutError);
+		TArray<FString>& OutIds, FString& OutError, const FParkAgentOutfit* Outfit = nullptr);
 
 	/**
 	 * 이동. Path(점 목록) 또는 To(목적지) 중 하나. 탑승자 id 를 주면 그 이동수단이 움직인다.

@@ -1,0 +1,149 @@
+[
+ {
+  "vehicle": "city",
+  "person": "manny",
+  "gap": {
+   "left": 3,
+   "right": 3
+  },
+  "gapMoving": {
+   "left": 3,
+   "right": 3
+  },
+  "gapStopped": {
+   "left": 3,
+   "right": 3
+  },
+  "speed": 1.5,
+  "state": "moving",
+  "activity": "riding",
+  "xAfterShots": 8.414,
+  "afterState": "moving"
+ },
+ {
+  "vehicle": "sport",
+  "person": "quinn",
+  "gap": {
+   "left": 3,
+   "right": 3
+  },
+  "gapMoving": {
+   "left": 3,
+   "right": 3
+  },
+  "gapStopped": {
+   "left": 3,
+   "right": 3
+  },
+  "speed": 1.5,
+  "state": "moving",
+  "activity": "riding",
+  "xAfterShots": 8.616,
+  "afterState": "moving"
+ },
+ {
+  "vehicle": "simple",
+  "person": "manny",
+  "gap": {
+   "left": 3,
+   "right": 3
+  },
+  "gapMoving": {
+   "left": 3,
+   "right": 3
+  },
+  "gapStopped": {
+   "left": 3,
+   "right": 3
+  },
+  "speed": 1.5,
+  "state": "moving",
+  "activity": "riding",
+  "xAfterShots": 8.422,
+  "afterState": "moving"
+ },
+ {
+  "vehicle": "scooter1",
+  "person": "quinn",
+  "gap": {
+   "left": 3,
+   "right": 3
+  },
+  "gapMoving": {
+   "left": 3,
+   "right": 3
+  },
+  "gapStopped": {
+   "left": 3,
+   "right": 3
+  },
+  "speed": 1.5,
+  "state": "moving",
+  "activity": "riding",
+  "xAfterShots": 8.667,
+  "afterState": "moving"
+ },
+ {
+  "vehicle": "evscooter2",
+  "person": "manny",
+  "gap": {
+   "left": 3,
+   "right": 3
+  },
+  "gapMoving": {
+   "left": 3,
+   "right": 3
+  },
+  "gapStopped": {
+   "left": 3,
+   "right": 3
+  },
+  "speed": 1.5,
+  "state": "moving",
+  "activity": "riding",
+  "xAfterShots": 8.495,
+  "afterState": "moving"
+ },
+ {
+  "vehicle": "hondawave",
+  "person": "quinn",
+  "gap": {
+   "left": 3,
+   "right": 3
+  },
+  "gapMoving": {
+   "left": 3,
+   "right": 3
+  },
+  "gapStopped": {
+   "left": 3,
+   "right": 3
+  },
+  "speed": 1.5,
+  "state": "moving",
+  "activity": "riding",
+  "xAfterShots": 8.647,
+  "afterState": "moving"
+ },
+ {
+  "vehicle": "scooter3",
+  "person": "manny",
+  "gap": {
+   "left": 3,
+   "right": 3
+  },
+  "gapMoving": {
+   "left": 3,
+   "right": 3
+  },
+  "gapStopped": {
+   "left": 3,
+   "right": 3
+  },
+  "speed": 1.5,
+  "state": "moving",
+  "activity": "riding",
+  "xAfterShots": 8.52,
+  "afterState": "moving"
+ }
+]

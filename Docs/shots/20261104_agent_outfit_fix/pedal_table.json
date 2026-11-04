@@ -1,0 +1,152 @@
+[
+ {
+  "model": "city",
+  "person": "manny",
+  "pedalGapCm": {
+   "left": 0.75,
+   "right": 0.75
+  },
+  "gripGapCm": {
+   "left": 3,
+   "right": 3
+  },
+  "applied": true,
+  "moving": {
+   "speed": 1,
+   "state": "moving",
+   "pedalGapCm": {
+    "left": 0.75,
+    "right": 0.75
+   }
+  },
+  "stopped": {
+   "left": 0.75,
+   "right": 0.75
+  }
+ },
+ {
+  "model": "city",
+  "person": "quinn",
+  "pedalGapCm": {
+   "left": 1.17,
+   "right": 1.17
+  },
+  "gripGapCm": {
+   "left": 3,
+   "right": 3
+  },
+  "applied": true,
+  "moving": {
+   "speed": 1,
+   "state": "moving",
+   "pedalGapCm": {
+    "left": 1.17,
+    "right": 1.17
+   }
+  },
+  "stopped": {
+   "left": 1.17,
+   "right": 1.17
+  }
+ },
+ {
+  "model": "sport",
+  "person": "manny",
+  "pedalGapCm": {
+   "left": 0.75,
+   "right": 0.75
+  },
+  "gripGapCm": {
+   "left": 3,
+   "right": 3
+  },
+  "applied": true,
+  "moving": {
+   "speed": 1,
+   "state": "moving",
+   "pedalGapCm": {
+    "left": 0.75,
+    "right": 0.75
+   }
+  },
+  "stopped": {
+   "left": 0.75,
+   "right": 0.75
+  }
+ },
+ {
+  "model": "sport",
+  "person": "quinn",
+  "pedalGapCm": {
+   "left": 1.17,
+   "right": 1.17
+  },
+  "gripGapCm": {
+   "left": 3,
+   "right": 3
+  },
+  "applied": true,
+  "moving": {
+   "speed": 1,
+   "state": "moving",
+   "pedalGapCm": {
+    "left": 1.17,
+    "right": 1.17
+   }
+  },
+  "stopped": {
+   "left": 1.17,
+   "right": 1.17
+  }
+ },
+ {
+  "model": "simple",
+  "person": "manny",
+  "pedalGapCm": {
+   "left": 0.75,
+   "right": 0.75
+  },
+  "gripGapCm": {
+   "left": 3,
+   "right": 3
+  },
+  "applied": true,
+  "moving": {
+   "speed": 1,
+   "state": "moving",
+   "pedalGapCm": {
+    "left": 0.75,
+    "right": 0.75
+   }
+  },
+  "stopped": {
+   "left": 0.75,
+   "right": 0.75
+  }
+ },
+ {
+  "model": "simple",
+  "person": "quinn",
+  "pedalGapCm": {
+   "left": 1.17,
+   "right": 1.17
+  },
+  "gripGapCm": {
+   "left": 3,
+   "right": 3
+  },
+  "applied": true,
+  "moving": {
+   "speed": 1,
+   "state": "moving",
+   "pedalGapCm": {
+    "left": 1.17,
+    "right": 1.17
+   }
+  },
+  "stopped": {
+   "left": 1.17,
+   "right": 1.17
+  }
+ }
+]

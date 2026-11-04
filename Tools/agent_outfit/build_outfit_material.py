@@ -32,8 +32,10 @@ float D2 = length(Q - (ElbowPos.xyz + LowerV * clamp(T2, 0.0, 1.9)));   // 손�
 float T = D1 < D2 ? T1 * 0.5 : 0.5 + 0.5 * T2;
 float D = min(D1, D2);
 bool OnArm = T > 0.0 && D < ArmRadius && ax > ShoulderPos.x - 2.0;
+// 민소매(SleeveT 0): 팔 판정 반경 밖의 어깨까지 맨살. 진동 둘레 = 어깨 위에서 겨드랑이로 바깥쪽으로 내려오는 사선.
+bool Bare = SleeveT < 0.01 && ax > ShoulderPos.x - 4.5 + 0.2 * (ShoulderPos.z + 6.0 - P.z);
 float3 C;
-if (OnArm && T >= SleeveT)
+if ((OnArm && T >= SleeveT) || Bare)
 {
     C = SkinColor.xyz;                                  // 소매 밖 팔과 손
 }

@@ -209,8 +209,8 @@ bool AParkAgentActor::ApplyOutfit(const FParkAgentOutfit& Outfit)
 	Mid->SetVectorParameterValue(TEXT("ShoesColor"), ParkAgentOutfit::ShoesColor(Outfit.Shoes));
 	Mid->SetVectorParameterValue(TEXT("SkinColor"), ParkAgentOutfit::SkinColor(Outfit.Skin));
 	Mid->SetVectorParameterValue(TEXT("HairColor"), ParkAgentOutfit::HairColor(Outfit.Hair));
-	// 소매 끝(T: 어깨 0, 팔꿈치 0.5, 손목 1). long 은 손목까지.
-	Mid->SetScalarParameterValue(TEXT("SleeveT"), Outfit.Sleeve == TEXT("long") ? 0.985f : (Outfit.Sleeve == TEXT("short") ? 0.33f : 0.04f));
+	// 소매 끝(T: 어깨 0, 팔꿈치 0.5, 손목 1). long 은 손목까지. 0 = 민소매(재질이 어깨까지 맨살로 판다).
+	Mid->SetScalarParameterValue(TEXT("SleeveT"), Outfit.Sleeve == TEXT("long") ? 0.985f : (Outfit.Sleeve == TEXT("short") ? 0.33f : 0.f));
 	Mid->SetScalarParameterValue(TEXT("PatternKind"), Outfit.Pattern == TEXT("check") ? 2.f : (Outfit.Pattern == TEXT("stripe") ? 1.f : 0.f));
 
 	// 부위 경계는 이 메시의 기준 자세 뼈에서 잡는다(Manny·Quinn 체형이 다르다).
@@ -248,6 +248,7 @@ void AParkAgentActor::SetRideVehicle(const AParkAgentActor& Vehicle)
 {
 	bHasRideGrip = !Vehicle.GripCm.IsZero();
 	RideGripCm = Vehicle.GripCm - FVector(Vehicle.SeatCm.X, 0.0, Vehicle.SeatCm.Z);
+	RideVehicle = &Vehicle;
 }
 
 bool AParkAgentActor::GetGripGapCm(double& OutLeft, double& OutRight) const
@@ -255,6 +256,20 @@ bool AParkAgentActor::GetGripGapCm(double& OutLeft, double& OutRight) const
 	OutLeft = GripGapLeftCm;
 	OutRight = GripGapRightCm;
 	return bHasGripGap;
+}
+
+bool AParkAgentActor::GetPedalGapCm(double& OutLeft, double& OutRight) const
+{
+	const AParkAgentActor* V = RideVehicle.Get();
+	if (!V || V->PedalLeftCm.IsZero() || !RideBody)
+	{
+		return false;
+	}
+	// 지금 월드에 있는 뼈와 페달로 잰다(손잡이 간격과 달리 메시 내림·좌석 붙임·좌우가 틀려도 드러난다).
+	const FTransform VT = V->GetActorTransform();
+	OutLeft = FVector::Dist(RideBody->GetBoneLocationByName(TEXT("ball_l"), EBoneSpaces::WorldSpace), VT.TransformPosition(V->PedalLeftCm));
+	OutRight = FVector::Dist(RideBody->GetBoneLocationByName(TEXT("ball_r"), EBoneSpaces::WorldSpace), VT.TransformPosition(V->PedalRightCm));
+	return true;
 }
 
 void AParkAgentActor::SetPersonPose(EPersonPose Pose, double SpeedMps)
@@ -322,11 +337,20 @@ void AParkAgentActor::ApplyRidePose()
 			RideBody->SetBoneRotationByName(T.Bone, (Dx(T.Deg) * Ref[T.Bone]).Rotator(), EBoneSpaces::ComponentSpace);
 		}
 	};
-	Apply(Legs);
 	// 엉덩이(골반 아래 10 cm)가 탑승자 액터 원점에 오도록 메시를 내린다 — 이동수단은 좌석 윗면에 탑승자 원점을 붙인다.
 	const FVector Pelvis = RideBody->GetBoneLocationByName(TEXT("pelvis"), EBoneSpaces::ComponentSpace);
 	const double MeshZ = -(Pelvis.Z - 10.0);
 	RideBody->SetRelativeLocation(FVector(0.0, 0.0, MeshZ));
+	const AParkAgentActor* Vehicle = RideVehicle.Get();
+	if (Vehicle && !Vehicle->PedalLeftCm.IsZero())
+	{
+		const FVector SeatXZ(Vehicle->SeatCm.X, 0.0, Vehicle->SeatCm.Z);
+		ApplyPedalPose(MeshZ, Vehicle->PedalLeftCm - SeatXZ, Vehicle->PedalRightCm - SeatXZ);
+	}
+	else
+	{
+		Apply(Legs);
+	}
 	if (bHasRideGrip)
 	{
 		ApplyGripPose(MeshZ);
@@ -334,6 +358,35 @@ void AParkAgentActor::ApplyRidePose()
 	else
 	{
 		Apply(NoGripUpper);
+	}
+}
+
+void AParkAgentActor::ApplyPedalPose(double MeshZOffsetCm, const FVector& PedalLeft, const FVector& PedalRight)
+{
+	// 메시 공간: +X = 사람 왼쪽, +Y = 앞, +Z = 위. 액터 (ax, ay, az) → 메시 (-ay, ax, az - MeshZ). 왼발 = 액터 -Y 페달.
+	auto BoneT = [this](const TCHAR* Bone) { return RideBody->GetBoneTransformByName(Bone, EBoneSpaces::ComponentSpace); };
+	auto SetRot = [this](const TCHAR* Bone, const FQuat& Q) { RideBody->SetBoneRotationByName(Bone, Q.Rotator(), EBoneSpaces::ComponentSpace); };
+	const FQuat ToeDown(FVector::XAxisVector, FMath::DegreesToRadians(-10.0));   // 발끝을 조금 내린다
+	struct FLeg { const TCHAR* Thigh; const TCHAR* Calf; const TCHAR* Foot; const TCHAR* Ball; FVector Pedal; };
+	const FLeg Legs[] = {
+		{ TEXT("thigh_l"), TEXT("calf_l"), TEXT("foot_l"), TEXT("ball_l"), PedalLeft },
+		{ TEXT("thigh_r"), TEXT("calf_r"), TEXT("foot_r"), TEXT("ball_r"), PedalRight },
+	};
+	for (const FLeg& L : Legs)
+	{
+		const FTransform Thigh = BoneT(L.Thigh), Calf = BoneT(L.Calf), Foot = BoneT(L.Foot);
+		const FVector Ball = BoneT(L.Ball).GetLocation();
+		const FVector S = Thigh.GetLocation();
+		// 기준 자세의 Z 는 바닥(발바닥)부터의 높이 — 발볼을 그만큼 페달 윗면 위에 둔다.
+		const FVector BallTarget(-L.Pedal.Y, L.Pedal.X, L.Pedal.Z - MeshZOffsetCm + Ball.Z);
+		const FVector Ankle = BallTarget - ToeDown.RotateVector(Ball - Foot.GetLocation());
+		const double L1 = FVector::Dist(S, Calf.GetLocation());
+		const double L2 = FVector::Dist(Calf.GetLocation(), Foot.GetLocation());
+		// 무릎은 앞, 조금 바깥으로(프레임 쪽으로 모이지 않게).
+		const FVector Knee = ApSolveElbow(S, Ankle, L1, L2, FVector(S.X >= 0.0 ? 0.15 : -0.15, 1.0, 0.0));
+		SetRot(L.Thigh, FQuat::FindBetweenNormals((Calf.GetLocation() - S).GetSafeNormal(), (Knee - S).GetSafeNormal()) * Thigh.GetRotation());
+		SetRot(L.Calf, FQuat::FindBetweenNormals((Foot.GetLocation() - Calf.GetLocation()).GetSafeNormal(), (Ankle - Knee).GetSafeNormal()) * Calf.GetRotation());
+		SetRot(L.Foot, ToeDown * Foot.GetRotation());
 	}
 }
 
@@ -671,7 +724,9 @@ void AParkAgentActor::BuildSpokedBicycle(bool bCity, uint32 Hash)
 		const FVector Dir = CrankDir * Side;
 		const FVector Pedal = Bb + Dir * 17.0 + FVector(0.0, 8.0 * Side * -1.0, 0.0);
 		Bar(Metal, Bb + FVector(0.0, -8.0 * Side, 0.0), Pedal, 2.0);
-		Dark->AddInstance(FTransform(FRotator::ZeroRotator, Pedal + FVector(0.0, -5.0 * Side, 0.0), FVector(0.10, 0.09, 0.025)));
+		const FVector PedalBox = Pedal + FVector(0.0, -5.0 * Side, 0.0);
+		Dark->AddInstance(FTransform(FRotator::ZeroRotator, PedalBox, FVector(0.10, 0.09, 0.025)));
+		(PedalBox.Y < 0.0 ? PedalLeftCm : PedalRightCm) = PedalBox + FVector(0.0, 0.0, 1.25);
 	}
 
 	if (bCity)
@@ -758,4 +813,7 @@ void AParkAgentActor::SetupBicycle(const FString& Model, uint32 Hash, FString& O
 	AddShape(GApCube, Bb, FRotator::ZeroRotator, FVector(0.04, 0.34, 0.03), Black);                          // 크랭크·페달
 	SeatCm = FVector(-14.0, 0.0, 88.5);
 	GripCm = FVector(38.0, 24.0, 98.0);   // 핸들 막대(±28 cm)의 끝 쪽
+	// 크랭크·페달 막대(Bb, ±17 cm, 두께 3 cm)의 양 끝 윗면.
+	PedalLeftCm = Bb + FVector(0.0, -13.0, 1.5);
+	PedalRightCm = Bb + FVector(0.0, 13.0, 1.5);
 }

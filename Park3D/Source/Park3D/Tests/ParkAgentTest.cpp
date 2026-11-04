@@ -428,6 +428,16 @@ bool FParkAgentGripTest::RunTest(const FString& Parameters)
 				TestTrue(FString::Printf(TEXT("%s/%s 왼손 %.2f cm"), C.Model, Person, L), L < 5.0);
 				TestTrue(FString::Printf(TEXT("%s/%s 오른손 %.2f cm"), C.Model, Person, R), R < 5.0);
 			}
+			// 자전거만 페달을 밟는다. 간격 = 발볼 뼈의 바닥 높이(뼈~페달 윗면)라 IK 가 닿았으면 몇 cm 안이다.
+			const bool bPedals = Rider.IsValid() && Rider->TryGetObjectField(TEXT("pedalGapCm"), Gap);
+			TestTrue(FString::Printf(TEXT("%s/%s pedalGapCm 은 자전거에만"), C.Model, Person), bPedals == (C.Kind == EKind::Bicycle));
+			if (bPedals)
+			{
+				const double L = (*Gap)->GetNumberField(TEXT("left")), R = (*Gap)->GetNumberField(TEXT("right"));
+				AddInfo(FString::Printf(TEXT("%s/%s 발 좌 %.2f 우 %.2f cm"), C.Model, Person, L, R));
+				TestTrue(FString::Printf(TEXT("%s/%s 왼발 %.2f cm"), C.Model, Person, L), L < 8.0);
+				TestTrue(FString::Printf(TEXT("%s/%s 오른발 %.2f cm"), C.Model, Person, R), R < 8.0);
+			}
 			M->Delete(Ids, false, NotFound);
 		}
 	}

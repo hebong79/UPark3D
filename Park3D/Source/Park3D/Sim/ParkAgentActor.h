@@ -48,6 +48,8 @@ public:
 	void SetRideVehicle(const AParkAgentActor& Vehicle);
 	/** 탑승 자세의 손(middle_01 뼈)~손잡이 중심 거리(cm). 손잡이를 안 잡았으면 false. */
 	bool GetGripGapCm(double& OutLeft, double& OutRight) const;
+	/** 탑승 자세의 발볼(ball 뼈)~페달 윗면 가운데 거리(cm, 월드에서 잰다). 페달이 없는 이동수단이면 false. */
+	bool GetPedalGapCm(double& OutLeft, double& OutRight) const;
 
 	ParkAgent::EKind GetKind() const { return Kind; }
 
@@ -66,6 +68,8 @@ private:
 	UStaticMeshComponent* AddAlignedMesh(const TCHAR* Path, bool bFlip, double& OutLengthCm, double& OutHeightCm);
 	UStaticMeshComponent* AddShape(const TCHAR* Shape, const FVector& LocCm, const FRotator& Rot, const FVector& Scale, const FLinearColor& Color);
 	void ApplyRidePose();
+	/** 다리를 2관절 IK 로 풀어 발볼을 페달 위에 놓는다. 페달 좌표는 좌석 기준(cm), Left = 액터 -Y. */
+	void ApplyPedalPose(double MeshZOffsetCm, const FVector& PedalLeft, const FVector& PedalRight);
 	/** 상체를 필요한 만큼 숙이고 팔을 2관절 IK 로 풀어 손을 손잡이에 놓는다. */
 	void ApplyGripPose(double MeshZOffsetCm);
 
@@ -86,6 +90,11 @@ private:
 	/** 탑승자: 탑승 중인 이동수단의 좌석 → 손잡이(액터 로컬 cm, Y > 0). */
 	FVector RideGripCm = FVector::ZeroVector;
 	bool bHasRideGrip = false;
+	/** 자전거: 페달 윗면 가운데(액터 로컬 cm). Left = -Y(탑승자 왼발). 오토바이는 0(페달 없음 — 예전 고정 다리). */
+	FVector PedalLeftCm = FVector::ZeroVector;
+	FVector PedalRightCm = FVector::ZeroVector;
+	/** 탑승자: 타고 있는 이동수단. */
+	TWeakObjectPtr<const AParkAgentActor> RideVehicle;
 	bool bHasGripGap = false;
 	double GripGapLeftCm = 0.0;
 	double GripGapRightCm = 0.0;

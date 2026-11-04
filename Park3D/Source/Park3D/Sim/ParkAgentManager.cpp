@@ -1093,6 +1093,13 @@ TArray<TSharedPtr<FJsonValue>> AParkAgentManager::ListJson(const EKind* KindFilt
 				Gap->SetNumberField(TEXT("right"), FMath::RoundToDouble(GapR * 100.0) / 100.0);
 				O->SetObjectField(TEXT("gripGapCm"), Gap);
 			}
+			if (bRiding && Act && Act->GetPedalGapCm(GapL, GapR))
+			{
+				TSharedPtr<FJsonObject> Gap = MakeShared<FJsonObject>();
+				Gap->SetNumberField(TEXT("left"), FMath::RoundToDouble(GapL * 100.0) / 100.0);
+				Gap->SetNumberField(TEXT("right"), FMath::RoundToDouble(GapR * 100.0) / 100.0);
+				O->SetObjectField(TEXT("pedalGapCm"), Gap);
+			}
 		}
 		O->SetStringField(TEXT("state"), StateName(A.State));
 		// 탑승자의 이동 정보는 이동수단 것.

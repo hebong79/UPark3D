@@ -246,7 +246,7 @@ void FAgentRpcModule::Register(URpcDispatcher& Dispatcher)
 		return RpcDto::MakeObject(O);
 	});
 	Dispatcher.SetMethodMeta(TEXT("agent.list"), { false, false, TEXT("{kind?, ids?:[str]}"),
-		TEXT("{count, agents[{id, objectType, model, pos, directionDeg, speedMps, motionType, activityType?, outfit?, gripGapCm?, state, moveId?, remainingM?, waitingFor?, endReason?, ridingWith, relationId?, plate?, plateVisible?}], timeMs, frameId}") });
+		TEXT("{count, agents[{id, objectType, model, pos, directionDeg, speedMps, motionType, activityType?, outfit?, gripGapCm?, pedalGapCm?, state, moveId?, remainingM?, waitingFor?, endReason?, ridingWith, relationId?, plate?, plateVisible?}], timeMs, frameId}") });
 
 	Dispatcher.Register(TEXT("agent.relations"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{

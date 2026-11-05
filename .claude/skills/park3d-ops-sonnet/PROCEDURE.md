@@ -80,10 +80,30 @@ Start-Process -FilePath "$root\Park3D.exe" -WorkingDirectory $root
 - 그다음 prompt 의 "확인할 것" 을 호출한다. 예: `system.catalog` method 수, 특정 메서드 응답.
 - 응답 원문을 보고한다.
 
+**6) 교체 전후 비교:** 1) 의 종료 전에 아래 값을 기록하고, 5) 뒤에 같은 값을 다시 읽어 비교한다. 6절의 미러 교체에도 똑같이 적용한다.
+
+- `cam.streamStatus` 의 `main.width`, `main.height`, `main.guard.antiAliasingDisabled`
+- `$root\Park3D\Saved\Config\Windows\Game.ini` 의 유무와 SHA256
+
+다르면 되돌리거나 고치지 말고 전후 값을 보고한다. 값이 같아도 전후 값을 보고에 적는다.
+
 **중단 조건:** 다음 경우에는 exe 만 바꿔서는 안 된다(재쿡이 필요하다). prompt 나 커밋 diff 에 해당하면 교체하지 말고 보고한다.
 
 - 쿠킹된 WBP 의 C++ 베이스 클래스에 `UPROPERTY` 를 추가했다. → `Bad export index` 로 즉시 종료된다.
 - 셰이더를 등록하는 플러그인을 추가했다.
+
+## 6. 재쿡 결과 미러 교체 (승인 `예` 일 때만)
+
+정본의 `Save`(데이터)와 `Saved`(`Game.ini`·`CarData`)는 재쿡 결과에 없거나 달라서 **반드시 둘 다 뺀다**. 빼지 않으면 조용히 지워진다.
+
+```powershell
+# $new = prompt 의 재쿡 폴더(Package\<태그>\Windows). 정본 프로세스를 내린 뒤, 옛 정본을 백업한 뒤에 실행한다.
+robocopy $new $root /MIR /XD Save Saved /NFL /NDL /NJH /NJS /NP
+if ($LASTEXITCODE -ge 8) { throw "robocopy 실패: $LASTEXITCODE" }   # 0~7 은 성공이다
+```
+
+- 이 명령을 바꾸지 않는다. `/MIR` 를 `/XD Save Saved` 없이 쓰지 않는다.
+- 기동·확인은 5절의 4)~6) 을 따른다.
 
 ## 보고 형식
 

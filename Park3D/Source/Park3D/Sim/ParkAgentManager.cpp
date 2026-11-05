@@ -588,12 +588,14 @@ void AParkAgentManager::SyncActor(FParkAgent& A)
 	Act->SetActorLocationAndRotation(FVector(A.Pos.X, A.Pos.Y, A.Z) * 100.0, FRotator(0.0, A.YawDeg, 0.0));
 	if (A.Kind == EKind::Pedestrian)
 	{
-		Act->SetPersonPose(A.SpeedMps > 0.05 ? AParkAgentActor::EPersonPose::Walk : AParkAgentActor::EPersonPose::Stand, A.SpeedMps);
+		const bool bWalk = A.PoseActivity.IsEmpty() ? A.SpeedMps > 0.05 : A.PoseActivity == TEXT("walking");
+		// activity walking 에 속도가 없으면 보통 걸음 빠르기로 걷는다.
+		Act->SetPersonPose(bWalk ? AParkAgentActor::EPersonPose::Walk : AParkAgentActor::EPersonPose::Stand, bWalk && A.SpeedMps <= 0.05 ? 1.3 : A.SpeedMps);
 	}
 }
 
 bool AParkAgentManager::Create(EKind Kind, const FVector2D& PosM, double YawDeg, bool bRider, const FString& Model, const FString& RiderModel,
-	TArray<FString>& OutIds, FString& OutError, const FParkAgentOutfit* Outfit)
+	TArray<FString>& OutIds, FString& OutError, const FParkAgentOutfit* Outfit, bool bAllowOverlap)
 {
 	UWorld* World = GetWorld();
 	if (!World) { OutError = TEXT("월드 없음"); return false; }
@@ -601,7 +603,12 @@ bool AParkAgentManager::Create(EKind Kind, const FVector2D& PosM, double YawDeg,
 	// 놓을 자리가 벽·보도(이동수단)·서 있는 차와 겹치면 만들지 않는다.
 	const FAgentGrid* G = GetGrid();
 	double Z = G ? GridGroundZ : 0.0;
-	if (G)
+	if (bAllowOverlap)
+	{
+		// 막힌 칸의 격자 높이는 건물 윗면일 수 있어 쓰지 않는다.
+		Z = GroundZAt(PosM, Z);
+	}
+	else if (G)
 	{
 		int32 X, Y;
 		if (G->ToCell(PosM, X, Y)) { Z = G->HeightM[Y * G->W + X]; }
@@ -819,6 +826,14 @@ bool AParkAgentManager::StartMove(const FString& Id, const TArray<FVector2D>* Pa
 	New.EndReason = New.bActive ? FString() : TEXT("arrived");
 	Mv = New;
 	M->State = New.bActive ? EParkAgentState::Moving : EParkAgentState::Arrived;
+	if (M->bPosed)
+	{
+		// setPose 의 속도는 표시용이다. 실제 이동은 멈춘 상태에서 출발한다.
+		M->bPosed = false;
+		M->PoseActivity.Reset();
+		M->SpeedMps = 0.0;
+		SyncActor(*M);
+	}
 
 	OutInfo = MakeShared<FJsonObject>();
 	OutInfo->SetBoolField(TEXT("ok"), true);
@@ -866,12 +881,55 @@ int32 AParkAgentManager::Stop(const TArray<FString>& Ids, bool bAll, TArray<FStr
 			A->Move.EndReason = TEXT("stopped");
 			++N;
 		}
+		if (A->bPosed && A->SpeedMps > 0.05) { ++N; }   // 표시 속도로 걷던 사람도 실제로 선다
+		A->bPosed = false;
+		A->PoseActivity.Reset();
 		A->SpeedMps = 0.0;
 		if (A->State != EParkAgentState::Idle && A->State != EParkAgentState::Arrived) { A->State = EParkAgentState::Stopped; }
 		SyncActor(*A);
 	}
 	Advance(0.f);   // 탑승자 상태를 이동수단에 맞춘다
 	return N;
+}
+
+bool AParkAgentManager::SetPoses(const TArray<FParkAgentPose>& Items, int32& OutApplied, TArray<FString>& OutNotFound, FString& OutError)
+{
+	OutApplied = 0;
+	for (const FParkAgentPose& P : Items)
+	{
+		const FParkAgent* A = FindAgent(P.Id);
+		if (!A) { continue; }
+		if (!A->RidingWith.IsEmpty())
+		{
+			OutError = FString::Printf(TEXT("%s 는 탑승 관계가 있어 setPose 로 옮길 수 없습니다(%s). 탑승 없이 만들거나 agent.move 를 쓰세요"), *P.Id, *A->RidingWith);
+			return false;
+		}
+		if (!P.Activity.IsEmpty() && A->Kind != EKind::Pedestrian)
+		{
+			OutError = FString::Printf(TEXT("%s: activity 는 사람만 쓸 수 있습니다"), *P.Id);
+			return false;
+		}
+	}
+	for (const FParkAgentPose& P : Items)
+	{
+		FParkAgent* A = FindAgent(P.Id);
+		if (!A) { OutNotFound.Add(P.Id); continue; }
+		if (A->Move.bActive)
+		{
+			A->Move.bActive = false;
+			A->Move.EndReason = TEXT("setPose");
+		}
+		A->Pos = P.PosM;
+		A->Z = P.bHasZ ? P.ZM : GroundZAt(P.PosM, bGridBuilt ? GridGroundZ : A->Z);
+		A->YawDeg = P.YawDeg;
+		A->SpeedMps = P.SpeedMps;
+		A->bPosed = true;
+		A->PoseActivity = P.Activity;
+		A->State = P.SpeedMps > 0.05 ? EParkAgentState::Moving : EParkAgentState::Stopped;
+		SyncActor(*A);
+		++OutApplied;
+	}
+	return true;
 }
 
 void AParkAgentManager::EndRelation(const FString& PersonId, const FString& VehicleId)
@@ -957,7 +1015,7 @@ void AParkAgentManager::Advance(float Dt)
 		FParkAgentMove& M = A.Move;
 		if (!M.bActive || Dt <= 0.f)
 		{
-			if (!M.bActive && A.SpeedMps != 0.0) { A.SpeedMps = 0.0; SyncActor(A); }
+			if (!M.bActive && !A.bPosed && A.SpeedMps != 0.0) { A.SpeedMps = 0.0; SyncActor(A); }
 			continue;
 		}
 		const double Total = M.TotalM();
@@ -1080,7 +1138,8 @@ TArray<TSharedPtr<FJsonValue>> AParkAgentManager::ListJson(const EKind* KindFilt
 		O->SetStringField(TEXT("motionType"), A.SpeedMps > 0.05 ? TEXT("moving") : TEXT("stationary"));
 		if (A.Kind == EKind::Pedestrian)
 		{
-			O->SetStringField(TEXT("activityType"), bRiding ? TEXT("riding") : (A.SpeedMps > 0.05 ? TEXT("walking") : TEXT("standing")));
+			O->SetStringField(TEXT("activityType"), bRiding ? FString(TEXT("riding"))
+				: !A.PoseActivity.IsEmpty() ? A.PoseActivity : FString(A.SpeedMps > 0.05 ? TEXT("walking") : TEXT("standing")));
 			const AParkAgentActor* Act = A.Actor.Get();
 			TSharedPtr<FJsonObject> Fit = ParkAgentOutfit::ToJson(A.Outfit);
 			Fit->SetBoolField(TEXT("applied"), Act && Act->IsOutfitApplied());
@@ -1191,6 +1250,13 @@ int32 AParkAgentManager::Restore(const FParkAgentSnapshot& Snap, bool bPaused)
 		{
 			A.Move.bActive = false;
 			A.Move.EndReason = TEXT("restoredPaused");
+			A.SpeedMps = 0.0;
+			A.State = EParkAgentState::Stopped;
+		}
+		if (bPaused && A.bPosed)
+		{
+			A.bPosed = false;
+			A.PoseActivity.Reset();
 			A.SpeedMps = 0.0;
 			A.State = EParkAgentState::Stopped;
 		}

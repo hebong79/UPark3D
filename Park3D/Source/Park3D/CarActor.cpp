@@ -92,6 +92,8 @@ ACarActor::ACarActor()
 	// 차량은 픽(라인트레이스) 대상이지만 물리 충돌은 불필요 → Query 전용.
 	MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	MeshComp->SetCustomDepthStencilValue(1);
+	// 노면 도색 데칼(바닥 위 약 15 cm)이 바퀴에 찍혀 하얗게 보이지 않게 한다. 번호판은 그 높이에 닿지 않아 그대로 둔다.
+	MeshComp->bReceivesDecals = false;
 
 	FrontPlateComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("FrontPlateComp"));
 	FrontPlateComp->SetupAttachment(MeshComp);

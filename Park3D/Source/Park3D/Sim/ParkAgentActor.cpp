@@ -112,6 +112,8 @@ namespace
 		C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		C->SetGenerateOverlapEvents(false);
 		C->SetCanEverAffectNavigation(false);
+		// 노면 도색 데칼(바닥 위 약 15 cm)이 바퀴·발에 찍혀 하얗게 보이지 않게 한다.
+		C->SetReceivesDecals(false);
 	}
 }
 

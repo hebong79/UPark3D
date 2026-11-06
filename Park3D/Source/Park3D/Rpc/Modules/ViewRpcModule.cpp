@@ -576,16 +576,14 @@ void FViewRpcModule::Register(URpcDispatcher& Dispatcher)
 			return nullptr;
 		}
 
-		// target 호출은 내려다본다. 지금 시점의 방향만 이으면 대상을 바꿀 때마다 각이 얕아져 시점이 바닥까지 내려간다.
+		// target 호출은 항상 같은 각으로 내려다본다. 지금 시점의 방향을 그대로 이으면 대상을 바꿀 때마다
+		// 각이 얕아져 바닥까지 내려가거나, 옆 대상으로 갈수록 가팔라져 실내 천장 위로 나간다.
 		if (RpcParam::Has(P, TEXT("target")))
 		{
-			constexpr double MinDownDeg = 35.0;
-			if (FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(-Dir.Z, -1.0, 1.0))) < MinDownDeg)
-			{
-				const FVector Flat = FVector(Dir.X, Dir.Y, 0.0).GetSafeNormal(UE_SMALL_NUMBER, FRotator(0.0, CurRot.Yaw, 0.0).Vector());
-				const double Rad = FMath::DegreesToRadians(MinDownDeg);
-				Dir = Flat * FMath::Cos(Rad) - FVector::UpVector * FMath::Sin(Rad);
-			}
+			constexpr double DownDeg = 35.0;
+			const FVector Flat = FVector(Dir.X, Dir.Y, 0.0).GetSafeNormal(UE_SMALL_NUMBER, FRotator(0.0, CurRot.Yaw, 0.0).Vector());
+			const double Rad = FMath::DegreesToRadians(DownDeg);
+			Dir = Flat * FMath::Cos(Rad) - FVector::UpVector * FMath::Sin(Rad);
 		}
 
 		// distance 를 주면 방향은 유지한 채 타겟에서 그만큼 물러난 자리로 옮긴다(= 그 지점을 그 거리에서 본다).

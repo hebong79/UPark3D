@@ -32,6 +32,8 @@ namespace
 	constexpr double GAmPlanCarMargin = 0.3;      // to 계획: 벽·차와 남길 여유(m)
 	constexpr double GAmPushDefaultMps = 1.3;     // 끄는 걸음 기본 속도
 	constexpr double GAmPushMaxMps = 2.0;         // 끄는 걸음 상한(agent.move). 렌더러의 탑승 판정 2.2 m/s 와 가까우니 바꾸면 알린다
+	constexpr double GAmPivotOffDeg = 20.0;       // 이동수단은 몸이 경로와 이보다 어긋나면 나아가지 않고 제자리에서 돈다
+	constexpr double GAmPivotRateScale = 0.5;     // 제자리에서 도는 빠르기 = 몸 회전 상한 × 이 값
 	constexpr double GAmPushRadiusM = 0.70;       // 끄는 쌍의 몸 반폭: 왼쪽 간격 0.40 + 사람 반경 0.30
 	constexpr double GAmArcWallMargin = 0.1;      // 호가 벽과 남길 여유(m). 차와는 GAmRideCarMargin
 
@@ -910,7 +912,7 @@ void AParkAgentManager::SmoothRoute(const FParkAgent& A, TArray<FVector2D>& Pts,
 		if (!LeadInArc(Pts[0], A.YawDeg, Pts[1], Tp.RadiusM, Accept, Arc))
 		{
 			Arc = { Pts[0] };
-			Notes.Add(FString::Printf(TEXT("출발 자리 (%.2f, %.2f) 에 호를 넣을 자리가 없어 천천히 돌며 출발합니다"), Pts[0].X, Pts[0].Y));
+			Notes.Add(FString::Printf(TEXT("출발 자리 (%.2f, %.2f) 에 호를 넣을 자리가 없어 제자리에서 돈 뒤 출발합니다"), Pts[0].X, Pts[0].Y));
 		}
 	}
 	TArray<FVector2D> Rest = { Arc.Last() };
@@ -919,7 +921,7 @@ void AParkAgentManager::SmoothRoute(const FParkAgent& A, TArray<FVector2D>& Pts,
 	RoundPath(Rest, Tp.RadiusM, Accept, Sharp);
 	for (const FVector2D& S : Sharp)
 	{
-		Notes.Add(FString::Printf(TEXT("모서리 (%.2f, %.2f) 에 호를 넣을 자리가 없어 천천히 꺾어 갑니다"), S.X, S.Y));
+		Notes.Add(FString::Printf(TEXT("모서리 (%.2f, %.2f) 에 호를 넣을 자리가 없어 %s"), S.X, S.Y, IsVehicle(A.Kind) ? TEXT("서서 돈 뒤 갑니다") : TEXT("천천히 꺾어 갑니다")));
 	}
 	Pts = MoveTemp(Arc);
 	Pts.Append(Rest.GetData() + 1, Rest.Num() - 1);
@@ -1313,14 +1315,17 @@ void AParkAgentManager::Advance(float Dt)
 		const EKind BrakeKind = AmNavKind(A);   // 끄는 자전거는 걷는 사람처럼 서고 출발한다
 		double Target = FMath::Min(M.CruiseMps, FMath::Sqrt(2.0 * DecelOf(BrakeKind) * Remaining));
 		Target = CornerLimitedSpeed(M.Cum, M.LimitMps, M.DistM, DecelOf(BrakeKind), Target);
+		bool bPivot = false;
 		{
-			// 몸 방향이 진행 방향과 크게 다르면(호를 못 넣은 자리) 맞출 때까지 천천히 간다.
+			// 몸 방향이 진행 방향과 크게 다르면(호를 못 넣은 자리): 사람은 맞출 때까지 천천히 가고, 이동수단은 옆·뒤로 미끄러지지 않게 서서 돈다.
 			FVector2D Here, HereDir;
 			PoseAt(M.Pts, M.Cum, M.DistM, Here, HereDir);
 			const double Off = FMath::Abs(FRotator::NormalizeAxis(FMath::RadiansToDegrees(FMath::Atan2(HereDir.Y, HereDir.X)) - A.YawDeg));
-			if (Off > 45.0) { Target = FMath::Min(Target, AmTurnParams(A).MinCornerMps); }
+			bPivot = IsVehicle(A.Kind) && Off > GAmPivotOffDeg;
+			if (bPivot) { Target = 0.0; }
+			else if (Off > 45.0) { Target = FMath::Min(Target, AmTurnParams(A).MinCornerMps); }
 		}
-		if (Remaining > 0.01) { Target = FMath::Max(Target, 0.15); }
+		if (Remaining > 0.01 && !bPivot) { Target = FMath::Max(Target, 0.15); }
 
 		bool bConflict = false;
 		FString Who;
@@ -1387,7 +1392,8 @@ void AParkAgentManager::Advance(float Dt)
 			if (FVector2D::DistSquared(Back, Ahead) > 1e-4) { Dir = (Ahead - Back).GetSafeNormal(); }
 		}
 		const double Want = FMath::RadiansToDegrees(FMath::Atan2(Dir.Y, Dir.X));
-		const double Step = MaxYawStepDeg(A.Kind, A.SpeedMps, Dt);
+		double Step = MaxYawStepDeg(A.Kind, A.SpeedMps, Dt);
+		if (bPivot) { Step = FMath::Max(Step, AmTurnParams(A).YawRateDeg * GAmPivotRateScale * Dt); }
 		A.YawDeg = FRotator::NormalizeAxis(A.YawDeg + FMath::Clamp(FRotator::NormalizeAxis(Want - A.YawDeg), -Step, Step));
 		A.Z = GroundZAt(A.Pos, A.Z);
 		if (M.DistM >= Total - 1e-4)

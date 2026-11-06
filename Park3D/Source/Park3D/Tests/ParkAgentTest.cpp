@@ -1066,6 +1066,80 @@ bool FParkAgentTurnMoveTest::RunTest(const FString& Parameters)
 }
 
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FParkAgentPivotTest, "Park3D.Agent.Pivot",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FParkAgentPivotTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = (GEngine && GEngine->GetWorldContexts().Num() > 0) ? GWorld : nullptr;
+	if (!TestNotNull(TEXT("에디터 월드"), World)) { return false; }
+	AParkAgentManager* M = AParkAgentManager::GetOrSpawn(World);
+	if (!TestNotNull(TEXT("매니저"), M)) { return false; }
+	TArray<FString> NotFound;
+	M->Delete({}, true, NotFound);
+
+	// 옆으로 0.5 m 는 어떤 반경의 호로도 바라볼 수 없다 → 출발 호 없음. 단독·탑승·끌기 모두 제자리에서 돈 뒤 간다.
+	const struct { const TCHAR* Name; EKind Kind; bool bRider; bool bPusher; } Cases[] = {
+		{ TEXT("자전거"), EKind::Bicycle, false, false },
+		{ TEXT("오토바이"), EKind::Motorcycle, false, false },
+		{ TEXT("탑승 자전거"), EKind::Bicycle, true, false },
+		{ TEXT("탑승 오토바이"), EKind::Motorcycle, true, false },
+		{ TEXT("끄는 자전거"), EKind::Bicycle, false, true },
+	};
+	int32 Row = 0;
+	for (const auto& C : Cases)
+	{
+		const FVector2D Start(3000.0, 3400.0 + 100.0 * Row++);
+		TArray<FString> Ids;
+		FString Err;
+		const FString What(C.Name);
+		TestTrue(What + TEXT(" 생성"), M->Create(C.Kind, Start, 0.0, C.bRider, FString(TEXT("city")), FString(), Ids, Err, nullptr, true, C.bPusher));
+		if (Ids.Num() == 0) { continue; }
+		const TArray<FVector2D> Path = { Start + FVector2D(0.0, 0.5) };
+		TSharedPtr<FJsonObject> Info;
+		bool bBad = false;
+		TestTrue(What + TEXT(" 이동"), M->StartMove(Ids[0], &Path, nullptr, 0.0, true, 20.0, Info, Err, bBad));
+		bool bNote = false;
+		if (Info.IsValid())
+		{
+			for (const TSharedPtr<FJsonValue>& N : Info->GetArrayField(TEXT("notes"))) { bNote |= N->AsString().Contains(TEXT("제자리에서 돈 뒤")); }
+		}
+		TestTrue(What + TEXT(": notes"), bNote);
+
+		TSharedPtr<FJsonObject> O = PaFind(M->ListJson(nullptr, {}), Ids[0]);
+		FVector2D Prev = PaPos(O);
+		double MaxSlide = 0.0, MovedWhileOff = 0.0, MaxYawStep = 0.0;
+		double PrevYaw = O->GetNumberField(TEXT("directionDeg"));
+		for (int32 i = 0; i < 900; ++i)
+		{
+			M->Advance(1.f / 30.f);
+			O = PaFind(M->ListJson(nullptr, {}), Ids[0]);
+			const FVector2D Now = PaPos(O);
+			const double Yaw = O->GetNumberField(TEXT("directionDeg"));
+			MaxYawStep = FMath::Max(MaxYawStep, FMath::Abs(FRotator::NormalizeAxis(Yaw - PrevYaw)));
+			PrevYaw = Yaw;
+			const FVector2D Delta = Now - Prev;
+			if (Delta.Size() > 0.02)
+			{
+				const double R = FMath::DegreesToRadians(Yaw);
+				const double Slide = PaAngleDeg(Delta, FVector2D(FMath::Cos(R), FMath::Sin(R)));
+				MaxSlide = FMath::Max(MaxSlide, Slide);
+				if (Slide > 30.0) { MovedWhileOff += Delta.Size(); }
+				Prev = Now;
+			}
+			if (O->GetStringField(TEXT("state")) != TEXT("moving")) { break; }
+		}
+		TestEqual(What + TEXT(": 도착"), O->GetStringField(TEXT("state")), FString(TEXT("arrived")));
+		TestTrue(What + TEXT(": 자리"), PaPos(O).Equals(Path[0], 1e-3));
+		TestTrue(FString::Printf(TEXT("%s: 어긋남 ≤ 25°(%.1f)"), *What, MaxSlide), MaxSlide <= 25.0);
+		TestTrue(FString::Printf(TEXT("%s: 30° 넘게 어긋난 채 간 거리 0(%.3f)"), *What, MovedWhileOff), MovedWhileOff <= 1e-6);
+		TestTrue(FString::Printf(TEXT("%s: 몸이 한 프레임에 튀지 않는다(%.1f)"), *What, MaxYawStep), MaxYawStep <= 6.0);
+		AddInfo(FString::Printf(TEXT("%s 어긋남 최대 %.1f°"), *What, MaxSlide));
+	}
+	M->Delete({}, true, NotFound);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FParkAgentPushTest, "Park3D.Agent.Push",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 

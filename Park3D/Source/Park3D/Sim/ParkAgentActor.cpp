@@ -32,6 +32,7 @@ namespace
 	constexpr double GApWalkAnimMps = 1.5;
 	/** 끄는 사람의 손가락을 말아 쥔다. 틱마다 뼈 24개를 더 고치므로 프레임이 문제면 false. */
 	constexpr bool GApPushCurlFingers = true;
+	constexpr double GApPushElbowOut = 0.35;   // 끄는 손은 어깨 바로 아래에 있어 팔꿈치를 옆으로 빼면 손을 허리에 댄 것처럼 보인다
 
 	/** 옷 재질(Tools/agent_outfit/build_outfit_material.py 가 만든다). */
 	const TCHAR* GApOutfitMaterial = TEXT("/Game/Characters/Mannequins/Outfit/M_AgentOutfit.M_AgentOutfit");
@@ -329,7 +330,7 @@ void AParkAgentActor::ApplyPushPose()
 	const FVector LeftHand = bPushRightSide ? Mid : Near;
 	const FVector RightHand = bPushRightSide ? Near : Mid;
 	SolveBarHands(MeshT.InverseTransformPosition(VehicleT.TransformPosition(LeftHand)),
-		MeshT.InverseTransformPosition(VehicleT.TransformPosition(RightHand)), 3.0, PushLeanDeg, GApPushCurlFingers);
+		MeshT.InverseTransformPosition(VehicleT.TransformPosition(RightHand)), 3.0, PushLeanDeg, GApPushCurlFingers, GApPushElbowOut);
 	RideBody->RefreshBoneTransforms();
 }
 
@@ -521,7 +522,7 @@ void AParkAgentActor::ApplyGripPose(double MeshZOffsetCm)
 	UE_LOG(LogTemp, Log, TEXT("[Agent] 손잡이 자세 숙임 %.0f° 간격 좌 %.1f 우 %.1f cm"), LeanDeg, GripGapLeftCm, GripGapRightCm);
 }
 
-void AParkAgentActor::SolveBarHands(const FVector& GripLeft, const FVector& GripRight, double StartLeanDeg, double& InOutLeanDeg, bool bCurl)
+void AParkAgentActor::SolveBarHands(const FVector& GripLeft, const FVector& GripRight, double StartLeanDeg, double& InOutLeanDeg, bool bCurl, double ElbowOut)
 {
 	auto BoneT = [this](const TCHAR* Bone) { return RideBody->GetBoneTransformByName(Bone, EBoneSpaces::ComponentSpace); };
 	auto SetRot = [this](const TCHAR* Bone, const FQuat& Q) { RideBody->SetBoneRotationByName(Bone, Q.Rotator(), EBoneSpaces::ComponentSpace); };
@@ -616,7 +617,7 @@ void AParkAgentActor::SolveBarHands(const FVector& GripLeft, const FVector& Grip
 	for (FArm& A : Arms)
 	{
 		const FVector S = BoneT(A.Upper).GetLocation();
-		const FVector Elbow = ApSolveElbow(S, A.Wrist, A.L1, A.L2, FVector(A.Side, -0.2, -1.0));
+		const FVector Elbow = ApSolveElbow(S, A.Wrist, A.L1, A.L2, FVector(A.Side * ElbowOut, -0.2, -1.0));
 		const FVector LowerDir = (A.Wrist - Elbow).GetSafeNormal();
 		SetRot(A.Upper, FQuat::FindBetweenNormals(A.RefUpperDir, (Elbow - S).GetSafeNormal()) * A.RefUpper.GetRotation());
 		// 아래팔은 손과 같은 쪽으로 비틀어 손목이 꼬이지 않게 한다.

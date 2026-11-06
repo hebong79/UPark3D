@@ -93,7 +93,7 @@ private:
 	 * @param InOutLeanDeg 0 이상이면 찾지 않고 그 각도를 쓰고, 음수면 찾아서 돌려준다.
 	 * @param bCurl 손가락을 말아 쥔다.
 	 */
-	void SolveBarHands(const FVector& GripLeft, const FVector& GripRight, double StartLeanDeg, double& InOutLeanDeg, bool bCurl);
+	void SolveBarHands(const FVector& GripLeft, const FVector& GripRight, double StartLeanDeg, double& InOutLeanDeg, bool bCurl, double ElbowOut = 1.0);
 	/** 끄는 동안 틱마다: 걷기 자세 복사 → 손을 핸들에. */
 	void ApplyPushPose();
 

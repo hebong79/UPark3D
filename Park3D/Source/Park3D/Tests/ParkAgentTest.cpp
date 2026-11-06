@@ -776,4 +776,293 @@ bool FParkAgentSetPoseTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+namespace
+{
+	double PaAngleDeg(const FVector2D& A, const FVector2D& B)
+	{
+		return FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector2D::DotProduct(A.GetSafeNormal(), B.GetSafeNormal()), -1.0, 1.0)));
+	}
+
+	/** 점마다 꺾이는 각의 최댓값. */
+	double PaMaxVertexTurn(const TArray<FVector2D>& Pts)
+	{
+		double Max = 0.0;
+		for (int32 i = 1; i + 1 < Pts.Num(); ++i) { Max = FMath::Max(Max, PaAngleDeg(Pts[i] - Pts[i - 1], Pts[i + 1] - Pts[i])); }
+		return Max;
+	}
+
+	double PaDistToLine(const TArray<FVector2D>& Pts, const FVector2D& P)
+	{
+		double Min = DBL_MAX;
+		for (int32 i = 0; i + 1 < Pts.Num(); ++i)
+		{
+			const FVector2D Near = FMath::ClosestPointOnSegment2D(P, Pts[i], Pts[i + 1]);
+			Min = FMath::Min(Min, FVector2D::Distance(Near, P));
+		}
+		return Min;
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FParkAgentTurnPathTest, "Park3D.Agent.TurnPath",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::EngineFilter)
+
+bool FParkAgentTurnPathTest::RunTest(const FString& Parameters)
+{
+	const auto AcceptAll = [](const TArray<FVector2D>&, const TArray<FVector2D>&) { return true; };
+
+	// 1) 막힘 없는 곳: 종류별 반경대로 둥글고, 끝 점은 그대로이고, 호 속도는 가로 가속으로 정해진다.
+	for (const EKind K : { EKind::Pedestrian, EKind::Bicycle, EKind::Motorcycle })
+	{
+		const FTurnParams Tp = TurnParamsOf(K);
+		const FString What = ObjectType(K);
+		TArray<FVector2D> Pts = { FVector2D(0, 0), FVector2D(10, 0), FVector2D(10, 10) };
+		TArray<FVector2D> Sharp;
+		RoundPath(Pts, Tp.RadiusM, AcceptAll, Sharp);
+		TestEqual(What + TEXT(": 꺾인 점 없음"), Sharp.Num(), 0);
+		TestTrue(What + TEXT(": 첫 점 그대로"), Pts[0].Equals(FVector2D(0, 0), 1e-9));
+		TestTrue(What + TEXT(": 끝 점 그대로"), Pts.Last().Equals(FVector2D(10, 10), 1e-9));
+		const double Turn = PaMaxVertexTurn(Pts);
+		TestTrue(FString::Printf(TEXT("%s: 점마다 10° 이하(%.1f)"), *What, Turn), Turn <= 10.0);
+		// 90° 호가 꼭짓점에서 떨어지는 거리 = R(√2 − 1).
+		const double Inset = PaDistToLine(Pts, FVector2D(10, 0));
+		TestEqual(What + TEXT(": 꼭짓점 안쪽 거리"), Inset, Tp.RadiusM * (FMath::Sqrt(2.0) - 1.0), 0.03);
+		TArray<double> Limits;
+		CornerSpeedLimits(Pts, Tp, Limits);
+		TestEqual(TEXT("제한 개수 = 점 개수"), Limits.Num(), Pts.Num());
+		double Low = DBL_MAX;
+		for (const double L : Limits) { Low = FMath::Min(Low, L); }
+		TestEqual(What + TEXT(": 호 안 속도"), Low, FMath::Sqrt(Tp.LatAccel * Tp.RadiusM), 0.1);
+	}
+
+	// 2) 호를 넣으면 벽에 닿는 모서리: 반경을 줄여 벽을 피한다. 원래 경로 = 통과, 그대로 둥글리면 = 벽.
+	{
+		const FAgentGrid G = PaWallGrid();
+		TArray<float> Clear;
+		ClearanceField(G, EKind::Pedestrian, nullptr, Clear);
+		const FFootprint Fp = FootprintOf(EKind::Pedestrian);   // 틈(폭 2 m)을 지나는 몸. 반경 2 m 호의 꼭대기는 틈 위 벽 속이다
+		const TArray<FVector2D> Raw = { FVector2D(8, 8), FVector2D(10, 5), FVector2D(12, 8) };
+		FVector2D At; FString Who;
+		TestEqual(TEXT("원래 경로 통과"), CheckPath(G, Clear, {}, Fp, Raw, 0.2, At, Who), 0);
+		TArray<FVector2D> Free = Raw;
+		TArray<FVector2D> Sharp;
+		RoundPath(Free, 2.0, AcceptAll, Sharp);
+		TestEqual(TEXT("검사 없이 둥글리면 벽"), CheckPath(G, Clear, {}, Fp, Free, 0.2, At, Who), 1);
+		TArray<FVector2D> Safe = Raw;
+		const auto Check = [&](const TArray<FVector2D>& Piece, const TArray<FVector2D>&)
+		{
+			FVector2D A2; FString W2;
+			return CheckPath(G, Clear, {}, Fp, Piece, 0.2, A2, W2) == 0;
+		};
+		RoundPath(Safe, 2.0, Check, Sharp);
+		TestEqual(TEXT("검사하면 벽에 안 닿는다"), CheckPath(G, Clear, {}, Fp, Safe, 0.2, At, Who), 0);
+		TestTrue(TEXT("그래도 호가 들어갔다"), Safe.Num() > Raw.Num());
+	}
+
+	// 3) 서 있는 차 사이: 안쪽 모서리에 차가 있으면 반경을 줄이고 차와 몸 반경 + 0.2 m 를 남긴다.
+	{
+		FAgentGrid G;
+		G.Cell = 0.2;
+		G.W = 151; G.H = 151;
+		G.Cls.Init(CellGround, G.W * G.H);
+		G.HeightM.Init(0.f, G.W * G.H);
+		TArray<float> Clear;
+		ClearanceField(G, EKind::Pedestrian, nullptr, Clear);
+		const FFootprint Fp = FootprintOf(EKind::Pedestrian);
+		FCarBox Car;
+		Car.Center = FVector2D(13.3, 7.0);   // 꼭짓점 (15, 10) 안쪽, 차와 꼭짓점 사이 약 1 m
+		Car.Half = FVector2D(1.0, 2.0);
+		Car.Id = TEXT("car-in");
+		TArray<FVector2D> Pts = { FVector2D(5, 10), FVector2D(15, 10), FVector2D(15, 20) };
+		TArray<FVector2D> Sharp;
+		const auto Check = [&](const TArray<FVector2D>& Piece, const TArray<FVector2D>&)
+		{
+			FVector2D A2; FString W2;
+			return CheckPath(G, Clear, { Car }, Fp, Piece, 0.2, A2, W2) == 0;
+		};
+		RoundPath(Pts, 0.6, Check, Sharp);
+		double MinGap = DBL_MAX;
+		TArray<double> Cum;
+		CumLengths(Pts, Cum);
+		for (double S = 0.0; S <= Cum.Last(); S += 0.02)
+		{
+			FVector2D P, D;
+			PoseAt(Pts, Cum, S, P, D);
+			MinGap = FMath::Min(MinGap, Car.DistanceTo(P));
+		}
+		TestTrue(FString::Printf(TEXT("차까지 ≥ 몸 반경 + 0.2(%.3f)"), MinGap), MinGap >= Fp.Radius + 0.2 - 1e-3);
+	}
+
+	// 4) 자리가 전혀 없으면 꺾인 점을 그대로 두고 알린다.
+	{
+		TArray<FVector2D> Pts = { FVector2D(0, 0), FVector2D(10, 0), FVector2D(10, 10) };
+		TArray<FVector2D> Sharp;
+		RoundPath(Pts, 2.0, [](const TArray<FVector2D>&, const TArray<FVector2D>&) { return false; }, Sharp);
+		TestEqual(TEXT("꺾인 점 1개"), Sharp.Num(), 1);
+		TestEqual(TEXT("점 3개 그대로"), Pts.Num(), 3);
+		TArray<double> Limits;
+		CornerSpeedLimits(Pts, TurnParamsOf(EKind::Bicycle), Limits);
+		TestEqual(TEXT("꺾인 점 = 최저 속도"), Limits[1], TurnParamsOf(EKind::Bicycle).MinCornerMps, 1e-9);
+	}
+
+	// 5) 출발 호: 지금 방향으로 나가 목표를 바라보며 끝난다. 자리가 없으면 false.
+	{
+		TArray<FVector2D> Arc;
+		TestTrue(TEXT("호 찾음"), LeadInArc(FVector2D(0, 0), 0.0, FVector2D(0, 10), 2.0, AcceptAll, Arc));
+		if (TestTrue(TEXT("호 점 여러 개"), Arc.Num() > 3))
+		{
+			TestTrue(TEXT("지금 방향으로 나간다"), PaAngleDeg(Arc[1] - Arc[0], FVector2D(1, 0)) < 6.0);
+			const FVector2D Last = Arc.Last() - Arc[Arc.Num() - 2];
+			TestTrue(TEXT("끝나면 목표를 본다"), PaAngleDeg(Last, FVector2D(0, 10) - Arc.Last()) < 12.0);
+		}
+		TestTrue(TEXT("방향이 맞으면 호 없음"), LeadInArc(FVector2D(0, 0), 0.0, FVector2D(10, 0), 2.0, AcceptAll, Arc) && Arc.Num() == 1);
+		TestFalse(TEXT("자리가 없으면 false"), LeadInArc(FVector2D(0, 0), 0.0, FVector2D(0, 10), 2.0, [](const TArray<FVector2D>&, const TArray<FVector2D>&) { return false; }, Arc));
+	}
+
+	// 6) 몸 회전: 이동수단은 서 있으면 안 돈다. 사람은 돈다.
+	TestEqual(TEXT("자전거 정지 회전 0"), MaxYawStepDeg(EKind::Bicycle, 0.0, 0.1), 0.0);
+	TestEqual(TEXT("오토바이 정지 회전 0"), MaxYawStepDeg(EKind::Motorcycle, 0.0, 0.1), 0.0);
+	TestTrue(TEXT("사람 정지 회전 > 0"), MaxYawStepDeg(EKind::Pedestrian, 0.0, 0.1) > 0.0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FParkAgentTurnMoveTest, "Park3D.Agent.TurnMove",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FParkAgentTurnMoveTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = (GEngine && GEngine->GetWorldContexts().Num() > 0) ? GWorld : nullptr;
+	if (!TestNotNull(TEXT("에디터 월드"), World)) { return false; }
+	AParkAgentManager* M = AParkAgentManager::GetOrSpawn(World);
+	if (!TestNotNull(TEXT("매니저"), M)) { return false; }
+	TArray<FString> NotFound;
+	M->Delete({}, true, NotFound);
+
+	const FVector2D Base(3000.0, 3000.0);
+	constexpr float Dt = 1.f / 30.f;
+	FString Err;
+	bool bBad = false;
+	TSharedPtr<FJsonObject> Info;
+
+	struct FTrack { double MaxMotionStep = 0.0; double MaxYawStep = 0.0; double MaxSlide = 0.0; double MinSpeed = DBL_MAX; double FirstHeadingOff = -1.0; };
+	// 한 프레임마다 방향 변화·미끄러짐을 잰다. 위치는 mm 로 반올림되므로 2 cm 넘게 움직인 프레임만 방향을 잰다.
+	const auto Drive = [&](const FString& Id, FTrack& T, double StartYaw) -> TSharedPtr<FJsonObject>
+	{
+		TSharedPtr<FJsonObject> O = PaFind(M->ListJson(nullptr, {}), Id);
+		FVector2D Prev = PaPos(O);
+		FVector2D PrevDir = FVector2D::ZeroVector;
+		double PrevYaw = O->GetNumberField(TEXT("directionDeg"));
+		for (int32 i = 0; i < 3000; ++i)
+		{
+			M->Advance(Dt);
+			O = PaFind(M->ListJson(nullptr, {}), Id);
+			const FVector2D Now = PaPos(O);
+			const double Yaw = O->GetNumberField(TEXT("directionDeg"));
+			T.MaxYawStep = FMath::Max(T.MaxYawStep, FMath::Abs(FRotator::NormalizeAxis(Yaw - PrevYaw)));
+			PrevYaw = Yaw;
+			const FVector2D Delta = Now - Prev;
+			if (Delta.Size() > 0.02)
+			{
+				if (T.FirstHeadingOff < 0.0)
+				{
+					const double R = FMath::DegreesToRadians(StartYaw);
+					T.FirstHeadingOff = PaAngleDeg(Delta, FVector2D(FMath::Cos(R), FMath::Sin(R)));
+				}
+				if (!PrevDir.IsZero()) { T.MaxMotionStep = FMath::Max(T.MaxMotionStep, PaAngleDeg(PrevDir, Delta)); }
+				const double R = FMath::DegreesToRadians(Yaw);
+				T.MaxSlide = FMath::Max(T.MaxSlide, PaAngleDeg(Delta, FVector2D(FMath::Cos(R), FMath::Sin(R))));
+				PrevDir = Delta;
+				Prev = Now;
+			}
+			if (O->GetStringField(TEXT("state")) != TEXT("moving")) { break; }
+			T.MinSpeed = FMath::Min(T.MinSpeed, O->GetNumberField(TEXT("speedMps")));
+		}
+		return O;
+	};
+
+	const struct { EKind Kind; double SlideMax; } Cases[] = { { EKind::Pedestrian, 25.0 }, { EKind::Bicycle, 15.0 }, { EKind::Motorcycle, 15.0 } };
+	int32 Row = 0;
+	for (const auto& C : Cases)
+	{
+		const FTurnParams Tp = TurnParamsOf(C.Kind);
+		const FString What = ObjectType(C.Kind);
+		const FVector2D Start = Base + FVector2D(0.0, 100.0 * Row++);
+
+		// 1) 90° 꺾기: 방향이 프레임마다 조금씩 바뀌고, 호에서 줄이고, 목적지에 정확히 선다.
+		TArray<FString> Ids;
+		TestTrue(What + TEXT(" 생성"), M->Create(C.Kind, Start, 0.0, false, FString(), FString(), Ids, Err));
+		if (Ids.Num() == 0) { continue; }
+		const FVector2D Goal = Start + FVector2D(12.0, 12.0);
+		const TArray<FVector2D> Path = { Start + FVector2D(12.0, 0.0), Goal };
+		TestTrue(What + TEXT(" 이동"), M->StartMove(Ids[0], &Path, nullptr, 0.0, true, 20.0, Info, Err, bBad));
+		TestTrue(What + TEXT(": 응답 pts 는 호를 포함"), Info.IsValid() && Info->GetArrayField(TEXT("pts")).Num() > 3);
+		TestTrue(What + TEXT(": lengthM 은 직각보다 짧다"), Info.IsValid() && Info->GetNumberField(TEXT("lengthM")) < 24.0);
+		FTrack T;
+		const TSharedPtr<FJsonObject> End = Drive(Ids[0], T, 0.0);
+		TestEqual(What + TEXT(": 도착"), End->GetStringField(TEXT("state")), FString(TEXT("arrived")));
+		TestTrue(What + TEXT(": 목적지"), PaPos(End).Equals(Goal, 1e-3));
+		TestEqual(What + TEXT(": 끝 방향"), End->GetNumberField(TEXT("directionDeg")), 90.0, 8.0);
+		TestTrue(FString::Printf(TEXT("%s: 이동 방향 프레임당 ≤ 10° (%.1f)"), *What, T.MaxMotionStep), T.MaxMotionStep <= 10.0);
+		TestTrue(FString::Printf(TEXT("%s: 몸 회전 ≤ 상한 %.0f°/s (%.0f)"), *What, Tp.YawRateDeg, T.MaxYawStep / Dt), T.MaxYawStep / Dt <= Tp.YawRateDeg * 1.02);
+		TestTrue(FString::Printf(TEXT("%s: 미끄러짐 ≤ %.0f° (%.1f)"), *What, C.SlideMax, T.MaxSlide), T.MaxSlide <= C.SlideMax);
+
+		// 2) 출발 방향이 어긋나도 이동수단은 지금 방향으로 나가 호를 돈다.
+		if (C.Kind != EKind::Pedestrian)
+		{
+			TArray<FString> Ids2;
+			const FVector2D S2 = Start + FVector2D(50.0, 0.0);
+			TestTrue(What + TEXT(" 2 생성"), M->Create(C.Kind, S2, 0.0, false, FString(), FString(), Ids2, Err));
+			const TArray<FVector2D> Side = { S2 + FVector2D(0.0, 12.0) };
+			TestTrue(What + TEXT(" 2 이동"), M->StartMove(Ids2[0], &Side, nullptr, 0.0, true, 20.0, Info, Err, bBad));
+			FTrack T2;
+			const TSharedPtr<FJsonObject> End2 = Drive(Ids2[0], T2, 0.0);
+			TestEqual(What + TEXT(": 옆 목적지 도착"), End2->GetStringField(TEXT("state")), FString(TEXT("arrived")));
+			TestTrue(What + TEXT(": 옆 목적지"), PaPos(End2).Equals(S2 + FVector2D(0.0, 12.0), 1e-3));
+			TestTrue(FString::Printf(TEXT("%s: 첫 움직임 = 지금 방향(%.1f)"), *What, T2.FirstHeadingOff), T2.FirstHeadingOff >= 0.0 && T2.FirstHeadingOff <= 10.0);
+			TestTrue(FString::Printf(TEXT("%s: 출발 호 미끄러짐 ≤ %.0f° (%.1f)"), *What, C.SlideMax, T2.MaxSlide), T2.MaxSlide <= C.SlideMax);
+		}
+	}
+
+	// 3) setPose 는 순간 이동 그대로: 돌던 호를 끊고 그 방향·자리에 바로 선다.
+	{
+		TArray<FString> Ids;
+		const FVector2D S3 = Base + FVector2D(100.0, 0.0);
+		TestTrue(TEXT("setPose 자전거"), M->Create(EKind::Bicycle, S3, 0.0, false, FString(), FString(), Ids, Err));
+		const TArray<FVector2D> Path = { S3 + FVector2D(12.0, 0.0), S3 + FVector2D(12.0, 12.0) };
+		TestTrue(TEXT("setPose 전 이동"), M->StartMove(Ids[0], &Path, nullptr, 0.0, true, 20.0, Info, Err, bBad));
+		for (int32 i = 0; i < 30; ++i) { M->Advance(Dt); }
+		FParkAgentPose Pose;
+		Pose.Id = Ids[0];
+		Pose.PosM = S3 + FVector2D(5.0, 5.0);
+		Pose.YawDeg = 137.0;
+		int32 Applied = 0;
+		TArray<FString> Missing;
+		TestTrue(TEXT("setPose"), M->SetPoses({ Pose }, Applied, Missing, Err));
+		const TSharedPtr<FJsonObject> O = PaFind(M->ListJson(nullptr, {}), Ids[0]);
+		TestTrue(TEXT("자리 즉시"), PaPos(O).Equals(Pose.PosM, 1e-3));
+		TestEqual(TEXT("방향 즉시"), O->GetNumberField(TEXT("directionDeg")), 137.0, 1e-6);
+		TestEqual(TEXT("이동 끝남"), O->GetStringField(TEXT("endReason")), FString(TEXT("setPose")));
+	}
+
+	// 4) 호 도중 스냅샷 → 복원: 같은 자리에서 이어 달려 목적지에 선다.
+	{
+		TArray<FString> Ids;
+		const FVector2D S4 = Base + FVector2D(150.0, 0.0);
+		TestTrue(TEXT("복원 자전거"), M->Create(EKind::Bicycle, S4, 0.0, false, FString(), FString(), Ids, Err));
+		const FVector2D Goal = S4 + FVector2D(8.0, 8.0);
+		const TArray<FVector2D> Path = { S4 + FVector2D(8.0, 0.0), Goal };
+		TestTrue(TEXT("복원 전 이동"), M->StartMove(Ids[0], &Path, nullptr, 0.0, true, 20.0, Info, Err, bBad));
+		for (int32 i = 0; i < 120; ++i) { M->Advance(Dt); }
+		const FParkAgentSnapshot Snap = M->Capture();
+		M->Restore(Snap, false);
+		FTrack T;
+		const TSharedPtr<FJsonObject> End = Drive(Ids[0], T, 0.0);
+		TestEqual(TEXT("복원 뒤 도착"), End->GetStringField(TEXT("state")), FString(TEXT("arrived")));
+		TestTrue(TEXT("복원 뒤 목적지"), PaPos(End).Equals(Goal, 1e-3));
+	}
+
+	M->Delete({}, true, NotFound);
+	M->Destroy();
+	return true;
+}
+
 #endif

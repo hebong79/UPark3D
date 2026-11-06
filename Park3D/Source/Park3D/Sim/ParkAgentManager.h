@@ -36,6 +36,7 @@ struct FParkAgentMove
 	FString Source;               // "path" | "to"
 	TArray<FVector2D> Pts;        // 첫 점 = 출발 위치
 	TArray<double> Cum;
+	TArray<double> LimitMps;      // 점마다 지날 수 있는 속도(모서리 감속). Pts 와 개수가 같다
 	double DistM = 0.0;
 	double CruiseMps = 1.3;
 	bool bAvoid = true;
@@ -191,6 +192,8 @@ private:
 	void UpdateCarVelocities(float Dt);
 
 	bool PlanTo(const FParkAgent& A, const FVector2D& Goal, TArray<FVector2D>& OutPts, TSharedPtr<FJsonObject>& OutLane, TArray<FString>& Notes, FString& OutError);
+	/** 검사를 통과한 경로의 모서리를 호로 바꾼다. 호도 벽·서 있는 차를 검사하고, 자리가 없으면 반경을 줄인다. */
+	void SmoothRoute(const FParkAgent& A, TArray<FVector2D>& Pts, TArray<FString>& Notes);
 
 	TArray<FParkAgent> Agents;
 	TArray<FParkAgentRelation> Relations;

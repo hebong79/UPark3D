@@ -29,7 +29,7 @@ namespace
 
 	constexpr double GAmRideCarMargin = 0.2;      // path 검사: 서 있는 차와 몸체 사이 최소 거리(m)
 	constexpr double GAmPlanCarMargin = 0.3;      // to 계획: 벽·차와 남길 여유(m)
-	constexpr double GAmYawRateDeg[3] = { 360.0, 150.0, 150.0 };
+	constexpr double GAmArcWallMargin = 0.1;      // 호가 벽과 남길 여유(m). 차와는 GAmRideCarMargin
 
 	FVector2D AmDir(double YawDeg)
 	{
@@ -756,6 +756,63 @@ bool AParkAgentManager::PlanTo(const FParkAgent& A, const FVector2D& Goal, TArra
 	return false;
 }
 
+void AParkAgentManager::SmoothRoute(const FParkAgent& A, TArray<FVector2D>& Pts, TArray<FString>& Notes)
+{
+	if (Pts.Num() < 2) { return; }
+	const FTurnParams Tp = TurnParamsOf(A.Kind);
+	const FFootprint Fp = FootprintOf(A.Kind);
+	const FAgentGrid* G = GetGrid();
+	TArray<float> Clear;
+	TArray<FCarBox> Moving, Parked;
+	if (G)
+	{
+		ClearanceField(*G, A.Kind, nullptr, Clear);
+		CollectCarBoxes(Moving, Parked);
+	}
+	// 호는 몸 반경에 벽 0.1 m·차 0.2 m 를 더 남긴다. 원래 경로가 이미 그보다 좁은 길이면 몸만 닿지 않게(원래 경로의 검사와 같은 기준) 본다.
+	FFootprint Wide = Fp;
+	Wide.Radius += GAmArcWallMargin;
+	int32 NumWide = 0, NumTight = 0;
+	const auto Accept = [&](const TArray<FVector2D>& Rounded, const TArray<FVector2D>& Raw)
+	{
+		if (!G) { return true; }
+		const auto Clears = [&](const TArray<FVector2D>& Piece, const FFootprint& Body, double CarMargin)
+		{
+			FVector2D At; FString Who;
+			const int32 Hit = CheckPath(*G, Clear, Parked, Body, Piece, CarMargin, At, Who);
+			return Hit == 0 || Hit == 3;
+		};
+		const double WideCar = GAmRideCarMargin - GAmArcWallMargin;
+		if (Clears(Rounded, Wide, WideCar)) { ++NumWide; return true; }
+		if (Clears(Raw, Wide, WideCar) || !Clears(Rounded, Fp, GAmRideCarMargin)) { return false; }
+		++NumTight;
+		return true;
+	};
+
+	// 이동수단은 지금 방향에서 호로 빠져나오고, 사람은 걷던 중일 때만 그렇게 한다(서 있으면 제자리에서 돈다).
+	TArray<FVector2D> Arc = { Pts[0] };
+	SimplifyPath(Pts);
+	if (IsVehicle(A.Kind) || A.SpeedMps > 0.3)
+	{
+		if (!LeadInArc(Pts[0], A.YawDeg, Pts[1], Tp.RadiusM, Accept, Arc))
+		{
+			Arc = { Pts[0] };
+			Notes.Add(FString::Printf(TEXT("출발 자리 (%.2f, %.2f) 에 호를 넣을 자리가 없어 천천히 돌며 출발합니다"), Pts[0].X, Pts[0].Y));
+		}
+	}
+	TArray<FVector2D> Rest = { Arc.Last() };
+	Rest.Append(Pts.GetData() + 1, Pts.Num() - 1);
+	TArray<FVector2D> Sharp;
+	RoundPath(Rest, Tp.RadiusM, Accept, Sharp);
+	for (const FVector2D& S : Sharp)
+	{
+		Notes.Add(FString::Printf(TEXT("모서리 (%.2f, %.2f) 에 호를 넣을 자리가 없어 천천히 꺾어 갑니다"), S.X, S.Y));
+	}
+	Pts = MoveTemp(Arc);
+	Pts.Append(Rest.GetData() + 1, Rest.Num() - 1);
+	UE_LOG(LogTemp, Log, TEXT("[Agent] 호 %s: 여유 통과 %d, 좁은 길 기준 통과 %d, 꺾인 점 %d"), *A.Id, NumWide, NumTight, Sharp.Num());
+}
+
 bool AParkAgentManager::StartMove(const FString& Id, const TArray<FVector2D>* Path, const FVector2D* To, double Speed, bool bAvoid, double BlockAfterSec,
 	TSharedPtr<FJsonObject>& OutInfo, FString& OutError, bool& bOutBadParams)
 {
@@ -812,6 +869,8 @@ bool AParkAgentManager::StartMove(const FString& Id, const TArray<FVector2D>* Pa
 		return false;
 	}
 
+	SmoothRoute(*M, Pts, Notes);
+
 	FParkAgentMove& Mv = M->Move;
 	if (Mv.bActive) { Mv.EndReason = TEXT("replaced"); }
 	FParkAgentMove New;
@@ -819,6 +878,7 @@ bool AParkAgentManager::StartMove(const FString& Id, const TArray<FVector2D>* Pa
 	New.Source = Path ? TEXT("path") : TEXT("to");
 	New.Pts = Pts;
 	CumLengths(New.Pts, New.Cum);
+	CornerSpeedLimits(New.Pts, TurnParamsOf(M->Kind), New.LimitMps);
 	New.CruiseMps = Speed;
 	New.bAvoid = bAvoid;
 	New.BlockAfterSec = BlockAfterSec;
@@ -1023,6 +1083,14 @@ void AParkAgentManager::Advance(float Dt)
 		const double Remaining = FMath::Max(Total - M.DistM, 0.0);
 		const FFootprint Fp = FootprintOf(A.Kind);
 		double Target = FMath::Min(M.CruiseMps, FMath::Sqrt(2.0 * DecelOf(A.Kind) * Remaining));
+		Target = CornerLimitedSpeed(M.Cum, M.LimitMps, M.DistM, DecelOf(A.Kind), Target);
+		{
+			// 몸 방향이 진행 방향과 크게 다르면(호를 못 넣은 자리) 맞출 때까지 천천히 간다.
+			FVector2D Here, HereDir;
+			PoseAt(M.Pts, M.Cum, M.DistM, Here, HereDir);
+			const double Off = FMath::Abs(FRotator::NormalizeAxis(FMath::RadiansToDegrees(FMath::Atan2(HereDir.Y, HereDir.X)) - A.YawDeg));
+			if (Off > 45.0) { Target = FMath::Min(Target, TurnParamsOf(A.Kind).MinCornerMps); }
+		}
 		if (Remaining > 0.01) { Target = FMath::Max(Target, 0.15); }
 
 		bool bConflict = false;
@@ -1082,7 +1150,7 @@ void AParkAgentManager::Advance(float Dt)
 		PoseAt(M.Pts, M.Cum, M.DistM, Pos, Dir);
 		A.Pos = Pos;
 		const double Want = FMath::RadiansToDegrees(FMath::Atan2(Dir.Y, Dir.X));
-		const double Step = GAmYawRateDeg[static_cast<int32>(A.Kind)] * Dt;
+		const double Step = MaxYawStepDeg(A.Kind, A.SpeedMps, Dt);
 		A.YawDeg = FRotator::NormalizeAxis(A.YawDeg + FMath::Clamp(FRotator::NormalizeAxis(Want - A.YawDeg), -Step, Step));
 		A.Z = GroundZAt(A.Pos, A.Z);
 		if (M.DistM >= Total - 1e-4)

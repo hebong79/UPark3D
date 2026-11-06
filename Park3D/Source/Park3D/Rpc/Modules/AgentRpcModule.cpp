@@ -277,7 +277,7 @@ void FAgentRpcModule::Register(URpcDispatcher& Dispatcher)
 	});
 	Dispatcher.SetMethodMeta(TEXT("agent.setPose"), { true, false,
 		TEXT("{items:[{id, pos{x,y,z?} (UE m), yawDeg, speedMps?=0, activity?:\"walking\"|\"standing\"}]}"),
-		TEXT("검사·회피 없이 그 자세로 바로 옮긴다(여러 개 한 번에). 돌던 이동은 끝난다. speedMps 는 표시용으로 걷기 애니메이션 빠르기를 정한다. {applied, changed, notFound}") });
+		TEXT("검사·회피 없이 그 자세로 바로 옮긴다(여러 개 한 번에). 돌던 이동은 끝난다. speedMps 는 표시용으로 걷기 애니메이션 빠르기를 정한다. 탑승 중인 탈것을 옮기면 탄 사람이 함께 가고, 탄 사람 id 는 거절한다. {applied, changed, notFound}") });
 
 	Dispatcher.Register(TEXT("agent.delete"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{

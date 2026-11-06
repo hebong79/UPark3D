@@ -619,7 +619,6 @@ bool FParkAgentSetPoseTest::RunTest(const FString& Parameters)
 		const FString Good = Item(P1, Base + FVector2D(50, 50));
 		const struct { const TCHAR* Name; FString Bad; } Cases[] = {
 			{ TEXT("탑승자"), Item(Rider, Base) },
-			{ TEXT("탑승 이동수단"), Item(Moto, Base) },
 			{ TEXT("이동수단 activity"), Item(Bike, Base, TEXT(",\"activity\":\"walking\"")) },
 			{ TEXT("모르는 activity"), Item(P2, Base, TEXT(",\"activity\":\"riding\"")) },
 			{ TEXT("음수 속도"), Item(P2, Base, TEXT(",\"speedMps\":-1")) },
@@ -682,12 +681,87 @@ bool FParkAgentSetPoseTest::RunTest(const FString& Parameters)
 			TestEqual(TEXT("paused stopped"), O->GetStringField(TEXT("state")), FString(TEXT("stopped")));
 		}
 	}
-	// 탑승 이동수단을 지워 내리면 옮길 수 있다.
+	// 탑승 중인 탈것을 옮기면 탄 사람이 함께 간다.
 	{
-		M->Delete({ Moto }, false, NotFound);
+		const auto CheckRider = [&](const TCHAR* What, const FVector2D& Spot, double Speed, const TCHAR* State)
+		{
+			const TSharedPtr<FJsonObject> V = Listed(Moto), O = Listed(Rider);
+			if (!TestTrue(FString::Printf(TEXT("%s: 목록"), What), V.IsValid() && O.IsValid())) { return; }
+			TestTrue(FString::Printf(TEXT("%s: 탈것 자리"), What), PaPos(V).Equals(Spot, 1e-3));
+			TestTrue(FString::Printf(TEXT("%s: 탄 사람 자리"), What), PaPos(O).Equals(Spot, 1e-3));
+			TestEqual(FString::Printf(TEXT("%s: 탄 사람 높이"), What), O->GetObjectField(TEXT("pos"))->GetNumberField(TEXT("z")), V->GetObjectField(TEXT("pos"))->GetNumberField(TEXT("z")), 1e-6);
+			TestEqual(FString::Printf(TEXT("%s: 탄 사람 방향"), What), O->GetNumberField(TEXT("directionDeg")), V->GetNumberField(TEXT("directionDeg")), 1e-6);
+			TestEqual(FString::Printf(TEXT("%s: 탈것 속도"), What), V->GetNumberField(TEXT("speedMps")), Speed, 1e-6);
+			TestEqual(FString::Printf(TEXT("%s: 탄 사람 속도"), What), O->GetNumberField(TEXT("speedMps")), Speed, 1e-6);
+			TestEqual(FString::Printf(TEXT("%s: 탄 사람 상태"), What), O->GetStringField(TEXT("state")), FString(State));
+			TestEqual(FString::Printf(TEXT("%s: riding"), What), O->GetStringField(TEXT("activityType")), FString(TEXT("riding")));
+			TestEqual(FString::Printf(TEXT("%s: ridingWith"), What), O->GetStringField(TEXT("ridingWith")), Moto);
+		};
+
+		// 호출 응답이 끝난 순간 목록이 맞고, 탄 사람 액터도 좌석에 붙어 따라갔다.
+		const FVector2D Spot = Base + FVector2D(20, 20);
 		FRpcError E;
-		Rpc(TEXT("agent.setPose"), Items(Item(Rider, Base + FVector2D(4, 4))), E);
-		TestFalse(TEXT("내린 사람"), E.HasError());
+		const TSharedPtr<FJsonObject> R = Rpc(TEXT("agent.setPose"), Items(Item(Moto, Spot, TEXT(",\"speedMps\":4"))), E);
+		TestFalse(TEXT("탑승 탈것 setPose"), E.HasError());
+		if (R.IsValid()) { TestEqual(TEXT("applied 는 탈것 1"), static_cast<int32>(R->GetNumberField(TEXT("applied"))), 1); }
+		CheckRider(TEXT("옮긴 직후"), Spot, 4.0, TEXT("moving"));
+		int32 Attached = 0;
+		for (TActorIterator<AParkAgentActor> It(World); It; ++It)
+		{
+			if (!It->GetAttachParentActor()) { continue; }
+			++Attached;
+			TestTrue(TEXT("탈것 액터 자리"), FVector2D(It->GetAttachParentActor()->GetActorLocation()).Equals(Spot * 100.0, 0.1));
+			TestTrue(TEXT("탄 사람 액터가 탈것 위"), FVector2D::Distance(FVector2D(It->GetActorLocation()), Spot * 100.0) < 100.0);
+		}
+		TestEqual(TEXT("붙어 있는 탄 사람 1"), Attached, 1);
+
+		for (int32 i = 0; i < 5; ++i) { M->Advance(0.1f); }
+		CheckRider(TEXT("틱 뒤"), Spot, 4.0, TEXT("moving"));
+
+		// 탄 사람 id 로 멈추면 탈것 표시 속도가 끝난다.
+		TestEqual(TEXT("탄 사람 id 로 정지"), M->Stop({ Rider }, false, NotFound), 1);
+		CheckRider(TEXT("정지"), Spot, 0.0, TEXT("stopped"));
+
+		// 달리던 이동이 끝나고, 다음 이동은 새 자리에서 함께 출발한다.
+		TSharedPtr<FJsonObject> Info;
+		bool bBad = false;
+		const TArray<FVector2D> Path = { Spot + FVector2D(10, 0) };
+		TestTrue(TEXT("이동 시작"), M->StartMove(Moto, &Path, nullptr, 3.0, true, 20.0, Info, Err, bBad));
+		M->Advance(0.5f);
+		const FVector2D Spot2 = Spot + FVector2D(-5, 5);
+		Rpc(TEXT("agent.setPose"), Items(Item(Moto, Spot2)), E);
+		TestFalse(TEXT("이동 중 탑승 탈것 setPose"), E.HasError());
+		for (int32 i = 0; i < 5; ++i) { M->Advance(0.1f); }
+		CheckRider(TEXT("이동 중 옮김"), Spot2, 0.0, TEXT("stopped"));
+		TestEqual(TEXT("탄 사람 endReason setPose"), Listed(Rider)->GetStringField(TEXT("endReason")), FString(TEXT("setPose")));
+		const TArray<FVector2D> Path2 = { Spot2 + FVector2D(10, 0) };
+		TestTrue(TEXT("다시 이동"), M->StartMove(Moto, &Path2, nullptr, 3.0, true, 20.0, Info, Err, bBad));
+		for (int32 i = 0; i < 10; ++i) { M->Advance(0.1f); }
+		TestTrue(TEXT("탄 사람도 새 자리에서 출발"), PaPos(Listed(Rider)).Equals(PaPos(Listed(Moto)), 1e-3) && FVector2D::Distance(PaPos(Listed(Rider)), Spot2) > 0.5);
+		M->Stop({ Moto }, false, NotFound);
+
+		// 스냅샷: 관계와 자리·표시 속도가 돌아온다.
+		Rpc(TEXT("agent.setPose"), Items(Item(Moto, Spot, TEXT(",\"speedMps\":4"))), E);
+		const FParkAgentSnapshot Snap = M->Capture();
+		Rpc(TEXT("agent.setPose"), Items(Item(Moto, Spot2)), E);
+		M->Restore(Snap, false);
+		CheckRider(TEXT("복원"), Spot, 4.0, TEXT("moving"));
+		M->Restore(Snap, true);
+		CheckRider(TEXT("paused 복원"), Spot, 0.0, TEXT("stopped"));
+
+		// 탈것을 지우면 옮긴 자리 옆에 내려 선다.
+		Rpc(TEXT("agent.setPose"), Items(Item(Moto, Spot2)), E);
+		M->Delete({ Moto }, false, NotFound);
+		const TSharedPtr<FJsonObject> Off = Listed(Rider);
+		if (TestTrue(TEXT("내린 사람 남음"), Off.IsValid()))
+		{
+			TestEqual(TEXT("옮긴 자리에서 0.8 m"), FVector2D::Distance(PaPos(Off), Spot2), 0.8, 1e-3);
+			TestEqual(TEXT("내린 사람 standing"), Off->GetStringField(TEXT("activityType")), FString(TEXT("standing")));
+		}
+		// 이제 사람 id 로 옮길 수 있다.
+		FRpcError E2;
+		Rpc(TEXT("agent.setPose"), Items(Item(Rider, Base + FVector2D(4, 4))), E2);
+		TestFalse(TEXT("내린 사람"), E2.HasError());
 	}
 	// allowOverlap: 시험 월드엔 격자가 없어 "기본값은 겹치면 거부" 는 13530 실기로 본다.
 	{

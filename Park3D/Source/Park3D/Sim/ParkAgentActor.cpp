@@ -617,8 +617,8 @@ void AParkAgentActor::BuildSpokedBicycle(bool bCity, uint32 Hash)
 	// 금속 부품은 무광. 납작한 상자 면이 태양을 받으면 앞쪽에서 은색으로 번쩍인다(옆에서는 어두워 보였다).
 	constexpr float Matte = 1.f;
 	UInstancedStaticMeshComponent* Rubber = AddShapeSet(GApCube, FLinearColor(0.015f, 0.015f, 0.015f), Matte);
-	// 림·바퀴살만 조금 밝게 둔다. 아스팔트(화면 선형값 약 0.10)와 같아지면 바퀴살이 바닥에 묻힌다.
-	UInstancedStaticMeshComponent* Spoke = AddShapeSet(GApCube, FLinearColor(0.16f, 0.16f, 0.17f), Matte);
+	// 림·바퀴살은 바닥보다 어둡게 둔다. 바닥보다 밝으면 운영 거리에서 바퀴 안쪽이 은색으로 보이고(0.16 도 그랬다), 아스팔트와 같아지면 묻힌다.
+	UInstancedStaticMeshComponent* Spoke = AddShapeSet(GApCube, FLinearColor(0.035f, 0.035f, 0.038f), Matte);
 	UInstancedStaticMeshComponent* Metal = AddShapeSet(GApCube, FLinearColor(0.06f, 0.06f, 0.065f), Matte);
 	UInstancedStaticMeshComponent* Dark = AddShapeSet(GApCube, FLinearColor(0.08f, 0.08f, 0.09f), Matte);
 	UInstancedStaticMeshComponent* Hubs = AddShapeSet(GApCylinder, FLinearColor(0.12f, 0.12f, 0.13f), Matte);

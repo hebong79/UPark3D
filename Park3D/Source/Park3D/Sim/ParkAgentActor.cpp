@@ -609,7 +609,7 @@ void AParkAgentActor::BuildSpokedBicycle(bool bCity, uint32 Hash)
 	// 바퀴살은 실물(2 mm)보다 굵게 0.9 cm — 1280×720 Camera-1 에서 25 m 면 1 px ≈ 1.2 cm 라 실물 굵기는 사라진다(#1794).
 	// 안장 윗면(-14, 88.5)·핸들 높이는 simple 과 맞춰 탑승자 자세(ApplyRidePose)를 그대로 쓴다.
 	const FLinearColor SportFrames[] = { FLinearColor(0.55f, 0.04f, 0.03f), FLinearColor(0.03f, 0.12f, 0.45f), FLinearColor(0.02f, 0.02f, 0.02f), FLinearColor(0.60f, 0.20f, 0.02f) };
-	const FLinearColor CityFrames[] = { FLinearColor(0.05f, 0.28f, 0.12f), FLinearColor(0.02f, 0.02f, 0.02f), FLinearColor(0.45f, 0.62f, 0.75f), FLinearColor(0.75f, 0.55f, 0.55f) };
+	const FLinearColor CityFrames[] = { FLinearColor(0.05f, 0.28f, 0.12f), FLinearColor(0.02f, 0.02f, 0.02f), FLinearColor(0.03f, 0.22f, 0.45f), FLinearColor(0.55f, 0.05f, 0.20f) };
 	const FLinearColor FrameColor = bCity ? CityFrames[Hash % UE_ARRAY_COUNT(CityFrames)] : SportFrames[Hash % UE_ARRAY_COUNT(SportFrames)];
 
 	UInstancedStaticMeshComponent* Frame = AddShapeSet(GApCube, FrameColor);

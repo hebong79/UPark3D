@@ -63,7 +63,7 @@ private:
 	/** 기본 도형 자전거 city·sport — 바퀴살·림·타이어가 있는 실물 크기 모형. */
 	void BuildSpokedBicycle(bool bCity, uint32 Hash);
 	/** 같은 도형·색의 부품을 인스턴스로 묶는다(바퀴살·림 조각이 수백 개라 컴포넌트를 나누지 않는다). */
-	UInstancedStaticMeshComponent* AddShapeSet(const TCHAR* Shape, const FLinearColor& Color);
+	UInstancedStaticMeshComponent* AddShapeSet(const TCHAR* Shape, const FLinearColor& Color, float Roughness = -1.f);
 	/** 에셋 메시를 진행 방향 = 액터 +X, 바닥 = 0, 중심 = 원점으로 맞춰 붙인다. 높이·길이(cm)를 돌려준다. */
 	UStaticMeshComponent* AddAlignedMesh(const TCHAR* Path, bool bFlip, double& OutLengthCm, double& OutHeightCm);
 	UStaticMeshComponent* AddShape(const TCHAR* Shape, const FVector& LocCm, const FRotator& Rot, const FVector& Scale, const FLinearColor& Color);

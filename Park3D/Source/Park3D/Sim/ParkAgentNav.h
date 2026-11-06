@@ -67,6 +67,27 @@ namespace ParkAgent
 		bool InBounds(const FVector2D& P) const { int32 X, Y; return ToCell(P, X, Y); }
 	};
 
+	/** 벽 스플라인 하나(m). 닫힌 고리면 Pts 에 닫는 점을 되풀이하지 않는다. */
+	struct FWallLoop
+	{
+		TArray<FVector2D> Pts;
+		bool bClosed = true;
+	};
+
+	struct FWallStamp
+	{
+		int32 Cells = 0;              // 새로 막은 칸 수
+		int32 OuterLoops = 0;         // 면을 품은 닫힌 고리 수
+		bool bOuterApplied = false;   // 바깥벽 밖을 막았는가
+	};
+
+	/**
+	 * 벽 스플라인을 격자에 옮긴다.
+	 * 닫힌 고리 + 안에 면 있음 = 바깥벽: 모든 바깥벽 밖의 칸을 막는다. 면이 하나라도 바깥벽 밖에 있으면 이 단계는 하지 않는다(bOuterApplied=false).
+	 * 닫힌 고리 + 안에 면 없음 = 기둥·건물: 고리 안을 막는다. 열린 스플라인: 선이 지나는 칸을 막는다.
+	 */
+	PARK3D_API FWallStamp ApplyWallLoops(FAgentGrid& G, const TArray<FWallLoop>& Loops, const TArray<FVector2D>& SlotCenters);
+
 	/** 지나갈 수 있는 칸인가(종류별). 사람: 노면·보도·주차면, 이동수단: 노면·주차면. */
 	PARK3D_API bool Passable(EKind K, uint8 Cls);
 

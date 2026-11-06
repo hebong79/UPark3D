@@ -776,4 +776,88 @@ bool FParkAgentSetPoseTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FParkAgentWallLoopsTest, "Park3D.Agent.WallLoops",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::EngineFilter)
+
+bool FParkAgentWallLoopsTest::RunTest(const FString& Parameters)
+{
+	// 20×20 m, 칸 0.2 m, 전부 노면.
+	auto MakeGrid = []()
+	{
+		FAgentGrid G;
+		G.W = G.H = 101;
+		G.Cell = 0.2;
+		G.Cls.Init(CellGround, G.W * G.H);
+		G.HeightM.Init(0.f, G.W * G.H);
+		return G;
+	};
+	auto ClsAt = [](const FAgentGrid& G, double X, double Y)
+	{
+		int32 CX, CY;
+		return G.ToCell(FVector2D(X, Y), CX, CY) ? G.Cls[CY * G.W + CX] : static_cast<uint8>(255);
+	};
+	FWallLoop OuterL;   // ㄱ자 바깥벽: (10..18, 10..18) 이 파여 있다
+	OuterL.Pts = { {2, 2}, {18, 2}, {18, 10}, {10, 10}, {10, 18}, {2, 18} };
+	FWallLoop Pillar;
+	Pillar.Pts = { {5, 5}, {6, 5}, {6, 6}, {5, 6} };
+	FWallLoop Line;
+	Line.bClosed = false;
+	Line.Pts = { {12, 4}, {16, 4} };
+	const TArray<FWallLoop> All = { OuterL, Pillar, Line };
+
+	// 1) 면이 모두 바깥벽 안: 밖·기둥·선이 막히고 나머지는 그대로다.
+	{
+		FAgentGrid G = MakeGrid();
+		int32 CX, CY;
+		G.ToCell(FVector2D(4, 8), CX, CY);
+		G.Cls[CY * G.W + CX] = CellBay;
+		const FWallStamp R = ApplyWallLoops(G, All, { FVector2D(4, 8), FVector2D(8, 4) });
+		TestEqual(TEXT("바깥벽 수"), R.OuterLoops, 1);
+		TestTrue(TEXT("바깥벽 밖을 막았다"), R.bOuterApplied);
+		TestEqual(TEXT("바깥벽 밖"), ClsAt(G, 1, 1), static_cast<uint8>(CellBlocked));
+		TestEqual(TEXT("파인 곳도 밖"), ClsAt(G, 15, 15), static_cast<uint8>(CellBlocked));
+		TestEqual(TEXT("안쪽 노면"), ClsAt(G, 4, 4), static_cast<uint8>(CellGround));
+		TestEqual(TEXT("주차면 유지"), ClsAt(G, 4, 8), static_cast<uint8>(CellBay));
+		TestEqual(TEXT("기둥 속"), ClsAt(G, 5.5, 5.5), static_cast<uint8>(CellBlocked));
+		TestEqual(TEXT("열린 선"), ClsAt(G, 14, 4), static_cast<uint8>(CellBlocked));
+		TestEqual(TEXT("선 옆"), ClsAt(G, 14, 6), static_cast<uint8>(CellGround));
+		int32 Blocked = 0;
+		for (const uint8 C : G.Cls) { Blocked += C == CellBlocked; }
+		TestEqual(TEXT("새로 막은 칸 수"), R.Cells, Blocked);
+
+		// 사람 경로: 기둥을 돌아가고, 바깥벽 밖으로는 못 간다.
+		TArray<float> Clear;
+		ClearanceField(G, EKind::Pedestrian, nullptr, Clear);
+		TArray<FVector2D> Pts;
+		FString Err;
+		TestTrue(TEXT("기둥 건너편 경로"), FindPath(G, Clear, 0.3, FVector2D(4, 5.5), FVector2D(7, 5.5), Pts, Err));
+		for (int32 k = 0; k + 1 < Pts.Num(); ++k)
+		{
+			TestTrue(TEXT("경로가 기둥을 안 뚫는다"), SegmentClear(G, Clear, Pts[k], Pts[k + 1], 0.3));
+		}
+		TestFalse(TEXT("바깥벽 밖으로 못 간다"), FindPath(G, Clear, 0.3, FVector2D(4, 4), FVector2D(15, 15), Pts, Err));
+	}
+
+	// 2) 면 하나가 바깥벽 밖: 바깥벽 밖은 그대로 두고 기둥·선만 막는다.
+	{
+		FAgentGrid G = MakeGrid();
+		const FWallStamp R = ApplyWallLoops(G, All, { FVector2D(4, 8), FVector2D(19, 19) });
+		TestEqual(TEXT("바깥벽은 찾았다"), R.OuterLoops, 1);
+		TestFalse(TEXT("바깥벽 밖을 안 막는다"), R.bOuterApplied);
+		TestEqual(TEXT("밖 그대로"), ClsAt(G, 1, 1), static_cast<uint8>(CellGround));
+		TestEqual(TEXT("바깥벽 안쪽 그대로"), ClsAt(G, 4, 4), static_cast<uint8>(CellGround));
+		TestEqual(TEXT("기둥은 막힌다"), ClsAt(G, 5.5, 5.5), static_cast<uint8>(CellBlocked));
+	}
+
+	// 3) 면이 어느 고리에도 없다(건물만 있는 야외): 큰 고리도 속을 채우고 밖은 그대로다.
+	{
+		FAgentGrid G = MakeGrid();
+		const FWallStamp R = ApplyWallLoops(G, { OuterL }, { FVector2D(19, 19) });
+		TestEqual(TEXT("바깥벽 없음"), R.OuterLoops, 0);
+		TestEqual(TEXT("건물 속"), ClsAt(G, 4, 4), static_cast<uint8>(CellBlocked));
+		TestEqual(TEXT("건물 밖"), ClsAt(G, 19, 19), static_cast<uint8>(CellGround));
+	}
+	return true;
+}
+
 #endif

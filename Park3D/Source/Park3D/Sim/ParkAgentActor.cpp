@@ -608,15 +608,16 @@ void AParkAgentActor::BuildSpokedBicycle(bool bCity, uint32 Hash)
 	// 실물 크기(cm, 액터 +X = 앞, 원점 = 바닥 가운데). 700C·26" 사이 바퀴 지름 68, 축간 106.
 	// 바퀴살은 실물(2 mm)보다 굵게 0.9 cm — 1280×720 Camera-1 에서 25 m 면 1 px ≈ 1.2 cm 라 실물 굵기는 사라진다(#1794).
 	// 안장 윗면(-14, 88.5)·핸들 높이는 simple 과 맞춰 탑승자 자세(ApplyRidePose)를 그대로 쓴다.
-	const FLinearColor SportFrames[] = { FLinearColor(0.55f, 0.04f, 0.03f), FLinearColor(0.03f, 0.12f, 0.45f), FLinearColor(0.02f, 0.02f, 0.02f), FLinearColor(0.85f, 0.85f, 0.88f) };
-	const FLinearColor CityFrames[] = { FLinearColor(0.85f, 0.85f, 0.82f), FLinearColor(0.02f, 0.02f, 0.02f), FLinearColor(0.45f, 0.62f, 0.75f), FLinearColor(0.75f, 0.55f, 0.55f) };
+	const FLinearColor SportFrames[] = { FLinearColor(0.55f, 0.04f, 0.03f), FLinearColor(0.03f, 0.12f, 0.45f), FLinearColor(0.02f, 0.02f, 0.02f), FLinearColor(0.60f, 0.20f, 0.02f) };
+	const FLinearColor CityFrames[] = { FLinearColor(0.05f, 0.28f, 0.12f), FLinearColor(0.02f, 0.02f, 0.02f), FLinearColor(0.03f, 0.22f, 0.45f), FLinearColor(0.55f, 0.05f, 0.20f) };
 	const FLinearColor FrameColor = bCity ? CityFrames[Hash % UE_ARRAY_COUNT(CityFrames)] : SportFrames[Hash % UE_ARRAY_COUNT(SportFrames)];
 
 	UInstancedStaticMeshComponent* Frame = AddShapeSet(GApCube, FrameColor);
 	UInstancedStaticMeshComponent* Rubber = AddShapeSet(GApCube, FLinearColor(0.015f, 0.015f, 0.015f));
-	UInstancedStaticMeshComponent* Metal = AddShapeSet(GApCube, FLinearColor(0.62f, 0.63f, 0.66f));
+	// 어두운 금속색. 0.62 는 화면에서 하얗게 보였다. 아스팔트(화면 선형값 약 0.10)와 같아지면 바퀴살이 사라지므로 그보다 밝게 둔다.
+	UInstancedStaticMeshComponent* Metal = AddShapeSet(GApCube, FLinearColor(0.20f, 0.20f, 0.22f));
 	UInstancedStaticMeshComponent* Dark = AddShapeSet(GApCube, FLinearColor(0.08f, 0.08f, 0.09f));
-	UInstancedStaticMeshComponent* Hubs = AddShapeSet(GApCylinder, FLinearColor(0.35f, 0.36f, 0.38f));
+	UInstancedStaticMeshComponent* Hubs = AddShapeSet(GApCylinder, FLinearColor(0.12f, 0.12f, 0.13f));
 	if (!Frame || !Rubber || !Metal || !Dark || !Hubs)
 	{
 		return;

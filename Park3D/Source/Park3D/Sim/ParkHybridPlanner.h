@@ -122,6 +122,14 @@ namespace ParkHybrid
 		 * 큰 차의 후면주차 호는 최소 회전반경 5.6 m 면 약 9 m 라 RelaxLen(6 m)으로는 모자란다.
 		 */
 		double WrongWayRevLen = 13.0;
+		/** 실제 후진은 차체 중심이 면(From 자세의 차체 중심)에서 이 거리(m) 안일 때만 한다. 흐름 방향 후진도 막는다. 0 = 제한 없음. */
+		double ReverseZoneM = 0.0;
+		/** 한 번에 후진할 수 있는 길이(m). 0 = 제한 없음. */
+		double MaxReverseRunM = 0.0;
+		/** 기어를 바꾸기 전에 지금 기어로 달려야 할 최소 길이(m) — 한 수씩 왕복하는 것을 막는다. 0 = 제한 없음. */
+		double MinGearRunM = 0.0;
+		/** 기어 전환 상한(끝맺음 Dubins 로 넘어가는 전환 포함). 0 = 제한 없음. */
+		int32 MaxGearChanges = 0;
 		/** 남의 주차면 위를 지나는 1 m 당 비용. */
 		double OtherSlotCost = 4.0;
 		/** 차체 둘레 여유가 이보다 좁으면 1 m 당 비용(통로 가운데로 달리게). */

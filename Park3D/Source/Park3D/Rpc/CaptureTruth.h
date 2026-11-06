@@ -31,6 +31,9 @@ namespace CaptureTruth
 		PARK3D_API bool Project(const FVector& P, FVector2D& OutPx, double* OutDepth = nullptr) const;
 	};
 
+	/** Cam 의 출력 W×H 그림을 그리는 투영 모델. */
+	PARK3D_API FProjector MakeProjector(const APTZCameraActor* Cam, int32 W, int32 H);
+
 	/**
 	 * 출력 픽셀 → 깊이 공간 픽셀 인덱스 표(왜곡 카메라 전용). 출력 픽셀 중심의 왜곡 전 방향이 깊이 렌더의 어느 픽셀에 떨어지는가.
 	 * 깊이 공간 밖이면 -1. 핀홀이면 쓰지 않는다(같은 격자).

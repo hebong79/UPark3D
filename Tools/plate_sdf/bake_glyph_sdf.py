@@ -31,8 +31,9 @@ from PIL import Image, ImageDraw, ImageFont
 DIGITS = "0123456789"
 HANGUL = "가나다라마바사거너더러머버서어저고노도로모보소오조구누두루무부수우주"
 # 종류(kind) 10종이 더 요구하는 글자(Source/Park3D/Plate/PlateKinds.cpp 와 같아야 한다):
-#   대여 하허호 · 사업용 아(바사자는 위에 있다) · 지역명 17곳(서울…세종)의 한글.
-EXTRA = "하허호아서울부산대인천광전경기강원충북남제세종"
+#   대여 하허호 · 사업용 아자(바사는 위에 있다) · 지역명 17곳(서울…세종)의 한글.
+#   새 글자는 끝에 붙인다. 앞 글자의 셀이 안 움직여 아틀라스 나머지 픽셀이 그대로다.
+EXTRA = "하허호아서울부산대인천광전경기강원충북남제세종자"
 GLYPHS = DIGITS + HANGUL + "".join(ch for ch in EXTRA if ch not in HANGUL)
 
 CELL = 256          # 아틀라스 셀 한 변(px). 런타임 렌더타깃 높이와 같게 두어 1:1 로 블릿한다.

@@ -131,6 +131,45 @@ namespace ParkAgent
 	/** 폴리라인 위 거리 S 의 위치·진행 방향(단위). */
 	PARK3D_API void PoseAt(const TArray<FVector2D>& Pts, const TArray<double>& Cum, double S, FVector2D& OutPos, FVector2D& OutDir);
 
+	// ---- 부드러운 꺾기 ----
+
+	/** 종류별 꺾기 값. */
+	struct FTurnParams
+	{
+		double RadiusM = 0.6;        // 모서리 호 반경(자리가 없으면 줄인다)
+		double LatAccel = 2.5;       // 호에서 허용하는 가로 가속(m/s²) — 호 안 속도 = sqrt(가속 × 반경)
+		double MinCornerMps = 0.4;   // 아무리 급해도 이 속도까지는 낸다
+		double YawRateDeg = 240.0;   // 몸 방향 회전 상한(°/s)
+	};
+	PARK3D_API FTurnParams TurnParamsOf(EKind K);
+
+	/** 이번 틱에 몸 방향을 돌릴 수 있는 각도(°). 사람은 제자리에서도 돌고, 이동수단은 구르는 만큼만 돈다(서 있으면 0). */
+	PARK3D_API double MaxYawStepDeg(EKind K, double SpeedMps, double Dt);
+
+	/** 거의 겹친 점과 거의 곧은 점을 없앤다. 첫·끝 점은 그대로. */
+	PARK3D_API void SimplifyPath(TArray<FVector2D>& Pts);
+
+	/** 둥글린 조각을 받아들일까. Rounded = 호를 넣은 조각, Raw = 같은 구간의 원래 점. */
+	using FPieceCheck = TFunctionRef<bool(const TArray<FVector2D>& Rounded, const TArray<FVector2D>& Raw)>;
+
+	/**
+	 * 꺾이는 점마다 접원호를 넣는다. 첫·끝 점은 그대로이고, 호는 앞뒤 변의 절반까지만(첫·끝 변은 전부) 쓴다.
+	 * Accept 가 그 모서리 조각을 거절하면 반경을 ×0.75·0.5·0.35·0.2 로 줄이고, 다 거절하면 꺾인 점을 그대로 둔다(OutSharp).
+	 */
+	PARK3D_API void RoundPath(TArray<FVector2D>& Pts, double RadiusM, FPieceCheck Accept, TArray<FVector2D>& OutSharp);
+
+	/**
+	 * 현재 방향에서 호를 돌아 Next 를 바라보게 되는 점들. OutArc[0] = Start, 마지막 = 호가 끝나는 곳.
+	 * 방향이 5° 안으로 맞으면 호가 필요 없어 true + 점 1개. 호를 넣을 자리가 없으면 false.
+	 */
+	PARK3D_API bool LeadInArc(const FVector2D& Start, double YawDeg, const FVector2D& Next, double RadiusM, FPieceCheck Accept, TArray<FVector2D>& OutArc);
+
+	/** 점마다 지날 수 있는 속도(곡률 기준, 곧은 곳·끝 점은 DBL_MAX). Pts 와 개수가 같다. */
+	PARK3D_API void CornerSpeedLimits(const TArray<FVector2D>& Pts, const FTurnParams& Tp, TArray<double>& Out);
+
+	/** Speed 를 앞쪽 모서리에 맞춰 Decel 로 줄여 들어갈 수 있는 속도로 낮춘다. */
+	PARK3D_API double CornerLimitedSpeed(const TArray<double>& Cum, const TArray<double>& Limits, double DistM, double Decel, double Speed);
+
 	/**
 	 * 경로 검사 — 몸체 원(Footprint)을 경로를 따라 0.1 m 마다 놓아 본다.
 	 * Clear(벽 거리장) < 반지름이면 벽, 서 있는 차 상자와 반지름 + CarMargin 안이면 차. 처음 걸린 곳을 돌려준다.

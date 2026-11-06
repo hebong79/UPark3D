@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "ParkAgentNav.h"
+#include "ParkLaneGraph.h"
 
 namespace ParkAgent
 {
@@ -422,6 +423,141 @@ namespace ParkAgent
 		OutPos = FMath::Lerp(Pts[Seg], Pts[Seg + 1], T);
 		const FVector2D D = Pts[Seg + 1] - Pts[Seg];
 		OutDir = D.SizeSquared() > 1e-12 ? D.GetSafeNormal() : FVector2D(1, 0);
+	}
+
+	FTurnParams TurnParamsOf(EKind K)
+	{
+		FTurnParams P;
+		if (K == EKind::Bicycle) { P.RadiusM = 2.0; P.LatAccel = 2.0; P.MinCornerMps = 0.6; P.YawRateDeg = 120.0; }
+		else if (K == EKind::Motorcycle) { P.RadiusM = 2.5; P.LatAccel = 2.0; P.MinCornerMps = 0.6; P.YawRateDeg = 100.0; }
+		return P;
+	}
+
+	double MaxYawStepDeg(EKind K, double SpeedMps, double Dt)
+	{
+		const double Cap = TurnParamsOf(K).YawRateDeg;
+		if (K == EKind::Pedestrian) { return Cap * Dt; }
+		constexpr double TightestRadiusM = 0.4;   // 호를 가장 줄였을 때의 자전거 반경
+		return FMath::Min(Cap, FMath::RadiansToDegrees(SpeedMps / TightestRadiusM)) * Dt;
+	}
+
+	void SimplifyPath(TArray<FVector2D>& Pts)
+	{
+		if (Pts.Num() < 3) { return; }
+		TArray<FVector2D> Out = { Pts[0] };
+		const double Straight = FMath::Cos(FMath::DegreesToRadians(0.5));
+		for (int32 i = 1; i < Pts.Num() - 1; ++i)
+		{
+			const FVector2D A = Pts[i] - Out.Last(), B = Pts[i + 1] - Pts[i];
+			if (A.Size() < 0.05) { continue; }
+			if (B.Size() > 1e-6 && FVector2D::DotProduct(A.GetSafeNormal(), B.GetSafeNormal()) > Straight) { continue; }
+			Out.Add(Pts[i]);
+		}
+		// 끝 점은 움직이지 않는다 — 마지막 중간 점이 끝 점에 붙어 있으면 그 중간 점을 뺀다.
+		if (Out.Num() > 1 && FVector2D::Distance(Out.Last(), Pts.Last()) < 0.05) { Out.Pop(); }
+		Out.Add(Pts.Last());
+		Pts = MoveTemp(Out);
+	}
+
+	void RoundPath(TArray<FVector2D>& Pts, double RadiusM, FPieceCheck Accept, TArray<FVector2D>& OutSharp)
+	{
+		SimplifyPath(Pts);
+		const int32 N = Pts.Num();
+		if (N < 3) { return; }
+		TArray<FVector2D> Out = { Pts[0] };
+		for (int32 i = 1; i < N - 1; ++i)
+		{
+			const FVector2D In = i == 1 ? Pts[0] : (Pts[i - 1] + Pts[i]) * 0.5;
+			const FVector2D Exit = i == N - 2 ? Pts[N - 1] : (Pts[i] + Pts[i + 1]) * 0.5;
+			const TArray<FVector2D> Raw = { In, Pts[i], Exit };
+			TArray<FVector2D> Piece;
+			bool bDone = false;
+			for (const double Scale : { 1.0, 0.75, 0.5, 0.35, 0.2 })
+			{
+				const double R = RadiusM * Scale;
+				Piece = Raw;
+				ParkLane::Fillet(Piece, R, FMath::Clamp(R * 0.12, 0.05, 0.25));   // 호 한 칸 약 7°
+				if (Accept(Piece, Raw)) { bDone = true; break; }
+			}
+			if (!bDone)
+			{
+				Piece = Raw;
+				OutSharp.Add(Pts[i]);
+			}
+			for (int32 k = 1; k < Piece.Num(); ++k) { Out.Add(Piece[k]); }
+		}
+		SimplifyPath(Out);   // Fillet 이 곧은 구간에 찍은 점을 없앤다
+		Pts = MoveTemp(Out);
+	}
+
+	bool LeadInArc(const FVector2D& Start, double YawDeg, const FVector2D& Next, double RadiusM, FPieceCheck Accept, TArray<FVector2D>& OutArc)
+	{
+		OutArc = { Start };
+		const FVector2D ToNext = Next - Start;
+		if (ToNext.Size() < 1e-3) { return true; }
+		const double YawRad = FMath::DegreesToRadians(YawDeg);
+		const FVector2D Head(FMath::Cos(YawRad), FMath::Sin(YawRad));
+		if (FVector2D::DotProduct(Head, ToNext.GetSafeNormal()) > FMath::Cos(FMath::DegreesToRadians(5.0))) { return true; }
+		const double Side = FVector2D::CrossProduct(Head, ToNext) >= 0.0 ? 1.0 : -1.0;
+		const double StepRad = FMath::DegreesToRadians(6.0) * Side;
+		for (const double Scale : { 1.0, 0.75, 0.5, 0.35 })
+		{
+			const double R = RadiusM * Scale;
+			const FVector2D Center = Start + FVector2D(-Head.Y, Head.X) * (R * Side);
+			if (FVector2D::Distance(Center, Next) <= R * 1.05) { continue; }   // 목표가 원 안이면 이 반경으로 못 바라본다
+			TArray<FVector2D> Arc = { Start };
+			const FVector2D Spoke = Start - Center;
+			double Yaw = YawRad;
+			double Swept = 0.0;
+			for (int32 k = 1; k <= 60; ++k)
+			{
+				Swept += StepRad;
+				Yaw = YawRad + Swept;
+				const FVector2D P = Center + Spoke.GetRotated(FMath::RadiansToDegrees(Swept));
+				Arc.Add(P);
+				if (FVector2D::CrossProduct(FVector2D(FMath::Cos(Yaw), FMath::Sin(Yaw)), Next - P) * Side <= 0.0) { break; }
+			}
+			TArray<FVector2D> Piece = Arc;
+			Piece.Add(Next);
+			if (Accept(Piece, { Start, Next }))
+			{
+				OutArc = MoveTemp(Arc);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	void CornerSpeedLimits(const TArray<FVector2D>& Pts, const FTurnParams& Tp, TArray<double>& Out)
+	{
+		Out.Init(DBL_MAX, Pts.Num());
+		for (int32 i = 1; i + 1 < Pts.Num(); ++i)
+		{
+			const FVector2D A = Pts[i] - Pts[i - 1], B = Pts[i + 1] - Pts[i];
+			const double Short = FMath::Min(A.Size(), B.Size());
+			if (Short < 1e-6) { continue; }
+			const double Turn = FMath::Acos(FMath::Clamp(FVector2D::DotProduct(A.GetSafeNormal(), B.GetSafeNormal()), -1.0, 1.0));
+			if (Turn < FMath::DegreesToRadians(0.5)) { continue; }
+			// 호의 한 칸은 7° 안팎이다. 25° 가 넘으면 호를 못 넣은 꺾인 점이라 길이로 곡률을 잴 수 없다.
+			Out[i] = Turn > FMath::DegreesToRadians(25.0)
+				? Tp.MinCornerMps
+				: FMath::Max(Tp.MinCornerMps, FMath::Sqrt(Tp.LatAccel * Short / Turn));
+		}
+	}
+
+	double CornerLimitedSpeed(const TArray<double>& Cum, const TArray<double>& Limits, double DistM, double Decel, double Speed)
+	{
+		double Out = Speed;
+		const double Reach = Speed * Speed / (2.0 * Decel);
+		for (int32 k = 0; k < Limits.Num() && k < Cum.Num(); ++k)
+		{
+			const double D = Cum[k] - DistM;
+			if (D < 0.0) { continue; }
+			if (D > Reach) { break; }
+			if (Limits[k] < Out) { Out = FMath::Min(Out, FMath::Sqrt(Limits[k] * Limits[k] + 2.0 * Decel * D)); }
+		}
+		// 지금 호 안이면 지나온 점의 제한도 그대로다(다음 점과 같아 위에서 잡힌다).
+		return Out;
 	}
 
 	int32 CheckPath(const FAgentGrid& G, const TArray<float>& WallClear, const TArray<FCarBox>& Parked, const FFootprint& Fp,

@@ -4,6 +4,7 @@
 //   이동: 경로 점(path) 또는 목적지(to). to 는 사람 = 보행 격자 A*, 이동수단 = 통로 그래프(sim.lanes 규칙) → 안 되면 격자 A*.
 //   벽·서 있는 차는 계획·검사에서 피하고, 움직이는 차는 매 틱 2초 앞을 예측해 서서 기다린다(waiting → 오래면 blocked).
 //   탑승 중이면 이동수단만 움직이고 사람은 좌석에 붙어 따라간다.
+//   끄는 중(pushing)이면 자전거만 움직이고 사람은 자전거 왼쪽에 서서 걷는다. 경로는 사람처럼 보행 격자로 찾는다.
 
 #pragma once
 
@@ -18,6 +19,7 @@ class AParkAgentActor;
 class ACarActor;
 class FJsonObject;
 class FJsonValue;
+namespace CaptureTruth { struct FProjector; }
 
 enum class EParkAgentState : uint8
 {
@@ -36,6 +38,7 @@ struct FParkAgentMove
 	FString Source;               // "path" | "to"
 	TArray<FVector2D> Pts;        // 첫 점 = 출발 위치
 	TArray<double> Cum;
+	TArray<double> LimitMps;      // 점마다 지날 수 있는 속도(모서리 감속). Pts 와 개수가 같다
 	double DistM = 0.0;
 	double CruiseMps = 1.3;
 	bool bAvoid = true;
@@ -56,6 +59,10 @@ struct FParkAgent
 	FParkAgentOutfit Outfit;
 	/** 탑승 상대(사람이면 이동수단 id, 이동수단이면 사람 id). 빈 값 = 혼자. */
 	FString RidingWith;
+	/** 끄는 상대(사람이면 자전거 id, 자전거면 사람 id). 빈 값 = 안 끈다. RidingWith 와 동시에 값이 있지 않다. */
+	FString PushingWith;
+	/** 끌기: 사람이 자전거 오른쪽(로컬 +Y)에 선다. false = 왼쪽. 사람·자전거 둘 다 같은 값. */
+	bool bPushRight = false;
 	FVector2D Pos = FVector2D::ZeroVector;   // UE m(지면)
 	double Z = 0.0;                          // 지면 높이(m)
 	double YawDeg = 0.0;                     // 진행 방위(UE yaw, 0 = +X)
@@ -85,7 +92,7 @@ struct FParkAgentPose
 struct FParkAgentRelation
 {
 	FString RelationId;
-	FString Type = TEXT("riding");
+	FString Type = TEXT("riding");   // riding | pushing
 	FString FromId;                // 사람
 	FString ToId;                  // 이동수단
 	double ValidFromMs = 0.0;
@@ -109,8 +116,8 @@ public:
 
 	static AParkAgentManager* Find(UWorld* World);
 	static AParkAgentManager* GetOrSpawn(UWorld* World);
-	/** 매니저가 없으면 빈 배열(truth 의 agents[] — agent.list 와 같은 항목). */
-	static TArray<TSharedPtr<FJsonValue>> ListJsonOf(UWorld* World);
+	/** truth 의 agents[] — agent.list 항목 + bboxAmodal(이 투영으로 본 화면 상자, 안 보이면 null). 매니저가 없으면 빈 배열. */
+	static TArray<TSharedPtr<FJsonValue>> TruthJsonOf(UWorld* World, const CaptureTruth::FProjector& Projector);
 
 	/** 오토바이 번호판 더미 문자열(상황복구 D-1). 실제 번호 추첨은 쓰지 않는다. */
 	static constexpr const TCHAR* DummyPlate = TEXT("00가0000");
@@ -118,18 +125,23 @@ public:
 	int32 Num() const { return Agents.Num(); }
 
 	/**
-	 * 만든다. 이동수단 + bRider 면 사람 1 + 이동수단 1 + 관계(riding) 1.
+	 * 만든다. 이동수단 + bRider 면 사람 1 + 이동수단 1 + 관계(riding) 1. 자전거 + bPusher 면 관계가 pushing 이고 bRider 는 보지 않는다.
 	 * @param OutIds 만든 id(이동수단 먼저, 다음 사람).
 	 * @param Outfit 사람의 옷(걷는 사람 또는 탑승자). nullptr 이면 새 seed 로 뽑는다.
 	 * @param bAllowOverlap 벽·보도·차와 겹쳐도 만든다. 높이는 그 자리 바닥(건물 지붕에 올라서지 않는다).
 	 */
 	bool Create(ParkAgent::EKind Kind, const FVector2D& PosM, double YawDeg, bool bRider, const FString& Model, const FString& RiderModel,
-		TArray<FString>& OutIds, FString& OutError, const FParkAgentOutfit* Outfit = nullptr, bool bAllowOverlap = false);
+		TArray<FString>& OutIds, FString& OutError, const FParkAgentOutfit* Outfit = nullptr, bool bAllowOverlap = false, bool bPusher = false, bool bPushRight = false);
+
+	/** 이미 있는 사람·자전거를 잇는다. 사람을 자전거 옆으로 옮기고(검사 없음) 둘의 이동을 끝낸다. 둘 중 하나라도 관계가 있으면 false. */
+	bool StartPush(const FString& PersonId, const FString& BicycleId, bool bPushRight, FString& OutError, bool& bOutNotFound);
+	/** 끌기만 끝낸다. Id 는 사람·자전거 어느 쪽이든. 둘 다 그 자리에 서고 사람은 선 자세가 된다. */
+	bool ReleasePush(const FString& Id, FString& OutError, bool& bOutNotFound);
 
 	/**
 	 * 검사·회피 없이 그 자세로 바로 옮긴다. 돌던 이동은 끝난다(endReason setPose).
-	 * 탑승 중인 탈것을 옮기면 탄 사람이 함께 간다.
-	 * 탄 사람 id 나 이동수단의 Activity 가 하나라도 있으면 아무것도 옮기지 않고 false.
+	 * 탑승 중인 탈것을 옮기면 탄 사람이, 끄는 자전거를 옮기면 끄는 사람이 함께 간다.
+	 * 탄·끄는 사람 id 나 이동수단의 Activity 가 하나라도 있으면 아무것도 옮기지 않고 false.
 	 * 없는 id 는 그 항목만 건너뛰어 OutNotFound 에 넣는다.
 	 */
 	bool SetPoses(const TArray<FParkAgentPose>& Items, int32& OutApplied, TArray<FString>& OutNotFound, FString& OutError);
@@ -177,6 +189,10 @@ private:
 
 	void SpawnActorFor(FParkAgent& A);
 	void AttachRider(FParkAgent& Rider, FParkAgent& Vehicle);
+	/** 끌기 관계를 만들고(bAddRelation) 겉모습을 잇는다. 스냅샷 복원은 관계가 이미 있어 false. */
+	void LinkPush(FParkAgent& Person, FParkAgent& Bicycle, bool bAddRelation);
+	/** 끄는 사람의 자리·방향·속도·상태를 자전거에 맞춘다. */
+	void SyncPusher(FParkAgent& Person, const FParkAgent& Bicycle, bool bForce, float Dt = 0.f);
 	/** 위치·방위만 갱신해 액터를 놓고, 탑승자는 좌석 자세. */
 	void SyncActor(FParkAgent& A);
 	double GroundZAt(const FVector2D& P, double Fallback);
@@ -191,6 +207,8 @@ private:
 	void UpdateCarVelocities(float Dt);
 
 	bool PlanTo(const FParkAgent& A, const FVector2D& Goal, TArray<FVector2D>& OutPts, TSharedPtr<FJsonObject>& OutLane, TArray<FString>& Notes, FString& OutError);
+	/** 검사를 통과한 경로의 모서리를 호로 바꾼다. 호도 벽·서 있는 차를 검사하고, 자리가 없으면 반경을 줄인다. */
+	void SmoothRoute(const FParkAgent& A, TArray<FVector2D>& Pts, TArray<FString>& Notes);
 
 	TArray<FParkAgent> Agents;
 	TArray<FParkAgentRelation> Relations;

@@ -712,7 +712,7 @@ UStaticMeshComponent* AParkAgentActor::AddShape(const TCHAR* Shape, const FVecto
 	return Comp;
 }
 
-UInstancedStaticMeshComponent* AParkAgentActor::AddShapeSet(const TCHAR* Shape, const FLinearColor& Color)
+UInstancedStaticMeshComponent* AParkAgentActor::AddShapeSet(const TCHAR* Shape, const FLinearColor& Color, float Roughness)
 {
 	UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, Shape);
 	if (!Mesh)
@@ -727,6 +727,7 @@ UInstancedStaticMeshComponent* AParkAgentActor::AddShapeSet(const TCHAR* Shape, 
 	{
 		UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Base, Comp);
 		Mid->SetVectorParameterValue(TEXT("Color"), Color);
+		if (Roughness >= 0.f) { Mid->SetScalarParameterValue(TEXT("Roughness"), Roughness); }
 		Comp->SetMaterial(0, Mid);
 	}
 	Comp->RegisterComponent();
@@ -744,12 +745,15 @@ void AParkAgentActor::BuildSpokedBicycle(bool bCity, uint32 Hash)
 	const FLinearColor FrameColor = bCity ? CityFrames[Hash % UE_ARRAY_COUNT(CityFrames)] : SportFrames[Hash % UE_ARRAY_COUNT(SportFrames)];
 
 	UInstancedStaticMeshComponent* Frame = AddShapeSet(GApCube, FrameColor);
-	UInstancedStaticMeshComponent* Rubber = AddShapeSet(GApCube, FLinearColor(0.015f, 0.015f, 0.015f));
-	// 어두운 금속색. 0.62 는 화면에서 하얗게 보였다. 아스팔트(화면 선형값 약 0.10)와 같아지면 바퀴살이 사라지므로 그보다 밝게 둔다.
-	UInstancedStaticMeshComponent* Metal = AddShapeSet(GApCube, FLinearColor(0.20f, 0.20f, 0.22f));
-	UInstancedStaticMeshComponent* Dark = AddShapeSet(GApCube, FLinearColor(0.08f, 0.08f, 0.09f));
-	UInstancedStaticMeshComponent* Hubs = AddShapeSet(GApCylinder, FLinearColor(0.12f, 0.12f, 0.13f));
-	if (!Frame || !Rubber || !Metal || !Dark || !Hubs)
+	// 금속 부품은 무광. 납작한 상자 면이 태양을 받으면 앞쪽에서 은색으로 번쩍인다(옆에서는 어두워 보였다).
+	constexpr float Matte = 1.f;
+	UInstancedStaticMeshComponent* Rubber = AddShapeSet(GApCube, FLinearColor(0.015f, 0.015f, 0.015f), Matte);
+	// 림·바퀴살만 조금 밝게 둔다. 아스팔트(화면 선형값 약 0.10)와 같아지면 바퀴살이 바닥에 묻힌다.
+	UInstancedStaticMeshComponent* Spoke = AddShapeSet(GApCube, FLinearColor(0.16f, 0.16f, 0.17f), Matte);
+	UInstancedStaticMeshComponent* Metal = AddShapeSet(GApCube, FLinearColor(0.06f, 0.06f, 0.065f), Matte);
+	UInstancedStaticMeshComponent* Dark = AddShapeSet(GApCube, FLinearColor(0.08f, 0.08f, 0.09f), Matte);
+	UInstancedStaticMeshComponent* Hubs = AddShapeSet(GApCylinder, FLinearColor(0.12f, 0.12f, 0.13f), Matte);
+	if (!Frame || !Rubber || !Spoke || !Metal || !Dark || !Hubs)
 	{
 		return;
 	}
@@ -779,14 +783,14 @@ void AParkAgentActor::BuildSpokedBicycle(bool bCity, uint32 Hash)
 	for (const FVector& Axle : { RearAxle, FrontAxle })
 	{
 		Arc(Rubber, Axle, R - 1.6, 0.0, 360.0, 40, 3.2, 3.6);   // 타이어
-		Arc(Metal, Axle, R - 4.4, 0.0, 360.0, 40, 2.0, 2.2);    // 림
+		Arc(Spoke, Axle, R - 4.4, 0.0, 360.0, 40, 2.0, 2.2);    // 림
 		constexpr int32 Spokes = 18;
 		for (int32 s = 0; s < Spokes; ++s)
 		{
 			const double A = 2.0 * PI * s / Spokes;
 			const FVector Dir(FMath::Cos(A), 0.0, FMath::Sin(A));
 			const double Flange = (s % 2 == 0) ? 2.0 : -2.0; // 허브 양쪽 플랜지에서 림 가운데로 — 앞에서 보면 살이 V 자로 벌어진다
-			Bar(Metal, Axle + Dir * 3.0 + FVector(0.0, Flange, 0.0), Axle + Dir * (R - 5.4), 0.9);
+			Bar(Spoke, Axle + Dir * 3.0 + FVector(0.0, Flange, 0.0), Axle + Dir * (R - 5.4), 0.9);
 		}
 		Hubs->AddInstance(FTransform(FRotator(0.0, 0.0, 90.0), Axle, FVector(0.06, 0.06, 0.11)));
 	}

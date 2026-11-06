@@ -62,6 +62,20 @@ namespace CaptureTruth
 		return true;
 	}
 
+	FProjector MakeProjector(const APTZCameraActor* Cam, int32 W, int32 H)
+	{
+		const FTransform CamXf = Cam->Capture->GetComponentTransform();
+		FProjector Pj;
+		Pj.C = CamXf.GetLocation();
+		Pj.Fwd = CamXf.GetUnitAxis(EAxis::X);
+		Pj.Right = CamXf.GetUnitAxis(EAxis::Y);
+		Pj.Up = CamXf.GetUnitAxis(EAxis::Z);
+		Pj.W = W; Pj.H = H;
+		Pj.F = (W * 0.5) / FMath::Tan(FMath::DegreesToRadians(Cam->Capture->FOVAngle * 0.5));
+		Pj.K1 = Cam->GetLensK1(); Pj.K2 = Cam->GetLensK2();
+		return Pj;
+	}
+
 	void BuildDepthIndexMap(const FProjector& Out, int32 Dw, int32 Dh, double DepthTan, TArray<int32>& OutMap)
 	{
 		OutMap.SetNumUninitialized(Out.W * Out.H);
@@ -91,17 +105,9 @@ namespace CaptureTruth
 		}
 
 		// ---- 투영 모델(출력 그림) ----
-		const FTransform CamXf = Cam->Capture->GetComponentTransform();
-		FProjector Pj;
-		Pj.C = CamXf.GetLocation();
-		Pj.Fwd = CamXf.GetUnitAxis(EAxis::X);
-		Pj.Right = CamXf.GetUnitAxis(EAxis::Y);
-		Pj.Up = CamXf.GetUnitAxis(EAxis::Z);
-		Pj.W = W; Pj.H = H;
+		const FProjector Pj = MakeProjector(Cam, W, H);
 		const double HFov = Cam->Capture->FOVAngle;
 		const double OutTan = FMath::Tan(FMath::DegreesToRadians(HFov * 0.5));
-		Pj.F = (W * 0.5) / OutTan;
-		Pj.K1 = Cam->GetLensK1(); Pj.K2 = Cam->GetLensK2();
 		const bool bDistorted = !CamLens::IsPinhole(Pj.K1, Pj.K2);
 
 		// ---- 깊이 공간(핀홀이면 출력과 같은 격자) ----

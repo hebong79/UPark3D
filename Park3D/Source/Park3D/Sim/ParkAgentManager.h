@@ -38,6 +38,7 @@ struct FParkAgentMove
 	FString Source;               // "path" | "to"
 	TArray<FVector2D> Pts;        // 첫 점 = 출발 위치
 	TArray<double> Cum;
+	TArray<double> LimitMps;      // 점마다 지날 수 있는 속도(모서리 감속). Pts 와 개수가 같다
 	double DistM = 0.0;
 	double CruiseMps = 1.3;
 	bool bAvoid = true;
@@ -60,6 +61,8 @@ struct FParkAgent
 	FString RidingWith;
 	/** 끄는 상대(사람이면 자전거 id, 자전거면 사람 id). 빈 값 = 안 끈다. RidingWith 와 동시에 값이 있지 않다. */
 	FString PushingWith;
+	/** 끌기: 사람이 자전거 오른쪽(로컬 +Y)에 선다. false = 왼쪽. 사람·자전거 둘 다 같은 값. */
+	bool bPushRight = false;
 	FVector2D Pos = FVector2D::ZeroVector;   // UE m(지면)
 	double Z = 0.0;                          // 지면 높이(m)
 	double YawDeg = 0.0;                     // 진행 방위(UE yaw, 0 = +X)
@@ -128,10 +131,10 @@ public:
 	 * @param bAllowOverlap 벽·보도·차와 겹쳐도 만든다. 높이는 그 자리 바닥(건물 지붕에 올라서지 않는다).
 	 */
 	bool Create(ParkAgent::EKind Kind, const FVector2D& PosM, double YawDeg, bool bRider, const FString& Model, const FString& RiderModel,
-		TArray<FString>& OutIds, FString& OutError, const FParkAgentOutfit* Outfit = nullptr, bool bAllowOverlap = false, bool bPusher = false);
+		TArray<FString>& OutIds, FString& OutError, const FParkAgentOutfit* Outfit = nullptr, bool bAllowOverlap = false, bool bPusher = false, bool bPushRight = false);
 
 	/** 이미 있는 사람·자전거를 잇는다. 사람을 자전거 옆으로 옮기고(검사 없음) 둘의 이동을 끝낸다. 둘 중 하나라도 관계가 있으면 false. */
-	bool StartPush(const FString& PersonId, const FString& BicycleId, FString& OutError, bool& bOutNotFound);
+	bool StartPush(const FString& PersonId, const FString& BicycleId, bool bPushRight, FString& OutError, bool& bOutNotFound);
 	/** 끌기만 끝낸다. Id 는 사람·자전거 어느 쪽이든. 둘 다 그 자리에 서고 사람은 선 자세가 된다. */
 	bool ReleasePush(const FString& Id, FString& OutError, bool& bOutNotFound);
 
@@ -204,6 +207,8 @@ private:
 	void UpdateCarVelocities(float Dt);
 
 	bool PlanTo(const FParkAgent& A, const FVector2D& Goal, TArray<FVector2D>& OutPts, TSharedPtr<FJsonObject>& OutLane, TArray<FString>& Notes, FString& OutError);
+	/** 검사를 통과한 경로의 모서리를 호로 바꾼다. 호도 벽·서 있는 차를 검사하고, 자리가 없으면 반경을 줄인다. */
+	void SmoothRoute(const FParkAgent& A, TArray<FVector2D>& Pts, TArray<FString>& Notes);
 
 	TArray<FParkAgent> Agents;
 	TArray<FParkAgentRelation> Relations;

@@ -8,6 +8,19 @@
 
 namespace
 {
+	/** pushSide: 없으면 왼쪽. "left"|"right" 밖이면 bad_params. */
+	bool AgParsePushSide(const TSharedPtr<FJsonObject>& P, bool& bOutRight, FRpcError& E)
+	{
+		const FString Side = RpcParam::GetString(P, TEXT("pushSide"), TEXT("left"));
+		if (Side != TEXT("left") && Side != TEXT("right"))
+		{
+			E.FailDomain(FString::Printf(TEXT("pushSide 는 left 또는 right 입니다: %s"), *Side), ERpcErrorKind::BadParams);
+			return false;
+		}
+		bOutRight = Side == TEXT("right");
+		return true;
+	}
+
 	/** {x,y} 객체 → 점. */
 	bool AgPoint(const TSharedPtr<FJsonValue>& V, FVector2D& Out)
 	{
@@ -87,6 +100,16 @@ void FAgentRpcModule::Register(URpcDispatcher& Dispatcher)
 			E.FailDomain(FString::Printf(TEXT("pusher 는 bicycle 만 씁니다: %s"), *KindS), ERpcErrorKind::BadParams);
 			return nullptr;
 		}
+		bool bPushRight = false;
+		if (P.IsValid() && P->HasField(TEXT("pushSide")))
+		{
+			if (!bPusher)
+			{
+				E.FailDomain(TEXT("pushSide 는 pusher 와 함께 씁니다"), ERpcErrorKind::BadParams);
+				return nullptr;
+			}
+			if (!AgParsePushSide(P, bPushRight, E)) { return nullptr; }
+		}
 		const bool bRider = !bPusher && RpcParam::GetBool(P, TEXT("rider"), true);
 		const FString Model = RpcParam::GetString(P, TEXT("model"));
 		const FString RiderModel = RpcParam::GetString(P, TEXT("riderModel"));
@@ -115,7 +138,7 @@ void FAgentRpcModule::Register(URpcDispatcher& Dispatcher)
 		if (!Mgr) { E.FailDomain(TEXT("월드 없음(맵 미로드)"), ERpcErrorKind::Busy); return nullptr; }
 		TArray<FString> Ids;
 		FString Err;
-		if (!Mgr->Create(Kind, FVector2D(X, Y), Yaw, bRider, Model, RiderModel, Ids, Err, bPerson ? &Outfit : nullptr, bAllowOverlap, bPusher))
+		if (!Mgr->Create(Kind, FVector2D(X, Y), Yaw, bRider, Model, RiderModel, Ids, Err, bPerson ? &Outfit : nullptr, bAllowOverlap, bPusher, bPushRight))
 		{
 			E.FailDomain(Err, ERpcErrorKind::BadParams);
 			return nullptr;
@@ -134,17 +157,19 @@ void FAgentRpcModule::Register(URpcDispatcher& Dispatcher)
 		return RpcDto::MakeObject(O);
 	});
 	Dispatcher.SetMethodMeta(TEXT("agent.create"), { true, false,
-		TEXT("{kind:\"pedestrian\"|\"bicycle\"|\"motorcycle\", pos{x,y} (UE m), yaw?=0, rider?=true, pusher?=false, model?, riderModel?, outfit?, outfitSeed?, riderOutfit?, riderOutfitSeed?, allowOverlap?=false}"),
+		TEXT("{kind:\"pedestrian\"|\"bicycle\"|\"motorcycle\", pos{x,y} (UE m), yaw?=0, rider?=true, pusher?=false, pushSide?=\"left\", model?, riderModel?, outfit?, outfitSeed?, riderOutfit?, riderOutfitSeed?, allowOverlap?=false}"),
 		TEXT("사람·자전거·오토바이 생성. 이동수단 + rider 면 사람·이동수단 각자 id + riding 관계, 자전거 + pusher 면 pushing 관계. {ids, agents, relations, changed}") });
 
 	Dispatcher.Register(TEXT("agent.push"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
 		FString PersonId, BicycleId;
 		if (!RpcParam::RequireString(P, TEXT("person"), PersonId, E) || !RpcParam::RequireString(P, TEXT("bicycle"), BicycleId, E)) return nullptr;
+		bool bPushRight = false;
+		if (!AgParsePushSide(P, bPushRight, E)) { return nullptr; }
 		AParkAgentManager* Mgr = AParkAgentManager::Find(GetWorldPtr());
 		FString Err = FString::Printf(TEXT("에이전트 없음: %s"), *PersonId);
 		bool bNotFound = true;
-		if (!Mgr || !Mgr->StartPush(PersonId, BicycleId, Err, bNotFound))
+		if (!Mgr || !Mgr->StartPush(PersonId, BicycleId, bPushRight, Err, bNotFound))
 		{
 			E.FailDomain(Err, bNotFound ? ERpcErrorKind::NotFound : ERpcErrorKind::BadParams);
 			return nullptr;
@@ -156,8 +181,8 @@ void FAgentRpcModule::Register(URpcDispatcher& Dispatcher)
 		O->SetNumberField(TEXT("changed"), 2);
 		return RpcDto::MakeObject(O);
 	});
-	Dispatcher.SetMethodMeta(TEXT("agent.push"), { true, false, TEXT("{person, bicycle}"),
-		TEXT("이미 있는 사람이 자전거를 끌기 시작한다. 사람은 자전거 왼쪽으로 옮겨 가고(검사 없음) 둘의 이동은 끝난다. {agents, relations, changed}") });
+	Dispatcher.SetMethodMeta(TEXT("agent.push"), { true, false, TEXT("{person, bicycle, pushSide?=\"left\"}"),
+		TEXT("이미 있는 사람이 자전거를 끌기 시작한다. 사람은 pushSide 쪽으로 옮겨 가고(검사 없음) 둘의 이동은 끝난다. {agents, relations, changed}") });
 
 	Dispatcher.Register(TEXT("agent.release"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
@@ -383,7 +408,7 @@ void FAgentRpcModule::Register(URpcDispatcher& Dispatcher)
 		return RpcDto::MakeObject(O);
 	});
 	Dispatcher.SetMethodMeta(TEXT("agent.list"), { false, false, TEXT("{kind?, ids?:[str]}"),
-		TEXT("{count, agents[{id, objectType, model, pos, directionDeg, speedMps, motionType, activityType?, outfit?, gripGapCm?, pedalGapCm?, pushOffsetM?, state, moveId?, remainingM?, waitingFor?, endReason?, ridingWith, pushingWith, relationId?, plate?, plateVisible?}], timeMs, frameId}") });
+		TEXT("{count, agents[{id, objectType, model, pos, directionDeg, speedMps, motionType, activityType?, outfit?, gripGapCm?, pedalGapCm?, pushSide?, pushOffsetM?, state, moveId?, remainingM?, waitingFor?, endReason?, ridingWith, pushingWith, relationId?, plate?, plateVisible?}], timeMs, frameId}") });
 
 	Dispatcher.Register(TEXT("agent.relations"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{

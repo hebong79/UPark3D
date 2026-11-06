@@ -30,10 +30,10 @@ namespace
 
 	constexpr double GAmRideCarMargin = 0.2;      // path 검사: 서 있는 차와 몸체 사이 최소 거리(m)
 	constexpr double GAmPlanCarMargin = 0.3;      // to 계획: 벽·차와 남길 여유(m)
-	constexpr double GAmYawRateDeg[3] = { 360.0, 150.0, 150.0 };
 	constexpr double GAmPushDefaultMps = 1.3;     // 끄는 걸음 기본 속도
 	constexpr double GAmPushMaxMps = 2.0;         // 끄는 걸음 상한(agent.move). 렌더러의 탑승 판정 2.2 m/s 와 가까우니 바꾸면 알린다
 	constexpr double GAmPushRadiusM = 0.70;       // 끄는 쌍의 몸 반폭: 왼쪽 간격 0.40 + 사람 반경 0.30
+	constexpr double GAmArcWallMargin = 0.1;      // 호가 벽과 남길 여유(m). 차와는 GAmRideCarMargin
 
 	FVector2D AmDir(double YawDeg)
 	{
@@ -53,13 +53,29 @@ namespace
 
 	FFootprint AmFootprint(const FParkAgent& A) { return A.PushingWith.IsEmpty() ? FootprintOf(A.Kind) : AmPushFootprint(); }
 
-	/** 자전거 원점 → 끄는 사람 원점(m). 왼쪽 = -오른쪽 벡터. */
+	/** 끄는 쌍은 자전거보다 좁게 돈다(걸음 속도라 사람 쪽 호도 무리 없다). */
+	FTurnParams AmTurnParams(const FParkAgent& A)
+	{
+		FTurnParams P = TurnParamsOf(A.Kind);
+		if (!A.PushingWith.IsEmpty() && IsVehicle(A.Kind))
+		{
+			P.RadiusM = 1.2;
+			P.LatAccel = 1.5;
+			P.MinCornerMps = 0.4;
+		}
+		return P;
+	}
+
+	/** 왼쪽 음수, 오른쪽 양수(자전거 로컬 Y). */
+	double AmPushSide(const FParkAgent& A) { return A.bPushRight ? AParkAgentActor::PushSideM : -AParkAgentActor::PushSideM; }
+
+	/** 자전거 원점 → 끄는 사람 원점(m). */
 	FVector2D AmPushOffset(const FParkAgent& Bicycle)
 	{
 		const AParkAgentActor* Act = Bicycle.Actor.Get();
 		const FVector2D Fwd = AmDir(Bicycle.YawDeg);
 		const FVector2D Right(-Fwd.Y, Fwd.X);
-		return Fwd * (Act ? Act->GetPushAlongM() : 0.0) - Right * AParkAgentActor::PushSideM;
+		return Fwd * (Act ? Act->GetPushAlongM() : 0.0) + Right * AmPushSide(Bicycle);
 	}
 
 	TSharedPtr<FJsonObject> AmVec(double X, double Y, double Z)
@@ -651,7 +667,7 @@ void AParkAgentManager::LinkPush(FParkAgent& Person, FParkAgent& Bicycle, bool b
 		Relations.Add(Rel);
 	}
 	SyncPusher(Person, Bicycle, true);   // 손 자리를 잡기 전에 사람을 먼저 옆에 세운다
-	if (AParkAgentActor* PA = Person.Actor.Get()) { PA->SetPushVehicle(Bicycle.Actor.Get()); }
+	if (AParkAgentActor* PA = Person.Actor.Get()) { PA->SetPushVehicle(Bicycle.Actor.Get(), Bicycle.bPushRight); }
 }
 
 void AParkAgentManager::SyncPusher(FParkAgent& Person, const FParkAgent& Bicycle, bool bForce)
@@ -683,7 +699,7 @@ void AParkAgentManager::SyncActor(FParkAgent& A)
 }
 
 bool AParkAgentManager::Create(EKind Kind, const FVector2D& PosM, double YawDeg, bool bRider, const FString& Model, const FString& RiderModel,
-	TArray<FString>& OutIds, FString& OutError, const FParkAgentOutfit* Outfit, bool bAllowOverlap, bool bPusher)
+	TArray<FString>& OutIds, FString& OutError, const FParkAgentOutfit* Outfit, bool bAllowOverlap, bool bPusher, bool bPushRight)
 {
 	UWorld* World = GetWorld();
 	if (!World) { OutError = TEXT("월드 없음"); return false; }
@@ -738,6 +754,8 @@ bool AParkAgentManager::Create(EKind Kind, const FVector2D& PosM, double YawDeg,
 	if (bPusher)
 	{
 		const int32 Pi = Make(EKind::Pedestrian, RiderModel);
+		Agents[Pi].bPushRight = bPushRight;
+		Agents[First].bPushRight = bPushRight;
 		LinkPush(Agents[Pi], Agents[First], true);
 	}
 	else if (IsVehicle(Kind) && bRider)
@@ -851,6 +869,63 @@ bool AParkAgentManager::PlanTo(const FParkAgent& A, const FVector2D& Goal, TArra
 	return false;
 }
 
+void AParkAgentManager::SmoothRoute(const FParkAgent& A, TArray<FVector2D>& Pts, TArray<FString>& Notes)
+{
+	if (Pts.Num() < 2) { return; }
+	const FTurnParams Tp = AmTurnParams(A);
+	const FFootprint Fp = AmFootprint(A);
+	const FAgentGrid* G = GetGrid();
+	TArray<float> Clear;
+	TArray<FCarBox> Moving, Parked;
+	if (G)
+	{
+		ClearanceField(*G, AmNavKind(A), nullptr, Clear);
+		CollectCarBoxes(Moving, Parked);
+	}
+	// 호는 몸 반경에 벽 0.1 m·차 0.2 m 를 더 남긴다. 원래 경로가 이미 그보다 좁은 길이면 몸만 닿지 않게(원래 경로의 검사와 같은 기준) 본다.
+	FFootprint Wide = Fp;
+	Wide.Radius += GAmArcWallMargin;
+	int32 NumWide = 0, NumTight = 0;
+	const auto Accept = [&](const TArray<FVector2D>& Rounded, const TArray<FVector2D>& Raw)
+	{
+		if (!G) { return true; }
+		const auto Clears = [&](const TArray<FVector2D>& Piece, const FFootprint& Body, double CarMargin)
+		{
+			FVector2D At; FString Who;
+			const int32 Hit = CheckPath(*G, Clear, Parked, Body, Piece, CarMargin, At, Who);
+			return Hit == 0 || Hit == 3;
+		};
+		const double WideCar = GAmRideCarMargin - GAmArcWallMargin;
+		if (Clears(Rounded, Wide, WideCar)) { ++NumWide; return true; }
+		if (Clears(Raw, Wide, WideCar) || !Clears(Rounded, Fp, GAmRideCarMargin)) { return false; }
+		++NumTight;
+		return true;
+	};
+
+	// 이동수단은 지금 방향에서 호로 빠져나오고, 사람은 걷던 중일 때만 그렇게 한다(서 있으면 제자리에서 돈다).
+	TArray<FVector2D> Arc = { Pts[0] };
+	SimplifyPath(Pts);
+	if (IsVehicle(A.Kind) || A.SpeedMps > 0.3)
+	{
+		if (!LeadInArc(Pts[0], A.YawDeg, Pts[1], Tp.RadiusM, Accept, Arc))
+		{
+			Arc = { Pts[0] };
+			Notes.Add(FString::Printf(TEXT("출발 자리 (%.2f, %.2f) 에 호를 넣을 자리가 없어 천천히 돌며 출발합니다"), Pts[0].X, Pts[0].Y));
+		}
+	}
+	TArray<FVector2D> Rest = { Arc.Last() };
+	Rest.Append(Pts.GetData() + 1, Pts.Num() - 1);
+	TArray<FVector2D> Sharp;
+	RoundPath(Rest, Tp.RadiusM, Accept, Sharp);
+	for (const FVector2D& S : Sharp)
+	{
+		Notes.Add(FString::Printf(TEXT("모서리 (%.2f, %.2f) 에 호를 넣을 자리가 없어 천천히 꺾어 갑니다"), S.X, S.Y));
+	}
+	Pts = MoveTemp(Arc);
+	Pts.Append(Rest.GetData() + 1, Rest.Num() - 1);
+	UE_LOG(LogTemp, Log, TEXT("[Agent] 호 %s: 여유 통과 %d, 좁은 길 기준 통과 %d, 꺾인 점 %d"), *A.Id, NumWide, NumTight, Sharp.Num());
+}
+
 bool AParkAgentManager::StartMove(const FString& Id, const TArray<FVector2D>* Path, const FVector2D* To, double Speed, bool bAvoid, double BlockAfterSec,
 	TSharedPtr<FJsonObject>& OutInfo, FString& OutError, bool& bOutBadParams)
 {
@@ -908,6 +983,8 @@ bool AParkAgentManager::StartMove(const FString& Id, const TArray<FVector2D>* Pa
 		return false;
 	}
 
+	SmoothRoute(*M, Pts, Notes);
+
 	FParkAgentMove& Mv = M->Move;
 	if (Mv.bActive) { Mv.EndReason = TEXT("replaced"); }
 	FParkAgentMove New;
@@ -915,6 +992,7 @@ bool AParkAgentManager::StartMove(const FString& Id, const TArray<FVector2D>* Pa
 	New.Source = Path ? TEXT("path") : TEXT("to");
 	New.Pts = Pts;
 	CumLengths(New.Pts, New.Cum);
+	CornerSpeedLimits(New.Pts, AmTurnParams(*M), New.LimitMps);
 	New.CruiseMps = Speed;
 	New.bAvoid = bAvoid;
 	New.BlockAfterSec = BlockAfterSec;
@@ -1034,7 +1112,7 @@ bool AParkAgentManager::SetPoses(const TArray<FParkAgentPose>& Items, int32& Out
 	return true;
 }
 
-bool AParkAgentManager::StartPush(const FString& PersonId, const FString& BicycleId, FString& OutError, bool& bOutNotFound)
+bool AParkAgentManager::StartPush(const FString& PersonId, const FString& BicycleId, bool bPushRight, FString& OutError, bool& bOutNotFound)
 {
 	bOutNotFound = false;
 	FParkAgent* Person = FindAgent(PersonId);
@@ -1070,6 +1148,8 @@ bool AParkAgentManager::StartPush(const FString& PersonId, const FString& Bicycl
 		A->SpeedMps = 0.0;
 		if (A->State == EParkAgentState::Moving || A->State == EParkAgentState::Waiting) { A->State = EParkAgentState::Stopped; }
 	}
+	Person->bPushRight = bPushRight;
+	Bicycle->bPushRight = bPushRight;
 	LinkPush(*Person, *Bicycle, true);
 	UE_LOG(LogTemp, Log, TEXT("[Agent] 끌기 시작 %s → %s"), *Person->Id, *Bicycle->Id);
 	return true;
@@ -1096,6 +1176,8 @@ bool AParkAgentManager::ReleasePush(const FString& Id, FString& OutError, bool& 
 	EndRelation(Person.Id, Bicycle.Id);
 	Person.PushingWith.Reset();
 	Bicycle.PushingWith.Reset();
+	Person.bPushRight = false;
+	Bicycle.bPushRight = false;
 	if (Bicycle.Move.bActive)
 	{
 		Bicycle.Move.bActive = false;
@@ -1108,7 +1190,7 @@ bool AParkAgentManager::ReleasePush(const FString& Id, FString& OutError, bool& 
 		X->SpeedMps = 0.0;
 		if (X->State == EParkAgentState::Moving || X->State == EParkAgentState::Waiting) { X->State = EParkAgentState::Stopped; }
 	}
-	if (AParkAgentActor* PA = Person.Actor.Get()) { PA->SetPushVehicle(nullptr); }
+	if (AParkAgentActor* PA = Person.Actor.Get()) { PA->SetPushVehicle(nullptr, false); }
 	SyncActor(Person);
 	SyncActor(Bicycle);
 	UE_LOG(LogTemp, Log, TEXT("[Agent] 끌기 끝 %s, %s"), *Person.Id, *Bicycle.Id);
@@ -1154,6 +1236,7 @@ int32 AParkAgentManager::Delete(const TArray<FString>& Ids, bool bAll, TArray<FS
 				const bool bIsPerson = A->Kind == EKind::Pedestrian;
 				EndRelation(bIsPerson ? A->Id : Other->Id, bIsPerson ? Other->Id : A->Id);
 				Other->PushingWith.Reset();
+				Other->bPushRight = false;
 				// 남은 쪽은 그 자리에 선다.
 				if (Other->Move.bActive)
 				{
@@ -1165,7 +1248,7 @@ int32 AParkAgentManager::Delete(const TArray<FString>& Ids, bool bAll, TArray<FS
 				Other->State = bIsPerson ? EParkAgentState::Stopped : EParkAgentState::Idle;
 				if (!bIsPerson)
 				{
-					if (AParkAgentActor* PA = Other->Actor.Get()) { PA->SetPushVehicle(nullptr); }
+					if (AParkAgentActor* PA = Other->Actor.Get()) { PA->SetPushVehicle(nullptr, false); }
 				}
 				SyncActor(*Other);
 			}
@@ -1229,6 +1312,14 @@ void AParkAgentManager::Advance(float Dt)
 		const FFootprint Fp = AmFootprint(A);
 		const EKind BrakeKind = AmNavKind(A);   // 끄는 자전거는 걷는 사람처럼 서고 출발한다
 		double Target = FMath::Min(M.CruiseMps, FMath::Sqrt(2.0 * DecelOf(BrakeKind) * Remaining));
+		Target = CornerLimitedSpeed(M.Cum, M.LimitMps, M.DistM, DecelOf(BrakeKind), Target);
+		{
+			// 몸 방향이 진행 방향과 크게 다르면(호를 못 넣은 자리) 맞출 때까지 천천히 간다.
+			FVector2D Here, HereDir;
+			PoseAt(M.Pts, M.Cum, M.DistM, Here, HereDir);
+			const double Off = FMath::Abs(FRotator::NormalizeAxis(FMath::RadiansToDegrees(FMath::Atan2(HereDir.Y, HereDir.X)) - A.YawDeg));
+			if (Off > 45.0) { Target = FMath::Min(Target, AmTurnParams(A).MinCornerMps); }
+		}
 		if (Remaining > 0.01) { Target = FMath::Max(Target, 0.15); }
 
 		bool bConflict = false;
@@ -1287,8 +1378,16 @@ void AParkAgentManager::Advance(float Dt)
 		FVector2D Pos, Dir;
 		PoseAt(M.Pts, M.Cum, M.DistM, Pos, Dir);
 		A.Pos = Pos;
+		if (!A.PushingWith.IsEmpty())
+		{
+			// 호는 짧은 직선 조각이라 조각 방향을 그대로 쓰면 자전거 방향이 계단으로 돌고, 호 안쪽 사람이 앞뒤로 튄다(칸당 31°). 앞뒤 0.15 m 로 잰 접선을 쓴다.
+			FVector2D Back, Ahead, Unused;
+			PoseAt(M.Pts, M.Cum, FMath::Max(0.0, M.DistM - 0.15), Back, Unused);
+			PoseAt(M.Pts, M.Cum, FMath::Min(Total, M.DistM + 0.15), Ahead, Unused);
+			if (FVector2D::DistSquared(Back, Ahead) > 1e-4) { Dir = (Ahead - Back).GetSafeNormal(); }
+		}
 		const double Want = FMath::RadiansToDegrees(FMath::Atan2(Dir.Y, Dir.X));
-		const double Step = GAmYawRateDeg[static_cast<int32>(A.Kind)] * Dt;
+		const double Step = MaxYawStepDeg(A.Kind, A.SpeedMps, Dt);
 		A.YawDeg = FRotator::NormalizeAxis(A.YawDeg + FMath::Clamp(FRotator::NormalizeAxis(Want - A.YawDeg), -Step, Step));
 		A.Z = GroundZAt(A.Pos, A.Z);
 		if (M.DistM >= Total - 1e-4)
@@ -1377,9 +1476,10 @@ TArray<TSharedPtr<FJsonValue>> AParkAgentManager::ListJson(const EKind* KindFilt
 			{
 				const AParkAgentActor* BikeAct = Pushed->Actor.Get();
 				TSharedPtr<FJsonObject> Off = MakeShared<FJsonObject>();
-				Off->SetNumberField(TEXT("side"), AParkAgentActor::PushSideM);
+				Off->SetNumberField(TEXT("side"), AmPushSide(A));
 				Off->SetNumberField(TEXT("along"), BikeAct ? BikeAct->GetPushAlongM() : 0.0);
 				O->SetObjectField(TEXT("pushOffsetM"), Off);
+				O->SetStringField(TEXT("pushSide"), A.bPushRight ? TEXT("right") : TEXT("left"));
 			}
 		}
 		O->SetStringField(TEXT("state"), StateName(A.State));

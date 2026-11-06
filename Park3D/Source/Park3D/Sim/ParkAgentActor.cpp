@@ -279,7 +279,7 @@ bool AParkAgentActor::GetPedalGapCm(double& OutLeft, double& OutRight) const
 	return true;
 }
 
-void AParkAgentActor::SetPushVehicle(const AParkAgentActor* Vehicle)
+void AParkAgentActor::SetPushVehicle(const AParkAgentActor* Vehicle, bool bRightSide)
 {
 	if (Kind != ParkAgent::EKind::Pedestrian || !Body || !RideBody)
 	{
@@ -287,6 +287,7 @@ void AParkAgentActor::SetPushVehicle(const AParkAgentActor* Vehicle)
 	}
 	const bool bPush = Vehicle != nullptr;
 	PushVehicle = Vehicle;
+	bPushRightSide = bRightSide;
 	SetActorTickEnabled(bPush);
 	// 숨긴 Body 도 뼈를 계속 계산해야 복사할 자세가 나온다.
 	Body->VisibilityBasedAnimTickOption = bPush ? EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones : EVisibilityBasedAnimTickOption::AlwaysTickPose;
@@ -321,9 +322,14 @@ void AParkAgentActor::ApplyPushPose()
 	// 자전거의 실제 자리에서 손 자리를 잡는다 — 간격(GripGap*Cm)이 끄는 자리·팔 길이가 틀리면 드러난다.
 	const FTransform VehicleT = V->GetActorTransform();
 	const FTransform MeshT = RideBody->GetComponentTransform();
-	const FVector Left(V->GripCm.X, -V->GripCm.Y, V->GripCm.Z);
-	SolveBarHands(MeshT.InverseTransformPosition(VehicleT.TransformPosition(Left)),
-		MeshT.InverseTransformPosition(VehicleT.TransformPosition(V->PushRightCm)), 3.0, PushLeanDeg, GApPushCurlFingers);
+	// 왼쪽에서 끌면 왼손 = 왼쪽 손잡이·오른손 = 핸들 가운데 쪽, 오른쪽에서 끌면 좌우가 반대다.
+	const double Sign = bPushRightSide ? 1.0 : -1.0;
+	const FVector Near(V->GripCm.X, Sign * V->GripCm.Y, V->GripCm.Z);
+	const FVector Mid(V->PushMidCm.X, -Sign * V->PushMidCm.Y, V->PushMidCm.Z);
+	const FVector LeftHand = bPushRightSide ? Mid : Near;
+	const FVector RightHand = bPushRightSide ? Near : Mid;
+	SolveBarHands(MeshT.InverseTransformPosition(VehicleT.TransformPosition(LeftHand)),
+		MeshT.InverseTransformPosition(VehicleT.TransformPosition(RightHand)), 3.0, PushLeanDeg, GApPushCurlFingers);
 	RideBody->RefreshBoneTransforms();
 }
 
@@ -910,7 +916,7 @@ void AParkAgentActor::SetupBicycle(const FString& Model, uint32 Hash, FString& O
 		SeatCm = FVector(-14.0, 0.0, 88.5);
 		// 고무 손잡이 가운데(BuildSpokedBicycle 의 핸들 좌표).
 		GripCm = Pick == TEXT("city") ? FVector(24.0, 28.0, 101.0) : FVector(40.0, 26.0, 97.0);
-		PushRightCm = Pick == TEXT("city") ? FVector(36.0, 6.0, 100.0) : FVector(40.0, 6.0, 97.0);
+		PushMidCm = Pick == TEXT("city") ? FVector(36.0, 6.0, 100.0) : FVector(40.0, 6.0, 97.0);
 		PushAlongCm = Pick == TEXT("city") ? 15.0 : 25.0;
 		return;
 	}
@@ -943,7 +949,7 @@ void AParkAgentActor::SetupBicycle(const FString& Model, uint32 Hash, FString& O
 	AddShape(GApCube, Bb, FRotator::ZeroRotator, FVector(0.04, 0.34, 0.03), Black);                          // 크랭크·페달
 	SeatCm = FVector(-14.0, 0.0, 88.5);
 	GripCm = FVector(38.0, 24.0, 98.0);   // 핸들 막대(±28 cm)의 끝 쪽
-	PushRightCm = FVector(38.0, 6.0, 98.0);
+	PushMidCm = FVector(38.0, 6.0, 98.0);
 	PushAlongCm = 23.0;
 	// 크랭크·페달 막대(Bb, ±17 cm, 두께 3 cm)의 양 끝 윗면.
 	PedalLeftCm = Bb + FVector(0.0, -13.0, 1.5);

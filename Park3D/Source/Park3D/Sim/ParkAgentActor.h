@@ -54,11 +54,11 @@ public:
 	bool GetPedalGapCm(double& OutLeft, double& OutRight) const;
 
 	/**
-	 * 사람: 이 자전거를 끌기 시작한다(nullptr = 그만). 끄는 동안 숨긴 Body 가 걷기·서기를 돌리고,
+	 * 사람: 이 자전거를 끌기 시작한다(nullptr = 그만). bRightSide = 자전거 오른쪽에 선다. 끄는 동안 숨긴 Body 가 걷기·서기를 돌리고,
 	 * RideBody 가 매 틱 그 자세를 복사한 뒤 두 손을 핸들에 놓는다. 틱은 끄는 사람만 돈다.
 	 */
-	void SetPushVehicle(const AParkAgentActor* Vehicle);
-	/** 끄는 사람은 자전거 왼쪽(로컬 -Y) 이만큼에 선다(m, 모델 공통). */
+	void SetPushVehicle(const AParkAgentActor* Vehicle, bool bRightSide);
+	/** 끄는 사람은 자전거 옆 이만큼에 선다(m, 모델·좌우 공통). */
 	static constexpr double PushSideM = 0.40;
 	/** 자전거: 끄는 사람이 자전거 원점보다 앞에 설 거리(m, 모델별). 끌 수 없는 이동수단이면 0. */
 	double GetPushAlongM() const { return PushAlongCm / 100.0; }
@@ -119,12 +119,13 @@ private:
 	FVector PedalRightCm = FVector::ZeroVector;
 	/** 탑승자: 타고 있는 이동수단. */
 	TWeakObjectPtr<const AParkAgentActor> RideVehicle;
-	/** 자전거: 끄는 사람의 오른손 자리(액터 로컬 cm, 핸들 가운데 쪽). 왼손은 왼쪽 손잡이. */
-	FVector PushRightCm = FVector::ZeroVector;
+	/** 자전거: 끄는 사람의 먼 손 자리(액터 로컬 cm, 핸들 가운데 쪽, +Y 쪽 값). 왼쪽에서 끌면 오른손이 여기, 오른쪽에서 끌면 왼손이 Y 를 뒤집은 곳. 가까운 손은 그쪽 손잡이. */
+	FVector PushMidCm = FVector::ZeroVector;
 	double PushAlongCm = 0.0;
 	/** 끄는 사람: 끌고 있는 자전거와 처음 틱에 정한 숙임(음수 = 아직). */
 	TWeakObjectPtr<const AParkAgentActor> PushVehicle;
 	double PushLeanDeg = -1.0;
+	bool bPushRightSide = false;
 	bool bHasGripGap = false;
 	double GripGapLeftCm = 0.0;
 	double GripGapRightCm = 0.0;

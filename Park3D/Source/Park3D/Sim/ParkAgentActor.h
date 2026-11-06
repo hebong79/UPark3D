@@ -27,6 +27,8 @@ class PARK3D_API AParkAgentActor : public AActor
 public:
 	AParkAgentActor();
 
+	virtual void Tick(float DeltaSeconds) override;
+
 	/**
 	 * 종류·모델로 겉모습을 만든다(스폰 직후 1회). Model 이 비었거나 없는 이름이면 Hash 로 고른다.
 	 * @return 실제 쓴 모델 이름(목록·스냅샷에 남긴다).
@@ -51,6 +53,18 @@ public:
 	/** 탑승 자세의 발볼(ball 뼈)~페달 윗면 가운데 거리(cm, 월드에서 잰다). 페달이 없는 이동수단이면 false. */
 	bool GetPedalGapCm(double& OutLeft, double& OutRight) const;
 
+	/**
+	 * 사람: 이 자전거를 끌기 시작한다(nullptr = 그만). 끄는 동안 숨긴 Body 가 걷기·서기를 돌리고,
+	 * RideBody 가 매 틱 그 자세를 복사한 뒤 두 손을 핸들에 놓는다. 틱은 끄는 사람만 돈다.
+	 */
+	void SetPushVehicle(const AParkAgentActor* Vehicle);
+	/** 끄는 사람은 자전거 왼쪽(로컬 -Y) 이만큼에 선다(m, 모델 공통). */
+	static constexpr double PushSideM = 0.40;
+	/** 자전거: 끄는 사람이 자전거 원점보다 앞에 설 거리(m, 모델별). 끌 수 없는 이동수단이면 0. */
+	double GetPushAlongM() const { return PushAlongCm / 100.0; }
+	/** 화면 상자를 낼 월드 점들. 이동수단 = 부품 메시 상자 모서리, 사람 = 주요 뼈 + 여유(근사). */
+	void CollectBoxPoints(TArray<FVector>& OutPoints);
+
 	ParkAgent::EKind GetKind() const { return Kind; }
 
 	/** 고를 수 있는 모델 이름(종류별). */
@@ -70,8 +84,18 @@ private:
 	void ApplyRidePose();
 	/** 다리를 2관절 IK 로 풀어 발볼을 페달 위에 놓는다. 페달 좌표는 좌석 기준(cm), Left = 액터 -Y. */
 	void ApplyPedalPose(double MeshZOffsetCm, const FVector& PedalLeft, const FVector& PedalRight);
-	/** 상체를 필요한 만큼 숙이고 팔을 2관절 IK 로 풀어 손을 손잡이에 놓는다. */
+	/** 탑승: 양쪽 손잡이에 손을 놓는다. */
 	void ApplyGripPose(double MeshZOffsetCm);
+	/**
+	 * 상체를 필요한 만큼 숙이고 팔을 2관절 IK 로 풀어 손을 놓는다. RideBody 의 지금 자세에서 출발한다.
+	 * @param GripLeft,GripRight 손잡이 중심(메시 공간). 간격은 GripGap*Cm 에 남는다.
+	 * @param StartLeanDeg 숙임을 찾기 시작할 각도.
+	 * @param InOutLeanDeg 0 이상이면 찾지 않고 그 각도를 쓰고, 음수면 찾아서 돌려준다.
+	 * @param bCurl 손가락을 말아 쥔다.
+	 */
+	void SolveBarHands(const FVector& GripLeft, const FVector& GripRight, double StartLeanDeg, double& InOutLeanDeg, bool bCurl);
+	/** 끄는 동안 틱마다: 걷기 자세 복사 → 손을 핸들에. */
+	void ApplyPushPose();
 
 	UPROPERTY(Transient) TObjectPtr<USceneComponent> Root = nullptr;
 	UPROPERTY(Transient) TObjectPtr<USkeletalMeshComponent> Body = nullptr;
@@ -95,6 +119,12 @@ private:
 	FVector PedalRightCm = FVector::ZeroVector;
 	/** 탑승자: 타고 있는 이동수단. */
 	TWeakObjectPtr<const AParkAgentActor> RideVehicle;
+	/** 자전거: 끄는 사람의 오른손 자리(액터 로컬 cm, 핸들 가운데 쪽). 왼손은 왼쪽 손잡이. */
+	FVector PushRightCm = FVector::ZeroVector;
+	double PushAlongCm = 0.0;
+	/** 끄는 사람: 끌고 있는 자전거와 처음 틱에 정한 숙임(음수 = 아직). */
+	TWeakObjectPtr<const AParkAgentActor> PushVehicle;
+	double PushLeanDeg = -1.0;
 	bool bHasGripGap = false;
 	double GripGapLeftCm = 0.0;
 	double GripGapRightCm = 0.0;

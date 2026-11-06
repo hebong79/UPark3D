@@ -267,8 +267,8 @@ namespace
 			}
 			Truth->SetNumberField(TEXT("frameId"), static_cast<double>(FrameId));
 			Truth->SetNumberField(TEXT("timeMs"), CaptureTimeMs);
-			// 사람·자전거·오토바이 — agent.list 와 같은 항목(가시성·상자·마스크는 아직 없다).
-			Truth->SetArrayField(TEXT("agents"), AParkAgentManager::ListJsonOf(Cam->GetWorld()));
+			// 사람·자전거·오토바이 — agent.list 항목 + 가림을 무시한 화면 상자(가시율·마스크는 없다).
+			Truth->SetArrayField(TEXT("agents"), AParkAgentManager::TruthJsonOf(Cam->GetWorld(), CaptureTruth::MakeProjector(Cam, W, H)));
 		}
 
 		TArray<uint8> Bytes;

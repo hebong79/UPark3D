@@ -75,7 +75,19 @@ void FAgentRpcModule::Register(URpcDispatcher& Dispatcher)
 			return nullptr;
 		}
 		const double Yaw = RpcParam::GetFloat(P, TEXT("yaw"), 0.0);
-		const bool bRider = RpcParam::GetBool(P, TEXT("rider"), true);
+		const bool bPusher = RpcParam::GetBool(P, TEXT("pusher"), false);
+		const bool bRiderAsked = RpcParam::GetBool(P, TEXT("rider"), false);
+		if (bPusher && bRiderAsked)
+		{
+			E.FailDomain(TEXT("pusher 와 rider 는 함께 쓸 수 없습니다"), ERpcErrorKind::BadParams);
+			return nullptr;
+		}
+		if (bPusher && Kind != ParkAgent::EKind::Bicycle)
+		{
+			E.FailDomain(FString::Printf(TEXT("pusher 는 bicycle 만 씁니다: %s"), *KindS), ERpcErrorKind::BadParams);
+			return nullptr;
+		}
+		const bool bRider = !bPusher && RpcParam::GetBool(P, TEXT("rider"), true);
 		const FString Model = RpcParam::GetString(P, TEXT("model"));
 		const FString RiderModel = RpcParam::GetString(P, TEXT("riderModel"));
 		const bool bAllowOverlap = RpcParam::GetBool(P, TEXT("allowOverlap"), false);
@@ -83,7 +95,7 @@ void FAgentRpcModule::Register(URpcDispatcher& Dispatcher)
 		// 옷: 걷는 사람은 outfit·outfitSeed, 탑승자는 riderOutfit·riderOutfitSeed. 해당 없는 쪽은 읽지 않아 unknownParam 경고로 알린다.
 		const bool bVehicle = Kind != ParkAgent::EKind::Pedestrian;
 		FParkAgentOutfit Outfit;
-		const bool bPerson = !bVehicle || bRider;
+		const bool bPerson = !bVehicle || bRider || bPusher;
 		if (bPerson)
 		{
 			const TCHAR* ObjKey = bVehicle ? TEXT("riderOutfit") : TEXT("outfit");
@@ -103,7 +115,7 @@ void FAgentRpcModule::Register(URpcDispatcher& Dispatcher)
 		if (!Mgr) { E.FailDomain(TEXT("월드 없음(맵 미로드)"), ERpcErrorKind::Busy); return nullptr; }
 		TArray<FString> Ids;
 		FString Err;
-		if (!Mgr->Create(Kind, FVector2D(X, Y), Yaw, bRider, Model, RiderModel, Ids, Err, bPerson ? &Outfit : nullptr, bAllowOverlap))
+		if (!Mgr->Create(Kind, FVector2D(X, Y), Yaw, bRider, Model, RiderModel, Ids, Err, bPerson ? &Outfit : nullptr, bAllowOverlap, bPusher))
 		{
 			E.FailDomain(Err, ERpcErrorKind::BadParams);
 			return nullptr;
@@ -117,13 +129,56 @@ void FAgentRpcModule::Register(URpcDispatcher& Dispatcher)
 		// 없는 모델 이름은 id 로 고른 모델로 대신한다 — 조용히 넘기지 않고 고를 수 있는 이름을 알린다.
 		TArray<TSharedPtr<FJsonValue>> Fallback;
 		AgModelFallback(Kind, Model, Fallback);
-		if (bRider && Kind != ParkAgent::EKind::Pedestrian) { AgModelFallback(ParkAgent::EKind::Pedestrian, RiderModel, Fallback, TEXT("riderModel")); }
+		if ((bRider || bPusher) && Kind != ParkAgent::EKind::Pedestrian) { AgModelFallback(ParkAgent::EKind::Pedestrian, RiderModel, Fallback, TEXT("riderModel")); }
 		if (Fallback.Num() > 0) { O->SetArrayField(TEXT("modelFallback"), Fallback); }
 		return RpcDto::MakeObject(O);
 	});
 	Dispatcher.SetMethodMeta(TEXT("agent.create"), { true, false,
-		TEXT("{kind:\"pedestrian\"|\"bicycle\"|\"motorcycle\", pos{x,y} (UE m), yaw?=0, rider?=true, model?, riderModel?, outfit?, outfitSeed?, riderOutfit?, riderOutfitSeed?, allowOverlap?=false}"),
-		TEXT("사람·자전거·오토바이 생성. 이동수단 + rider 면 사람·이동수단 각자 id + riding 관계. {ids, agents, relations, changed}") });
+		TEXT("{kind:\"pedestrian\"|\"bicycle\"|\"motorcycle\", pos{x,y} (UE m), yaw?=0, rider?=true, pusher?=false, model?, riderModel?, outfit?, outfitSeed?, riderOutfit?, riderOutfitSeed?, allowOverlap?=false}"),
+		TEXT("사람·자전거·오토바이 생성. 이동수단 + rider 면 사람·이동수단 각자 id + riding 관계, 자전거 + pusher 면 pushing 관계. {ids, agents, relations, changed}") });
+
+	Dispatcher.Register(TEXT("agent.push"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		FString PersonId, BicycleId;
+		if (!RpcParam::RequireString(P, TEXT("person"), PersonId, E) || !RpcParam::RequireString(P, TEXT("bicycle"), BicycleId, E)) return nullptr;
+		AParkAgentManager* Mgr = AParkAgentManager::Find(GetWorldPtr());
+		FString Err = FString::Printf(TEXT("에이전트 없음: %s"), *PersonId);
+		bool bNotFound = true;
+		if (!Mgr || !Mgr->StartPush(PersonId, BicycleId, Err, bNotFound))
+		{
+			E.FailDomain(Err, bNotFound ? ERpcErrorKind::NotFound : ERpcErrorKind::BadParams);
+			return nullptr;
+		}
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetArrayField(TEXT("agents"), Mgr->ListJson(nullptr, { BicycleId, PersonId }));
+		O->SetArrayField(TEXT("relations"), Mgr->RelationsJson(PersonId));
+		O->SetNumberField(TEXT("changed"), 2);
+		return RpcDto::MakeObject(O);
+	});
+	Dispatcher.SetMethodMeta(TEXT("agent.push"), { true, false, TEXT("{person, bicycle}"),
+		TEXT("이미 있는 사람이 자전거를 끌기 시작한다. 사람은 자전거 왼쪽으로 옮겨 가고(검사 없음) 둘의 이동은 끝난다. {agents, relations, changed}") });
+
+	Dispatcher.Register(TEXT("agent.release"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
+	{
+		FString Id;
+		if (!RpcParam::RequireString(P, TEXT("id"), Id, E)) return nullptr;
+		AParkAgentManager* Mgr = AParkAgentManager::Find(GetWorldPtr());
+		FString Err = FString::Printf(TEXT("에이전트 없음: %s"), *Id);
+		bool bNotFound = true;
+		if (!Mgr || !Mgr->ReleasePush(Id, Err, bNotFound))
+		{
+			E.FailDomain(Err, bNotFound ? ERpcErrorKind::NotFound : ERpcErrorKind::BadParams);
+			return nullptr;
+		}
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetBoolField(TEXT("ok"), true);
+		O->SetArrayField(TEXT("relations"), Mgr->RelationsJson(Id));
+		O->SetNumberField(TEXT("changed"), 2);
+		return RpcDto::MakeObject(O);
+	});
+	Dispatcher.SetMethodMeta(TEXT("agent.release"), { true, false, TEXT("{id}"),
+		TEXT("끌기만 끝낸다(사람·자전거 어느 id 든). 둘 다 그 자리에 서고 사람은 선 자세가 된다. {relations, changed}") });
 
 	Dispatcher.Register(TEXT("agent.move"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
@@ -277,7 +332,7 @@ void FAgentRpcModule::Register(URpcDispatcher& Dispatcher)
 	});
 	Dispatcher.SetMethodMeta(TEXT("agent.setPose"), { true, false,
 		TEXT("{items:[{id, pos{x,y,z?} (UE m), yawDeg, speedMps?=0, activity?:\"walking\"|\"standing\"}]}"),
-		TEXT("검사·회피 없이 그 자세로 바로 옮긴다(여러 개 한 번에). 돌던 이동은 끝난다. speedMps 는 표시용으로 걷기 애니메이션 빠르기를 정한다. 탑승 중인 탈것을 옮기면 탄 사람이 함께 가고, 탄 사람 id 는 거절한다. {applied, changed, notFound}") });
+		TEXT("검사·회피 없이 그 자세로 바로 옮긴다(여러 개 한 번에). 돌던 이동은 끝난다. speedMps 는 표시용으로 걷기 애니메이션 빠르기를 정한다. 탑승 중인 탈것을 옮기면 탄 사람이, 끄는 자전거를 옮기면 끄는 사람이 함께 가고, 그 사람 id 는 거절한다. {applied, changed, notFound}") });
 
 	Dispatcher.Register(TEXT("agent.delete"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
@@ -301,7 +356,7 @@ void FAgentRpcModule::Register(URpcDispatcher& Dispatcher)
 		return RpcDto::MakeObject(O);
 	});
 	Dispatcher.SetMethodMeta(TEXT("agent.delete"), { true, true, TEXT("{id? | ids?:[str] | all?:true}"),
-		TEXT("삭제. 탑승 중인 이동수단을 지우면 사람은 오른쪽 0.8 m 에 내려 선다(관계 종료). 모르는 id 만 주면 not_found. {deleted, changed, notFound}") });
+		TEXT("삭제. 탑승 중인 이동수단을 지우면 사람은 오른쪽 0.8 m 에 내려 선다(관계 종료). 끌기 쌍은 남은 쪽이 그 자리에 선다. 모르는 id 만 주면 not_found. {deleted, changed, notFound}") });
 
 	Dispatcher.Register(TEXT("agent.list"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
@@ -328,7 +383,7 @@ void FAgentRpcModule::Register(URpcDispatcher& Dispatcher)
 		return RpcDto::MakeObject(O);
 	});
 	Dispatcher.SetMethodMeta(TEXT("agent.list"), { false, false, TEXT("{kind?, ids?:[str]}"),
-		TEXT("{count, agents[{id, objectType, model, pos, directionDeg, speedMps, motionType, activityType?, outfit?, gripGapCm?, pedalGapCm?, state, moveId?, remainingM?, waitingFor?, endReason?, ridingWith, relationId?, plate?, plateVisible?}], timeMs, frameId}") });
+		TEXT("{count, agents[{id, objectType, model, pos, directionDeg, speedMps, motionType, activityType?, outfit?, gripGapCm?, pedalGapCm?, pushOffsetM?, state, moveId?, remainingM?, waitingFor?, endReason?, ridingWith, pushingWith, relationId?, plate?, plateVisible?}], timeMs, frameId}") });
 
 	Dispatcher.Register(TEXT("agent.relations"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{
@@ -340,7 +395,7 @@ void FAgentRpcModule::Register(URpcDispatcher& Dispatcher)
 		return RpcDto::MakeObject(O);
 	});
 	Dispatcher.SetMethodMeta(TEXT("agent.relations"), { false, false, TEXT("{id?}"),
-		TEXT("{relations[{relationId, relationType:\"riding\", fromObjectId(사람), toObjectId(이동수단), validFromMs, validToMs|null, active}]}") });
+		TEXT("{relations[{relationId, relationType:\"riding\"|\"pushing\", fromObjectId(사람), toObjectId(이동수단), validFromMs, validToMs|null, active}]}") });
 
 	Dispatcher.Register(TEXT("agent.grid"), [this](const TSharedPtr<FJsonObject>& P, FRpcError& E) -> TSharedPtr<FJsonValue>
 	{

@@ -447,46 +447,56 @@ bool AParkingSimManager::ChooseAndPlan(UWorld* World, const FParkSimRequest& Req
 			continue;
 		}
 
-		for (int32 m = 0; m < Modes.Num(); ++m)
+		// 입차는 먼저 어느 방식이든 통로 전진 조건으로 찾는다 — 전면으로 왕복하느니 후면으로 한 번에 넣는다. 다 안 되면 조건을 푼다.
+		const bool bEnterDir = Req.Dir == EParkSimDir::Enter;
+		TArray<ParkSimLot::EHybridSteps> Steps;
+		if (bEnterDir) { Steps = { ParkSimLot::EHybridSteps::ForwardAisle, ParkSimLot::EHybridSteps::Relaxed }; }
+		else { Steps = { ParkSimLot::EHybridSteps::Both }; }
+		for (const ParkSimLot::EHybridSteps Step : Steps)
 		{
-			const bool bRear = Modes[m] == EParkSimParkMode::Rear;
-			FParkSimWorldPlan P;
-			if (Req.Dir == EParkSimDir::Enter)
+			const FString ForwardFail = Step == ParkSimLot::EHybridSteps::Relaxed ? LastFail : FString();
+			for (int32 m = 0; m < Modes.Num(); ++m)
 			{
-				P = ParkSimLot::PlanEnter(World, *S, bRear, NewDims, Out.Entrance, BusyCars);
-			}
-			else
-			{
-				// 빈 면에 새로 세워 내보낸다: 정형·사선은 방식대로(전면=코가 면 안쪽), 도로변은 출구 쪽을 보게.
-				FVector2D Fwd;
-				if (S->Type == ELotType::Parallel)
+				const bool bRear = Modes[m] == EParkSimParkMode::Rear;
+				FParkSimWorldPlan P;
+				if (bEnterDir)
 				{
-					Fwd = FVector2D::DotProduct(Out.Exit.Pos - S->Center, S->RowDir) >= 0.0 ? S->RowDir : -S->RowDir;
+					P = ParkSimLot::PlanEnter(World, *S, bRear, NewDims, Out.Entrance, BusyCars, Step);
 				}
 				else
 				{
-					const FVector2D In = S->Axis * (FVector2D::DotProduct(S->Axis, -S->AisleDir) >= 0.0 ? 1.0 : -1.0);
-					Fwd = bRear ? -In : In;
+					// 빈 면에 새로 세워 내보낸다: 정형·사선은 방식대로(전면=코가 면 안쪽), 도로변은 출구 쪽을 보게.
+					FVector2D Fwd;
+					if (S->Type == ELotType::Parallel)
+					{
+						Fwd = FVector2D::DotProduct(Out.Exit.Pos - S->Center, S->RowDir) >= 0.0 ? S->RowDir : -S->RowDir;
+					}
+					else
+					{
+						const FVector2D In = S->Axis * (FVector2D::DotProduct(S->Axis, -S->AisleDir) >= 0.0 ? 1.0 : -1.0);
+						Fwd = bRear ? -In : In;
+					}
+					P = ParkSimLot::PlanExit(World, *S, S->Center, FMath::Atan2(Fwd.Y, Fwd.X), NewDims, Out.Exit, BusyCars);
 				}
-				P = ParkSimLot::PlanExit(World, *S, S->Center, FMath::Atan2(Fwd.Y, Fwd.X), NewDims, Out.Exit, BusyCars);
-			}
-			if (!P.bOk)
-			{
-				LastFail = FString::Printf(TEXT("%d번 면 %s: %s"), S->Number, *ParkModeLabel(Modes[m]), *P.Note);
-				Out.Slot = *S;          // 실패해도 마지막 후보를 남긴다(sim.plan debug)
+				if (!P.bOk)
+				{
+					LastFail = FString::Printf(TEXT("%d번 면 %s: %s"), S->Number, *ParkModeLabel(Modes[m]), *P.Note);
+					Out.Slot = *S;          // 실패해도 마지막 후보를 남긴다(sim.plan debug)
+					Out.Plan = MoveTemp(P);
+					Out.Resolved = Modes[m];
+					continue;
+				}
+				if (m > 0)
+				{
+					Note = FString::Printf(TEXT("%s는 안전 간격이 모자라 %s로 바꿈"), *ParkModeLabel(Modes[0]), *ParkModeLabel(Modes[m]));
+				}
+				if (!ForwardFail.IsEmpty()) { P.Note += TEXT(" · 통로 전진 조건 실패: ") + ForwardFail; }
+				if (!Note.IsEmpty()) { P.Note = P.Note.IsEmpty() ? Note : Note + TEXT(" · ") + P.Note; }
+				Out.Slot = *S;
 				Out.Plan = MoveTemp(P);
 				Out.Resolved = Modes[m];
-				continue;
+				return true;
 			}
-			if (m > 0)
-			{
-				Note = FString::Printf(TEXT("%s는 안전 간격이 모자라 %s로 바꿈"), *ParkModeLabel(Modes[0]), *ParkModeLabel(Modes[m]));
-			}
-			if (!Note.IsEmpty()) { P.Note = P.Note.IsEmpty() ? Note : Note + TEXT(" · ") + P.Note; }
-			Out.Slot = *S;
-			Out.Plan = MoveTemp(P);
-			Out.Resolved = Modes[m];
-			return true;
 		}
 	}
 

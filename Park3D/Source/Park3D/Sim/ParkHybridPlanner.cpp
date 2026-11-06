@@ -228,6 +228,10 @@ namespace
 		double G = 0.0;
 		/** 탐색 시작부터 달린 거리(m). 처음 RelaxLen 안은 여유 기준을 낮춘다. */
 		double Dist = 0.0;
+		/** 지금 기어로 이어 달린 거리(m). */
+		double GearRun = 0.0;
+		/** 탐색 시작부터의 기어 전환 수. */
+		int32 GearChanges = 0;
 		int32 Parent = INDEX_NONE;
 		int8 Gs = 0;       // 탐색 공간 기어(+1/-1, 시작 0)
 		int8 Steer = 0;    // 곡률 단계 인덱스(-2..2)
@@ -575,14 +579,15 @@ FResult Search(const FMap& M, const FCarDims& Car, const FPose& From, const FPos
 
 	const int32 NX = FMath::CeilToInt(M.W * M.Cell / P.XYBin) + 2;
 	const int32 NY = FMath::CeilToInt(M.H * M.Cell / P.XYBin) + 2;
-	auto KeyOf = [&](const FPose& Q, int32 Gs) -> int64
+	// bRunDone: MinGearRunM 을 채워 기어를 바꿀 수 있는 상태. 칸이 같아도 갓 전환해 못 바꾸는 노드가 먼저 닫아 버리면 그 칸에서 영영 기어를 못 바꾼다.
+	auto KeyOf = [&](const FPose& Q, int32 Gs, bool bRunDone) -> int64
 	{
 		const int64 Ix = FMath::Clamp(FMath::FloorToInt((Q.X - M.Origin.X) / P.XYBin), 0, NX - 1);
 		const int64 Iy = FMath::Clamp(FMath::FloorToInt((Q.Y - M.Origin.Y) / P.XYBin), 0, NY - 1);
 		double Th = FMath::Fmod(Q.Th, UE_DOUBLE_TWO_PI);
 		if (Th < 0) { Th += UE_DOUBLE_TWO_PI; }
 		const int64 It = FMath::Clamp(FMath::FloorToInt(Th / UE_DOUBLE_TWO_PI * P.HeadingBins), 0, P.HeadingBins - 1);
-		return ((Ix * NY + Iy) * P.HeadingBins + It) * 2 + (Gs < 0 ? 1 : 0);
+		return ((Ix * NY + Iy) * P.HeadingBins + It) * 4 + (Gs < 0 ? 1 : 0) + (bRunDone ? 2 : 0);
 	};
 
 	TArray<FPhNode> Nodes;
@@ -602,11 +607,21 @@ FResult Search(const FMap& M, const FCarDims& Car, const FPose& From, const FPos
 
 	const double Ks[5] = { -P.KMax, -P.KMax * 0.5, 0.0, P.KMax * 0.5, P.KMax };
 	int32 Found = INDEX_NONE;
-	int32 RejHit = 0, RejFlow = 0, RejStall = 0;
+	int32 RejHit = 0, RejFlow = 0, RejStall = 0, RejGear = 0;
 	TArray<FSeg> Tail;   // Dubins(실제 순서)
 	const FPose GoalPose = Goal;
-	auto TryAnalytic = [&](const FPose& Q) -> bool
+	const FVector2D SlotCenter = CenterFromRearAxle(From, Car);
+	/** 지금 기어로 MinGearRunM 을 채웠고 상한도 남았으면 기어를 바꿀 수 있다. */
+	auto CanSwitchGear = [&](const FPhNode& N)
 	{
+		if (P.MinGearRunM > 0.0 && N.GearRun < P.MinGearRunM - 1e-6) { return false; }
+		return P.MaxGearChanges <= 0 || N.GearChanges < P.MaxGearChanges;
+	};
+	auto TryAnalytic = [&](const FPhNode& N) -> bool
+	{
+		const FPose& Q = N.Pose;
+		// 끝맺음은 실제 전진이다. 후진하던 노드에서 이으면 거기서 기어가 한 번 바뀐다.
+		if (N.Gs != 0 && (bTimeReversed ? -N.Gs : N.Gs) < 0 && !CanSwitchGear(N)) { return false; }
 		TArray<FSeg> D;
 		// 실제 전진만: 출차 = 노드 → 목표, 입차 = 목표(입구) → 노드.
 		const bool bOk = bTimeReversed ? DubinsPath(GoalPose, Q, Radius, D, 3.0, TransitLabel) : DubinsPath(Q, GoalPose, Radius, D, 3.0, TransitLabel);
@@ -624,7 +639,7 @@ FResult Search(const FMap& M, const FCarDims& Car, const FPose& From, const FPos
 		FOpen Top;
 		Open.HeapPop(Top, Less);
 		const FPhNode Cur = Nodes[Top.I];
-		const int64 CurKey = KeyOf(Cur.Pose, Cur.Gs);
+		const int64 CurKey = KeyOf(Cur.Pose, Cur.Gs, Cur.GearRun >= P.MinGearRunM - 1e-6);
 		if (Top.I != 0)
 		{
 			if (Closed.Contains(CurKey)) { continue; }
@@ -633,11 +648,13 @@ FResult Search(const FMap& M, const FCarDims& Car, const FPose& From, const FPos
 		if (++R.Expanded > P.MaxExpand) { break; }
 
 		const double H = HAt(Cur.Pose);
-		if (H < P.AnalyticRange && (H < 8.0 || R.Expanded % 3 == 0) && TryAnalytic(Cur.Pose)) { Found = Top.I; break; }
+		if (H < P.AnalyticRange && (H < 8.0 || R.Expanded % 3 == 0) && TryAnalytic(Cur)) { Found = Top.I; break; }
 
 		for (const int8 Gs : { int8(1), int8(-1) })
 		{
 			const int32 Ga = bTimeReversed ? -Gs : Gs;
+			const bool bSwitch = Cur.Gs != 0 && Cur.Gs != Gs;
+			if (bSwitch && !CanSwitchGear(Cur)) { ++RejGear; continue; }
 			for (int8 Si = -2; Si <= 2; ++Si)
 			{
 				FSeg S;
@@ -646,6 +663,8 @@ FResult Search(const FMap& M, const FCarDims& Car, const FPose& From, const FPos
 				double Cost = 0.0;
 				FPose Q = Cur.Pose;
 				bool bOk = true;
+				const double NewRun = bSwitch ? P.Step : Cur.GearRun + P.Step;
+				if (Ga < 0 && P.MaxReverseRunM > 0.0 && NewRun > P.MaxReverseRunM + 1e-6) { ++RejGear; continue; }
 				const bool bRelax = Cur.Dist < P.RelaxLen;
 				const bool bWrongRevOk = Cur.Dist < P.WrongWayRevLen;
 				constexpr int32 Sub = 2;
@@ -656,15 +675,16 @@ FResult Search(const FMap& M, const FCarDims& Car, const FPose& From, const FPos
 					double Slack;
 					if (!PhPoseOk(M, Cv, Q, bRelax ? WallRelax : P.WallMargin, bRelax ? CarRelax : P.CarMargin, Slack)) { ++RejHit; bOk = false; break; }
 					if (!PhFlowOk(M, Q, Ga, Ds, P, Car, Cost, bWrongRevOk)) { ++RejFlow; bOk = false; break; }
+					if (Ga < 0 && P.ReverseZoneM > 0.0 && FVector2D::Distance(CenterFromRearAxle(Q, Car), SlotCenter) > P.ReverseZoneM) { ++RejGear; bOk = false; break; }
 					if (!bRelax && PhWouldStall(M, Q, Ga, P, Car)) { ++RejStall; bOk = false; break; }
 					Cost += Ds * (Ga < 0 ? P.ReverseCost : 1.0);
 					if (Slack < P.ComfortClear) { Cost += Ds * P.ComfortCost * (P.ComfortClear - Slack) / P.ComfortClear; }
 				}
 				if (!bOk) { continue; }
-				if (Cur.Gs != 0 && Cur.Gs != Gs) { Cost += P.GearChangeCost; }
+				if (bSwitch) { Cost += P.GearChangeCost; }
 				if (Cur.Gs != 0) { Cost += P.SteerChangeCost * FMath::Abs(Si - Cur.Steer); }
 				const double Gn = Cur.G + Cost;
-				const int64 Key = KeyOf(Q, Gs);
+				const int64 Key = KeyOf(Q, Gs, NewRun >= P.MinGearRunM - 1e-6);
 				if (Closed.Contains(Key)) { continue; }
 				if (const double* Old = BestG.Find(Key); Old && *Old <= Gn) { continue; }
 				BestG.Add(Key, Gn);
@@ -672,6 +692,8 @@ FResult Search(const FMap& M, const FCarDims& Car, const FPose& From, const FPos
 				Nn.Pose = Q;
 				Nn.G = Gn;
 				Nn.Dist = Cur.Dist + P.Step;
+				Nn.GearRun = NewRun;
+				Nn.GearChanges = Cur.GearChanges + (bSwitch ? 1 : 0);
 				Nn.Parent = Top.I;
 				Nn.Gs = Gs;
 				Nn.Steer = Si;
@@ -687,8 +709,8 @@ FResult Search(const FMap& M, const FCarDims& Car, const FPose& From, const FPos
 		R.Why = R.Expanded > P.MaxExpand
 			? FString::Printf(TEXT("격자 탐색이 %d 상태를 넘도록 길을 찾지 못했습니다"), P.MaxExpand)
 			: TEXT("격자 탐색으로 갈 수 있는 길이 없습니다");
-		R.Why += FString::Printf(TEXT("(거절한 수: 벽·차 %d, 통로 규칙·회랑 %d, 정체 예상 %d · 면 둘레 기준 벽 %.2f / 차 %.2f m)"),
-			RejHit, RejFlow, RejStall, WallRelax, CarRelax);
+		R.Why += FString::Printf(TEXT("(거절한 수: 벽·차 %d, 통로 규칙·회랑 %d, 정체 예상 %d, 기어 제한 %d · 면 둘레 기준 벽 %.2f / 차 %.2f m)"),
+			RejHit, RejFlow, RejStall, RejGear, WallRelax, CarRelax);
 		return R;
 	}
 

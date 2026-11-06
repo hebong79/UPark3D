@@ -192,6 +192,63 @@ bool FParkHybridEnterTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// 통로 전진 전용 조건: 후진 위치·왕복 길이·전환 수 제한이 실제 경로에서 지켜지고, 조건을 못 지키면 찾지 않는다(마스터 신고 2026-11-06).
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FParkHybridForwardAisleTest, "Park3D.Lane.HybridForwardAisle",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::EngineFilter)
+
+bool FParkHybridForwardAisleTest::RunTest(const FString& Parameters)
+{
+	FPhtLot L = PhtMake(TEXT("ccw"));
+	if (!TestTrue(TEXT("지도"), L.M.IsValid())) { return false; }
+	ParkHybrid::FParams P;
+	P.KMax = 1.0 / (L.Car.MinRadius * 1.05);
+	P.ReverseZoneM = 10.0;
+	P.MinGearRunM = 1.5;
+	P.MaxGearChanges = 5;
+	P.MaxReverseRunM = 10.0;
+	P.GearChangeCost = 15.0;
+	const FVector2D SlotCenter(9.5, 15.75);
+
+	auto Check = [&](const TCHAR* Name, const ParkHybrid::FResult& R)
+	{
+		AddInfo(FString::Printf(TEXT("%s: ok=%d · %.0f ms · 전개 %d · 기어 전환 %d · %s"), Name, R.bOk, R.Ms, R.Expanded, R.GearChanges, *R.Why));
+		if (!TestTrue(FString::Printf(TEXT("%s 경로를 찾는다"), Name), R.bOk)) { return; }
+		TestTrue(FString::Printf(TEXT("%s 전환 상한"), Name), R.GearChanges <= P.MaxGearChanges);
+		FPose Q = R.Start;
+		double RunLen = 0.0, MaxRevDist = 0.0, ShortRun = DBL_MAX, MaxRevRun = 0.0;
+		int32 Gear = 0;
+		for (const FSeg& S : R.Segs)
+		{
+			if (Gear != 0 && S.Gear != Gear) { ShortRun = FMath::Min(ShortRun, RunLen); RunLen = 0.0; }
+			Gear = S.Gear;
+			RunLen += S.Len;
+			if (S.Gear < 0) { MaxRevRun = FMath::Max(MaxRevRun, RunLen); }
+			const int32 N = FMath::Max(1, FMath::CeilToInt(S.Len / 0.25));
+			for (int32 i = 0; i < N; ++i)
+			{
+				Q = Step(Q, S, S.Len / N);
+				if (S.Gear < 0) { MaxRevDist = FMath::Max(MaxRevDist, FVector2D::Distance(CenterFromRearAxle(Q, L.Car), SlotCenter)); }
+			}
+		}
+		AddInfo(FString::Printf(TEXT("%s: 면에서 가장 먼 후진 %.1f m · 가장 짧은 기어 구간 %.1f m"), Name, MaxRevDist, ShortRun == DBL_MAX ? 0.0 : ShortRun));
+		TestTrue(FString::Printf(TEXT("%s 후진은 면 앞에서만"), Name), MaxRevDist <= P.ReverseZoneM + 1e-6);
+		TestTrue(FString::Printf(TEXT("%s 왕복 최소 길이"), Name), ShortRun == DBL_MAX || ShortRun >= P.MinGearRunM - 1e-6);
+		TestTrue(FString::Printf(TEXT("%s 한 번 후진 길이"), Name), MaxRevRun <= P.MaxReverseRunM + 1e-6);
+	};
+
+	Check(TEXT("출차"), ParkHybrid::Search(L.M, L.Car, L.Parked, FPose{ 30.5, 12.0, -UE_DOUBLE_HALF_PI }, false, P, TEXT("t")));
+	Check(TEXT("후면 입차"), ParkHybrid::Search(L.M, L.Car, RearAxleFromCenter(SlotCenter, UE_DOUBLE_PI, L.Car), FPose{ 20.0, 3.5, UE_DOUBLE_PI }, true, P, TEXT("t")));
+
+	// 조건을 못 지키는 경우: 전면주차 면은 후진으로 빼야 하는데 후진 구역이 차체 중심보다 좁으면 경로가 없다.
+	ParkHybrid::FParams Tight = P;
+	Tight.ReverseZoneM = 0.1;
+	Tight.MaxExpand = 60000;
+	const ParkHybrid::FResult RT = ParkHybrid::Search(L.M, L.Car, L.Parked, FPose{ 30.5, 12.0, -UE_DOUBLE_HALF_PI }, false, Tight, TEXT("t"));
+	AddInfo(FString::Printf(TEXT("후진 구역 0.1 m: ok=%d · %s"), RT.bOk, *RT.Why));
+	TestFalse(TEXT("후진을 못 하면 전면주차 면에서 나오지 못한다"), RT.bOk);
+	return true;
+}
+
 // 도로변 면 주차 자세 옮기기 — 서신 16·17번 재현(pm-restore 2026-11-01, .125 일방 입차 17번 「들어갈 자리가 없음」).
 // 길이 5.14 m 면 두 칸을 중심 간격 5.0 m 로 겹쳐 그린 열(축 +Y, x 1.0..3.64), 왼쪽은 연석(벽), 17번 끝 너머 1.3 m 뒤에 벽.
 // 16번에는 이오닉9(5.10 m)가 17번 쪽으로 0.31 m 밀려 서 있다. 카니발(5.26 m)을 17번 가운데에 세우면 겹친다.

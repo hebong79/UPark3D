@@ -79,6 +79,9 @@ struct FParkSimWorldPlan
 
 namespace ParkSimLot
 {
+	/** 격자 탐색 단계. ForwardAisle = 통로는 전진만·후진은 면 앞에서만, Relaxed = 그 조건 없이, Both = 앞의 것이 안 되면 뒤의 것. */
+	enum class EHybridSteps : uint8 { ForwardAisle, Relaxed, Both };
+
 	/** 월드 면 목록(유형·통로 방향까지 채움). 면이 없으면 빈 배열. */
 	PARK3D_API void CollectSlots(UWorld* World, TArray<FParkSimLotSlot>& Out);
 
@@ -103,7 +106,7 @@ namespace ParkSimLot
 	 * Ignore 의 차량은 장애물에서 뺀다(주행 중인 다른 시뮬 차량 등).
 	 */
 	PARK3D_API FParkSimWorldPlan PlanEnter(UWorld* World, const FParkSimLotSlot& Slot, bool bRearIn, const ParkPlan::FCarDims& Car,
-		const FParkSimGate& Entrance, const TSet<const ACarActor*>& Ignore);
+		const FParkSimGate& Entrance, const TSet<const ACarActor*>& Ignore, EHybridSteps Steps = EHybridSteps::Both);
 
 	/** 출차 계획: 지금 자세(차체 중심·방위, 월드) → 기동 → 통로 → (Dubins) → 출구. */
 	PARK3D_API FParkSimWorldPlan PlanExit(UWorld* World, const FParkSimLotSlot& Slot, const FVector2D& CarCenter, double CarYawRad,

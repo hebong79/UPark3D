@@ -128,7 +128,8 @@ public:
 
 	/**
 	 * 검사·회피 없이 그 자세로 바로 옮긴다. 돌던 이동은 끝난다(endReason setPose).
-	 * 탑승 관계가 있는 대상이나 이동수단의 Activity 가 하나라도 있으면 아무것도 옮기지 않고 false.
+	 * 탑승 중인 탈것을 옮기면 탄 사람이 함께 간다.
+	 * 탄 사람 id 나 이동수단의 Activity 가 하나라도 있으면 아무것도 옮기지 않고 false.
 	 * 없는 id 는 그 항목만 건너뛰어 OutNotFound 에 넣는다.
 	 */
 	bool SetPoses(const TArray<FParkAgentPose>& Items, int32& OutApplied, TArray<FString>& OutNotFound, FString& OutError);

@@ -899,9 +899,9 @@ bool AParkAgentManager::SetPoses(const TArray<FParkAgentPose>& Items, int32& Out
 	{
 		const FParkAgent* A = FindAgent(P.Id);
 		if (!A) { continue; }
-		if (!A->RidingWith.IsEmpty())
+		if (A->Kind == EKind::Pedestrian && !A->RidingWith.IsEmpty())
 		{
-			OutError = FString::Printf(TEXT("%s 는 탑승 관계가 있어 setPose 로 옮길 수 없습니다(%s). 탑승 없이 만들거나 agent.move 를 쓰세요"), *P.Id, *A->RidingWith);
+			OutError = FString::Printf(TEXT("%s 는 %s 에 타고 있어 직접 옮길 수 없습니다. 탈것 id 로 옮기면 함께 움직입니다"), *P.Id, *A->RidingWith);
 			return false;
 		}
 		if (!P.Activity.IsEmpty() && A->Kind != EKind::Pedestrian)
@@ -929,6 +929,7 @@ bool AParkAgentManager::SetPoses(const TArray<FParkAgentPose>& Items, int32& Out
 		SyncActor(*A);
 		++OutApplied;
 	}
+	Advance(0.f);   // 탑승자 값을 탈것에 맞춘다(액터는 좌석에 붙어 이미 따라갔다)
 	return true;
 }
 

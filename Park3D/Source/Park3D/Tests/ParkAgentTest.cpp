@@ -1108,7 +1108,7 @@ bool FParkAgentPivotTest::RunTest(const FString& Parameters)
 
 		TSharedPtr<FJsonObject> O = PaFind(M->ListJson(nullptr, {}), Ids[0]);
 		FVector2D Prev = PaPos(O);
-		double MaxSlide = 0.0, MovedWhileOff = 0.0, MaxYawStep = 0.0;
+		double MaxSlide = 0.0, MovedWhileOff = 0.0, MaxYawStep = 0.0, PusherSpeedInTurn = 0.0;
 		double PrevYaw = O->GetNumberField(TEXT("directionDeg"));
 		for (int32 i = 0; i < 900; ++i)
 		{
@@ -1117,6 +1117,15 @@ bool FParkAgentPivotTest::RunTest(const FString& Parameters)
 			const FVector2D Now = PaPos(O);
 			const double Yaw = O->GetNumberField(TEXT("directionDeg"));
 			MaxYawStep = FMath::Max(MaxYawStep, FMath::Abs(FRotator::NormalizeAxis(Yaw - PrevYaw)));
+			if (C.bPusher && O->GetNumberField(TEXT("speedMps")) < 0.01 && O->GetStringField(TEXT("state")) == TEXT("moving") && Ids.Num() > 1)
+			{
+				const TSharedPtr<FJsonObject> Person = PaFind(M->ListJson(nullptr, {}), Ids[1]);
+				if (FMath::Abs(FRotator::NormalizeAxis(Yaw - PrevYaw)) > 0.5)
+				{
+					PusherSpeedInTurn = FMath::Max(PusherSpeedInTurn, Person->GetNumberField(TEXT("speedMps")));
+					TestEqual(What + TEXT(": 도는 동안 사람 motionType"), Person->GetStringField(TEXT("motionType")), FString(TEXT("moving")));
+				}
+			}
 			PrevYaw = Yaw;
 			const FVector2D Delta = Now - Prev;
 			if (Delta.Size() > 0.02)
@@ -1134,9 +1143,11 @@ bool FParkAgentPivotTest::RunTest(const FString& Parameters)
 		TestTrue(FString::Printf(TEXT("%s: 어긋남 ≤ 25°(%.1f)"), *What, MaxSlide), MaxSlide <= 25.0);
 		TestTrue(FString::Printf(TEXT("%s: 30° 넘게 어긋난 채 간 거리 0(%.3f)"), *What, MovedWhileOff), MovedWhileOff <= 1e-6);
 		TestTrue(FString::Printf(TEXT("%s: 몸이 한 프레임에 튀지 않는다(%.1f)"), *What, MaxYawStep), MaxYawStep <= 6.0);
+		if (C.bPusher) { TestTrue(FString::Printf(TEXT("도는 동안 사람이 걷는다(%.2f m/s)"), PusherSpeedInTurn), PusherSpeedInTurn > 0.2); }
 		AddInfo(FString::Printf(TEXT("%s 어긋남 최대 %.1f°"), *What, MaxSlide));
 	}
 	M->Delete({}, true, NotFound);
+	M->Destroy();
 	return true;
 }
 

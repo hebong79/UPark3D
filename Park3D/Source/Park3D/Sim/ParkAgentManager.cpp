@@ -672,14 +672,18 @@ void AParkAgentManager::LinkPush(FParkAgent& Person, FParkAgent& Bicycle, bool b
 	if (AParkAgentActor* PA = Person.Actor.Get()) { PA->SetPushVehicle(Bicycle.Actor.Get(), Bicycle.bPushRight); }
 }
 
-void AParkAgentManager::SyncPusher(FParkAgent& Person, const FParkAgent& Bicycle, bool bForce)
+void AParkAgentManager::SyncPusher(FParkAgent& Person, const FParkAgent& Bicycle, bool bForce, float Dt)
 {
 	const FVector2D NewPos = Bicycle.Pos + AmPushOffset(Bicycle);
 	const bool bMoved = bForce || FVector2D::DistSquared(NewPos, Person.Pos) > 1e-6 || FMath::Abs(FRotator::NormalizeAxis(Bicycle.YawDeg - Person.YawDeg)) > 0.01;
-	const bool bSpeed = FMath::Abs(Bicycle.SpeedMps - Person.SpeedMps) > 1e-3;
+	// 자전거가 제자리에서 돌면 사람은 그 둘레를 걷는다. 걷기 동작과 값이 실제로 움직인 빠르기를 따른다.
+	const double NewSpeed = (Dt > 0.f && Bicycle.Move.bActive && Bicycle.SpeedMps < 0.05)
+		? FMath::Min(FVector2D::Distance(NewPos, Person.Pos) / Dt, GAmPushMaxMps)
+		: Bicycle.SpeedMps;
+	const bool bSpeed = FMath::Abs(NewSpeed - Person.SpeedMps) > 1e-3;
 	Person.Pos = NewPos;
 	Person.YawDeg = Bicycle.YawDeg;
-	Person.SpeedMps = Bicycle.SpeedMps;
+	Person.SpeedMps = NewSpeed;
 	Person.State = Bicycle.State;
 	if (bMoved) { Person.Z = GroundZAt(Person.Pos, Bicycle.Z); }   // 사람은 자기 발밑 지면에 선다
 	if (bMoved || bSpeed) { SyncActor(Person); }
@@ -1424,7 +1428,7 @@ void AParkAgentManager::Advance(float Dt)
 	for (FParkAgent& P : Agents)
 	{
 		if (P.Kind != EKind::Pedestrian || P.PushingWith.IsEmpty()) { continue; }
-		if (const FParkAgent* V = FindAgent(P.PushingWith)) { SyncPusher(P, *V, false); }
+		if (const FParkAgent* V = FindAgent(P.PushingWith)) { SyncPusher(P, *V, false, Dt); }
 	}
 }
 

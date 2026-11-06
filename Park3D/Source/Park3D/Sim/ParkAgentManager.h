@@ -192,7 +192,7 @@ private:
 	/** 끌기 관계를 만들고(bAddRelation) 겉모습을 잇는다. 스냅샷 복원은 관계가 이미 있어 false. */
 	void LinkPush(FParkAgent& Person, FParkAgent& Bicycle, bool bAddRelation);
 	/** 끄는 사람의 자리·방향·속도·상태를 자전거에 맞춘다. */
-	void SyncPusher(FParkAgent& Person, const FParkAgent& Bicycle, bool bForce);
+	void SyncPusher(FParkAgent& Person, const FParkAgent& Bicycle, bool bForce, float Dt = 0.f);
 	/** 위치·방위만 갱신해 액터를 놓고, 탑승자는 좌석 자세. */
 	void SyncActor(FParkAgent& A);
 	double GroundZAt(const FVector2D& P, double Fallback);

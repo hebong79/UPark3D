@@ -20,6 +20,7 @@ Grep pattern:"<제목 일부>" path:".claude/skills/park3d-history/HISTORY.md" o
 
 ## 운영·승인·도구
 
+- 2026-11-07 재쿡 승인을 담당 PM 결정으로
 - 2026-11-07 CLAUDE.md 최소화와 변경 이력 이전
 - 2026-11-06 승인 규칙 변경
 - 2026-11-05 머지·푸시·재쿡·정본 교체·재기동 승인을 PM 경유로

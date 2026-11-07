@@ -100,6 +100,7 @@ Grep pattern:"<제목 일부>" path:".claude/skills/park3d-history/HISTORY.md" o
 
 ## 카메라·스트림·캡처
 
+- 2026-11-06 `view.lookAt {target}` 이 항상 35° 로 내려다본다
 - 2026-10-29 화면·모든 캡처 공통 노출 보정 `ExposureBiasTrim`
 - 2026-10-29 SceneCapture 에 Lumen GI·반사 복구
 - 2026-10-26 카메라 채널 스트림 리드백을 비동기 슬롯 링으로

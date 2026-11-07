@@ -223,6 +223,8 @@ private:
 	int32 GridSidewalkPolys = 0;
 	/** 충돌 없는 건물(BP_Building) 메시 상자로 막은 칸 수. */
 	int32 GridBuildingCells = 0;
+	/** 스플라인 벽(BP_SplineWall)으로 막은 칸 수. */
+	int32 GridSplineWallCells = 0;
 
 	TMap<TWeakObjectPtr<ACarActor>, FVector2D> CarLastPos;
 	TMap<TWeakObjectPtr<ACarActor>, FVector2D> CarVel;

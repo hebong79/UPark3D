@@ -380,6 +380,44 @@ void AParkAgentManager::BuildGrid()
 		if (Changed > 0) { ++GridSidewalkPolys; }
 	}
 
+	// 스플라인 벽(BP_SplineWall — 모듈 ISM)은 위 질의에 안 잡힌다. 판 메시는 두께가 0 이라 수직 질의와 나란하고, 객체 타입도 WorldDynamic 이다.
+	// 메시 상자도 두께가 0 이라 안 찍힌다 — 스플라인을 그대로 칸에 옮긴다. 머리 높이에 안 걸리는 고리(위층 벽)는 건너뛴다.
+	TArray<FWallLoop> WallLoops;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		if (!It->GetClass()->GetName().Contains(TEXT("SplineWall")) || It->IsHidden()) { continue; }
+		const USplineComponent* Sp = It->FindComponentByClass<USplineComponent>();
+		if (!Sp || Sp->GetNumberOfSplinePoints() < 2) { continue; }
+		const FBox AB = It->GetComponentsBoundingBox(/*bNonColliding=*/true);
+		if (AB.IsValid && (AB.Max.Z < (Z0 + 0.1) * 100.0 || AB.Min.Z > (Z0 + TopM) * 100.0)) { continue; }
+		FWallLoop L;
+		L.bClosed = Sp->IsClosedLoop();
+		const int32 NPts = Sp->GetNumberOfSplinePoints();
+		for (int32 k = 0; k < (L.bClosed ? NPts : NPts - 1); ++k)
+		{
+			const double D1 = k + 1 < NPts ? Sp->GetDistanceAlongSplineAtSplinePoint(k + 1) : Sp->GetSplineLength();
+			for (double D = Sp->GetDistanceAlongSplineAtSplinePoint(k); D < D1 - 1.0; D += 25.0)
+			{
+				const FVector W = Sp->GetLocationAtDistanceAlongSpline(D, ESplineCoordinateSpace::World);
+				L.Pts.Add(FVector2D(W.X, W.Y) / 100.0);
+			}
+		}
+		if (!L.bClosed)
+		{
+			const FVector W = Sp->GetLocationAtSplinePoint(NPts - 1, ESplineCoordinateSpace::World);
+			L.Pts.Add(FVector2D(W.X, W.Y) / 100.0);
+		}
+		WallLoops.Add(MoveTemp(L));
+	}
+	TArray<FVector2D> SlotCenters;
+	for (const FParkSimLotSlot& S : Slots) { SlotCenters.Add(S.Center); }
+	const FWallStamp WallStamp = ApplyWallLoops(G, WallLoops, SlotCenters);
+	GridSplineWallCells = WallStamp.Cells;
+	if (WallStamp.OuterLoops > 0 && !WallStamp.bOuterApplied)
+	{
+		GridNote = TEXT("주차면 일부가 바깥벽 고리 밖에 있어 바깥벽 밖을 막지 않았습니다");
+	}
+
 	// 건물(BP_Building — 모듈 ISM)은 충돌이 없어 질의에 안 잡힌다. 메시 상자를 칸에 찍어 막는다(보도 다각형이 건물 밑까지 덮어도).
 	// 노면~머리 높이에 걸치는 인스턴스만 — 지붕·간판처럼 높이 떠 있거나 바닥에 깔린 조각은 건너뛴다.
 	GridBuildingCells = 0;
@@ -492,8 +530,8 @@ void AParkAgentManager::BuildGrid()
 	GridBuildMs = (FPlatformTime::Seconds() - T0) * 1000.0;
 	int32 Cnt[4] = { 0, 0, 0, 0 };
 	for (const uint8 C : Grid.Cls) { ++Cnt[FMath::Min<int32>(C, 3)]; }
-	UE_LOG(LogTemp, Log, TEXT("[Agent] 보행 격자 %dx%d(%.2f m), 노면 z %.3f — 막힘 %d(건물 %d) · 노면 %d · 보도 %d(스플라인 보도 판 %d/%d) · 주차면 %d (%.0f ms)"),
-		Grid.W, Grid.H, Grid.Cell, Z0, Cnt[0], GridBuildingCells, Cnt[1], Cnt[2], GridSidewalkPolys, Walks.Num(), Cnt[3], GridBuildMs);
+	UE_LOG(LogTemp, Log, TEXT("[Agent] 보행 격자 %dx%d(%.2f m), 노면 z %.3f — 막힘 %d(건물 %d, 스플라인 벽 %d·고리 %d·바깥벽 %d) · 노면 %d · 보도 %d(스플라인 보도 판 %d/%d) · 주차면 %d (%.0f ms)"),
+		Grid.W, Grid.H, Grid.Cell, Z0, Cnt[0], GridBuildingCells, GridSplineWallCells, WallLoops.Num(), WallStamp.OuterLoops, Cnt[1], Cnt[2], GridSidewalkPolys, Walks.Num(), Cnt[3], GridBuildMs);
 }
 
 TSharedPtr<FJsonObject> AParkAgentManager::GridJson(bool bRebuild, bool bWithCells, const TArray<FVector2D>& Probe)
@@ -520,6 +558,7 @@ TSharedPtr<FJsonObject> AParkAgentManager::GridJson(bool bRebuild, bool bWithCel
 	O->SetObjectField(TEXT("counts"), Counts);
 	O->SetNumberField(TEXT("sidewalkPolys"), GridSidewalkPolys);
 	O->SetNumberField(TEXT("buildingCells"), GridBuildingCells);
+	O->SetNumberField(TEXT("splineWallCells"), GridSplineWallCells);
 	static const TCHAR* Names[4] = { TEXT("blocked"), TEXT("ground"), TEXT("raised"), TEXT("bay") };
 	TArray<TSharedPtr<FJsonValue>> Pr;
 	for (const FVector2D& P : Probe)

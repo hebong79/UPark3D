@@ -62,6 +62,7 @@ Grep pattern:"<제목 일부>" path:".claude/skills/park3d-history/HISTORY.md" o
 
 ## 사람·자전거·오토바이
 
+- 2026-11-06 보행 격자가 `BP_SplineWall` 을 막는다
 - 2026-11-06 사람이 자전거 끌기 + 자전거 은색 제거
 - 2026-11-06 사람·자전거·오토바이 방향 전환을 부드럽게
 - 2026-11-06 자전거 city·sport 흰색 제거

@@ -82,6 +82,84 @@ namespace ParkAgent
 		return OutX >= 0 && OutY >= 0 && OutX < W && OutY < H;
 	}
 
+	namespace
+	{
+		bool PaInsidePoly(const TArray<FVector2D>& Poly, const FVector2D& P)
+		{
+			bool bIn = false;
+			for (int32 a = 0, b = Poly.Num() - 1; a < Poly.Num(); b = a++)
+			{
+				if (((Poly[a].Y > P.Y) != (Poly[b].Y > P.Y)) && (P.X < (Poly[b].X - Poly[a].X) * (P.Y - Poly[a].Y) / (Poly[b].Y - Poly[a].Y) + Poly[a].X)) { bIn = !bIn; }
+			}
+			return bIn;
+		}
+	}
+
+	FWallStamp ApplyWallLoops(FAgentGrid& G, const TArray<FWallLoop>& Loops, const TArray<FVector2D>& SlotCenters)
+	{
+		FWallStamp R;
+		if (!G.IsValid()) { return R; }
+		auto Block = [&](int32 i)
+		{
+			if (G.Cls[i] != CellBlocked) { G.Cls[i] = CellBlocked; ++R.Cells; }
+		};
+
+		TArray<const FWallLoop*> Outer;
+		for (const FWallLoop& L : Loops)
+		{
+			if (L.Pts.Num() < 2) { continue; }
+			if (!L.bClosed)
+			{
+				for (int32 k = 0; k + 1 < L.Pts.Num(); ++k)
+				{
+					const int32 N = FMath::Max(1, FMath::CeilToInt(FVector2D::Distance(L.Pts[k], L.Pts[k + 1]) / (G.Cell * 0.5)));
+					for (int32 s = 0; s <= N; ++s)
+					{
+						int32 X, Y;
+						if (G.ToCell(FMath::Lerp(L.Pts[k], L.Pts[k + 1], static_cast<double>(s) / N), X, Y)) { Block(Y * G.W + X); }
+					}
+				}
+				continue;
+			}
+			if (L.Pts.Num() < 3) { continue; }
+			bool bHasSlot = false;
+			for (const FVector2D& C : SlotCenters) { bHasSlot |= PaInsidePoly(L.Pts, C); }
+			if (bHasSlot) { Outer.Add(&L); continue; }
+			const FBox2D B(L.Pts);
+			const int32 X0 = FMath::Max(0, FMath::FloorToInt((B.Min.X - G.Origin.X) / G.Cell)), X1 = FMath::Min(G.W - 1, FMath::CeilToInt((B.Max.X - G.Origin.X) / G.Cell));
+			const int32 Y0 = FMath::Max(0, FMath::FloorToInt((B.Min.Y - G.Origin.Y) / G.Cell)), Y1 = FMath::Min(G.H - 1, FMath::CeilToInt((B.Max.Y - G.Origin.Y) / G.Cell));
+			for (int32 Y = Y0; Y <= Y1; ++Y)
+			{
+				for (int32 X = X0; X <= X1; ++X)
+				{
+					if (PaInsidePoly(L.Pts, G.CellCenter(X, Y))) { Block(Y * G.W + X); }
+				}
+			}
+		}
+
+		R.OuterLoops = Outer.Num();
+		if (Outer.Num() == 0) { return R; }
+		auto InAnyOuter = [&](const FVector2D& P)
+		{
+			for (const FWallLoop* L : Outer) { if (PaInsidePoly(L->Pts, P)) { return true; } }
+			return false;
+		};
+		for (const FVector2D& C : SlotCenters)
+		{
+			if (!InAnyOuter(C)) { return R; }
+		}
+		R.bOuterApplied = true;
+		for (int32 Y = 0; Y < G.H; ++Y)
+		{
+			for (int32 X = 0; X < G.W; ++X)
+			{
+				const int32 i = Y * G.W + X;
+				if (G.Cls[i] != CellBlocked && !InAnyOuter(G.CellCenter(X, Y))) { Block(i); }
+			}
+		}
+		return R;
+	}
+
 	bool Passable(EKind K, uint8 Cls)
 	{
 		if (Cls == CellGround || Cls == CellBay) { return true; }

@@ -11,6 +11,8 @@ description: Park3D 의 과거 변경·결정·함정 기록. 이미 겪은 문�
 Grep pattern:"<제목 일부>" path:".claude/skills/park3d-history/HISTORY.md" output_mode:"content"
 ```
 
+옛 기록의 「재쿡」은 지금 말로 「재패키징」이다. 찾을 때는 둘 다 찾는다.
+
 상세는 `Docs/yyyyMMdd_HHmmss_*.md` 에 있고, 그보다 오래된 사정은 `git log` 로 본다.
 
 ## 새 기록을 적는 법
@@ -20,6 +22,7 @@ Grep pattern:"<제목 일부>" path:".claude/skills/park3d-history/HISTORY.md" o
 
 ## 운영·승인·도구
 
+- 2026-11-07 재쿡 용어를 재패키징으로
 - 2026-11-07 재쿡 승인을 담당 PM 결정으로
 - 2026-11-07 CLAUDE.md 최소화와 변경 이력 이전
 - 2026-11-06 승인 규칙 변경

@@ -90,19 +90,19 @@ Start-Process -FilePath "$root\Park3D.exe" -WorkingDirectory $root
 
 다르면 되돌리거나 고치지 말고 전후 값을 보고한다. 값이 같아도 전후 값을 보고에 적는다.
 
-**중단 조건:** 다음 경우에는 exe 만 바꿔서는 안 된다(재쿡이 필요하다. 재쿡은 담당 PM 명령 대상이고, 그 결과는 6절로 바꾼다). prompt 나 커밋 diff 에 해당하면 교체하지 말고 보고한다.
+**중단 조건:** 다음 경우에는 exe 만 바꿔서는 안 된다(재패키징이 필요하다. 재패키징은 담당 PM 명령 대상이고, 그 결과는 6절로 바꾼다). prompt 나 커밋 diff 에 해당하면 교체하지 말고 보고한다.
 
 - 쿠킹된 WBP 의 C++ 베이스 클래스에 `UPROPERTY` 를 추가했다. → `Bad export index` 로 즉시 종료된다.
 - 셰이더를 등록하는 플러그인을 추가했다.
 
-## 6. 정본 교체 — 재쿡 결과 미러 교체 (승인 `예` 일 때만 — 담당 PM 명령)
+## 6. 정본 교체 — 재패키징 결과 미러 교체 (승인 `예` 일 때만 — 담당 PM 명령)
 
-재쿡 결과로 패키지 전체를 바꾼다. 재쿡과 그 결과로 바꾸는 이 교체는 모두 담당 PM 명령으로 한다. 재쿡은 PM 이 다른 쪽이 쓰는지 확인한 뒤 명령한다.
+재패키징 결과로 패키지 전체를 바꾼다. 재패키징과 그 결과로 바꾸는 이 교체는 모두 담당 PM 명령으로 한다. 재패키징은 PM 이 다른 쪽이 쓰는지 확인한 뒤 명령한다.
 
-정본의 `Save`(데이터)와 `Saved`(`Game.ini`·`CarData`)는 재쿡 결과에 없거나 달라서 **반드시 둘 다 뺀다**. 빼지 않으면 조용히 지워진다.
+정본의 `Save`(데이터)와 `Saved`(`Game.ini`·`CarData`)는 재패키징 결과에 없거나 달라서 **반드시 둘 다 뺀다**. 빼지 않으면 조용히 지워진다.
 
 ```powershell
-# $new = prompt 의 재쿡 폴더(Package\<태그>\Windows). 정본 프로세스를 내린 뒤, 옛 정본을 백업한 뒤에 실행한다.
+# $new = prompt 의 재패키징 폴더(Package\<태그>\Windows). 정본 프로세스를 내린 뒤, 옛 정본을 백업한 뒤에 실행한다.
 robocopy $new $root /MIR /XD Save Saved /NFL /NDL /NJH /NJS /NP
 if ($LASTEXITCODE -ge 8) { throw "robocopy 실패: $LASTEXITCODE" }   # 0~7 은 성공이다
 ```
